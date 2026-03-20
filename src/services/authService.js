@@ -100,11 +100,12 @@ const authService = {
     localStorage.setItem('accessToken',  data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('currentUser',  JSON.stringify({
-      id:       data.user.id,
-      name:     data.user.username,
-      email:    data.user.email,
-      avatar:   data.user.avatarUrl,
-      role:     data.user.role,
+      id:           data.user.id,
+      name:         data.user.username,
+      email:        data.user.email,
+      avatar:       data.user.avatarUrl,
+      role:         data.user.role,
+      is2FaEnabled: data.user.is2FaEnabled ?? false, // ← sync trạng thái 2FA
     }));
   },
 

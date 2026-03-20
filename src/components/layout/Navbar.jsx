@@ -12,13 +12,33 @@ const Navbar = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
   const navigate = useNavigate();
 
-  const currentUser = authService.getCurrentUser();
+  const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
 
-  // Đóng dropdown khi click ra ngoài
+  // ── Sync user khi localStorage thay đổi (sau khi update avatar/profile) ──
+  useEffect(() => {
+    const syncUser = () => setCurrentUser(authService.getCurrentUser());
+    window.addEventListener('storage', syncUser);
+    // Cũng lắng nghe custom event từ ProfilePage
+    window.addEventListener('userUpdated', syncUser);
+    return () => {
+      window.removeEventListener('storage', syncUser);
+      window.removeEventListener('userUpdated', syncUser);
+    };
+  }, []);
+
+  // ── Scroll listener ──────────────────────────────────────────
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ── Click outside dropdown ───────────────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -36,7 +56,7 @@ const Navbar = () => {
       // Nếu API lỗi vẫn xóa session local
     } finally {
       authService.clearSession();
-      window.location.href = '/login'; // hoặc dùng navigate('/login') nếu dùng react-router
+      window.location.href = '/welcome';
     }
   };
 
@@ -62,21 +82,30 @@ const Navbar = () => {
     {
       icon: <User size={15} />,
       label: 'Hồ sơ của tôi',
-      onClick: () => { window.location.href = '/profile'; },
+      onClick: () => navigate('/profile'),
     },
     {
       icon: <Shield size={15} />,
       label: 'Bảo mật & 2FA',
-      onClick: () => { window.location.href = '/settings/security'; },
+      onClick: () => navigate('/settings/security'),
     },
     {
       icon: <Settings size={15} />,
       label: 'Cài đặt',
-      onClick: () => { window.location.href = '/settings'; },
+      onClick: () => navigate('/settings'),
     },
   ];
 
   const avatarLetter = currentUser?.name?.[0]?.toUpperCase() ?? 'U';
+
+  // ── Dynamic nav styles dựa theo scroll ──────────────────────
+  const navBg = scrolled
+    ? 'rgba(0,0,0,0.97)'
+    : 'transparent';
+
+  const navBorder = scrolled
+    ? '1px solid rgba(255,255,255,0.06)'
+    : '1px solid transparent';
 
   return (
     <motion.nav
@@ -84,51 +113,107 @@ const Navbar = () => {
       initial="hidden"
       animate="visible"
       transition={transitions.TRANSITION_HERO_CONTENT}
-      className="fixed top-0 left-0 right-0 z-[9999] bg-gradient-to-b from-black via-black/50 to-transparent"
-      style={{ isolation: 'isolate' }}
+      className="fixed top-0 left-0 right-0 z-[9999]"
+      style={{
+        isolation: 'isolate',
+        background: navBg,
+        borderBottom: navBorder,
+        backdropFilter: scrolled ? 'blur(20px)' : 'none',
+        transition: 'background 0.35s ease, border-color 0.35s ease, backdrop-filter 0.35s ease',
+      }}
     >
-      <div className="flex items-center justify-between px-4 md:px-8 py-4">
-        {/* Logo */}
-        <motion.div className="flex items-center gap-2">
-          <div className="text-4xl font-black text-red-600">UIA</div>
-          <div className="text-3xl font-bold text-white">MOVIE</div>
+      <div className="flex items-center justify-between px-4 md:px-8 py-3">
+
+        {/* ── Logo ── */}
+        <motion.div
+          className="flex items-center gap-1.5 cursor-pointer"
+          onClick={() => navigate('/')}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <span
+            className="text-3xl font-black leading-none"
+            style={{ color: '#e5181e', letterSpacing: '-0.02em' }}
+          >
+            UIA
+          </span>
+          <span
+            className="text-2xl font-bold leading-none"
+            style={{
+              color: scrolled ? '#ffffff' : '#f0f0f0',
+              letterSpacing: '0.06em',
+              transition: 'color 0.3s',
+            }}
+          >
+            MOVIE
+          </span>
         </motion.div>
 
-        {/* Nav links */}
-        <div className="hidden md:flex items-center gap-8">
-          {['Home', 'Trending', 'My Favorites', 'Watchlist'].map((item, i) => (
-            <motion.a
-              key={item}
-              href="#"
-              className="text-base font-medium text-gray-300 hover:text-white"
-              initial={{ opacity: 0, y: -10 }}
+        {/* ── Nav links ── */}
+        <div className="hidden md:flex items-center gap-1">
+          {[
+            { label: 'Trang chủ', path: '/' },
+            { label: 'Trending', path: '/search?sort=trending' },
+            { label: 'Yêu thích', path: '/search?filter=favorites' },
+            { label: 'Watchlist', path: '/search?filter=watchlist' },
+          ].map(({ label, path }, i) => (
+            <motion.button
+              key={label}
+              onClick={() => navigate(path)}
+              initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ ...transitions.TRANSITION_NORMAL, delay: i * 0.1 }}
+              transition={{ ...transitions.TRANSITION_NORMAL, delay: i * 0.07 }}
+              className="relative px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 group"
+              style={{
+                color: scrolled ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.7)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+              whileHover={{ color: '#ffffff' }}
             >
-              {item}
-            </motion.a>
+              <span
+                className="relative z-10 transition-colors duration-200 group-hover:text-white"
+                style={{ fontFamily: "'DM Sans', sans-serif" }}
+              >
+                {label}
+              </span>
+              {/* Hover pill background */}
+              <motion.span
+                className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
+              />
+            </motion.button>
           ))}
         </div>
 
-        {/* Right actions */}
-        <div className="flex items-center gap-4">
-          {/* Search — expandable inline bar */}
+        {/* ── Right actions ── */}
+        <div className="flex items-center gap-1">
+
+          {/* Search */}
           <AnimatePresence mode="wait">
             {showSearch ? (
               <motion.form
                 key="search-bar"
                 initial={{ width: 36, opacity: 0 }}
-                animate={{ width: 260, opacity: 1 }}
+                animate={{ width: 240, opacity: 1 }}
                 exit={{ width: 36, opacity: 0 }}
                 transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                 onSubmit={handleSearchSubmit}
-                style={{ display: 'flex', alignItems: 'center', overflow: 'hidden',
-                  background: 'rgba(255,255,255,0.08)', borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+                style={{
+                  display: 'flex', alignItems: 'center', overflow: 'hidden',
+                  background: scrolled ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.4)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  backdropFilter: 'blur(12px)',
+                }}
               >
-                <button type="submit" style={{ background: 'none', border: 'none', cursor: 'pointer',
-                  padding: '8px 10px', display: 'flex', color: 'rgba(255,255,255,0.6)', flexShrink: 0 }}>
-                  <Search size={16} />
+                <button type="submit" style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '8px 10px', display: 'flex',
+                  color: 'rgba(255,255,255,0.5)', flexShrink: 0,
+                }}>
+                  <Search size={15} />
                 </button>
                 <input
                   ref={searchInputRef}
@@ -137,13 +222,17 @@ const Navbar = () => {
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Tìm phim, diễn viên..."
                   onKeyDown={e => e.key === 'Escape' && closeSearch()}
-                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none',
-                    color: '#fff', fontSize: 13, fontFamily: "'Nunito', sans-serif",
-                    padding: '8px 0', minWidth: 0 }}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', outline: 'none',
+                    color: '#fff', fontSize: 13, fontFamily: "'DM Sans', sans-serif",
+                    padding: '8px 0', minWidth: 0,
+                  }}
                 />
-                <button type="button" onClick={closeSearch}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer',
-                    padding: '8px 10px', display: 'flex', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <button type="button" onClick={closeSearch} style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '8px 10px', display: 'flex',
+                  color: 'rgba(255,255,255,0.3)', flexShrink: 0,
+                }}>
                   <X size={14} />
                 </button>
               </motion.form>
@@ -151,83 +240,195 @@ const Navbar = () => {
               <motion.button
                 key="search-icon"
                 onClick={openSearch}
-                className="p-2 hover:bg-white/10 rounded-lg"
-                whileHover={{ scale: 1.1 }}
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                whileHover={{ scale: 1.08, backgroundColor: 'rgba(255,255,255,0.1)' }}
+                whileTap={{ scale: 0.94 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-2 rounded-lg transition-colors"
+                style={{
+                  background: 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  color: scrolled ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.7)',
+                }}
               >
-                <Search size={20} />
+                <Search size={18} />
               </motion.button>
             )}
           </AnimatePresence>
 
           {/* Bell */}
-          <motion.button className="p-2 hover:bg-white/10 rounded-lg">
-            <Bell size={20} />
+          <motion.button
+            whileHover={{ scale: 1.08, backgroundColor: 'rgba(255,255,255,0.1)' }}
+            whileTap={{ scale: 0.94 }}
+            className="p-2 rounded-lg relative"
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: scrolled ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.7)',
+            }}
+          >
+            <Bell size={18} />
+            {/* Notification dot */}
+            <span
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+              style={{ background: '#e5181e' }}
+            />
           </motion.button>
+
+          {/* Divider */}
+          <div
+            className="mx-1 h-5 w-px"
+            style={{
+              background: scrolled ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
+              transition: 'background 0.3s',
+            }}
+          />
 
           {/* Avatar + Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <motion.button
               onClick={() => setShowDropdown((prev) => !prev)}
-              className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-white/10 transition-colors"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all"
+              style={{
+                background: showDropdown
+                  ? 'rgba(255,255,255,0.1)'
+                  : 'transparent',
+                border: 'none', cursor: 'pointer',
+              }}
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center font-bold text-white text-sm">
-                {avatarLetter}
+              {/* Avatar */}
+              <div
+                className="w-7 h-7 rounded-lg flex-shrink-0 overflow-hidden"
+                style={{
+                  background: 'linear-gradient(135deg, #e5181e 0%, #7a0409 100%)',
+                  boxShadow: scrolled ? '0 2px 8px rgba(229,24,30,0.4)' : '0 2px 12px rgba(229,24,30,0.5)',
+                  transition: 'box-shadow 0.3s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {currentUser?.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt="avatar"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="font-black text-white text-xs">{avatarLetter}</span>
+                )}
               </div>
-              <motion.span
+
+              {/* Name (chỉ hiện khi scrolled) */}
+              <AnimatePresence>
+                {scrolled && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-xs font-semibold text-white overflow-hidden whitespace-nowrap"
+                    style={{ fontFamily: "'DM Sans', sans-serif", maxWidth: 80 }}
+                  >
+                    {currentUser?.name?.split(' ')[0] ?? 'User'}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+
+              <motion.div
                 animate={{ rotate: showDropdown ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
+                style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}
               >
-                <ChevronDown size={14} className="text-gray-400" />
-              </motion.span>
+                <ChevronDown size={13} />
+              </motion.div>
             </motion.button>
 
             {/* Dropdown panel */}
             <AnimatePresence>
               {showDropdown && (
                 <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="absolute right-0 mt-2 w-52 rounded-xl overflow-hidden shadow-2xl border border-white/10"
-                  style={{ background: 'rgba(15, 15, 15, 0.95)', backdropFilter: 'blur(16px)' }}
+                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="absolute right-0 mt-2 w-52 rounded-2xl overflow-hidden shadow-2xl"
+                  style={{
+                    background: 'rgba(12,12,12,0.97)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    backdropFilter: 'blur(20px)',
+                  }}
                 >
                   {/* User info header */}
-                  <div className="px-4 py-3 border-b border-white/10">
-                    <p className="text-sm font-semibold text-white truncate">
-                      {currentUser?.name ?? 'Người dùng'}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {currentUser?.email ?? ''}
-                    </p>
+                  <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center gap-2.5 mb-1">
+                      <div
+                        className="w-8 h-8 rounded-lg flex-shrink-0 overflow-hidden"
+                        style={{
+                          background: 'linear-gradient(135deg, #e5181e, #7a0409)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        {currentUser?.avatar ? (
+                          <img
+                            src={currentUser.avatar}
+                            alt="avatar"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={e => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <span className="font-black text-white text-sm">{avatarLetter}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate leading-tight">
+                          {currentUser?.name ?? 'Người dùng'}
+                        </p>
+                        <p className="text-xs truncate leading-tight" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          {currentUser?.email ?? ''}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Menu items */}
-                  <div className="py-1">
+                  <div className="py-1.5 px-1.5">
                     {dropdownItems.map(({ icon, label, onClick }) => (
-                      <button
+                      <motion.button
                         key={label}
                         onClick={() => { setShowDropdown(false); onClick(); }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+                        whileHover={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
                       >
-                        <span className="text-gray-500">{icon}</span>
-                        {label}
-                      </button>
+                        <span style={{ color: 'rgba(255,255,255,0.3)' }}>{icon}</span>
+                        <span
+                          className="text-sm"
+                          style={{ color: 'rgba(255,255,255,0.7)', fontFamily: "'DM Sans', sans-serif" }}
+                        >
+                          {label}
+                        </span>
+                      </motion.button>
                     ))}
                   </div>
 
                   {/* Logout */}
-                  <div className="border-t border-white/10 py-1">
-                    <button
+                  <div className="px-1.5 pb-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <motion.button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-left"
+                      whileHover={{ backgroundColor: 'rgba(229,24,30,0.1)' }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors mt-1"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
                     >
-                      <LogOut size={15} />
-                      Đăng xuất
-                    </button>
+                      <LogOut size={15} style={{ color: 'rgba(229,24,30,0.7)' }} />
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: '#e5181e', fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        Đăng xuất
+                      </span>
+                    </motion.button>
                   </div>
                 </motion.div>
               )}

@@ -7,6 +7,14 @@ import movieService from '../services/movieService';
 import PersonScrollRow from '../components/movie/Personscrollrow';
 import ReviewSection from '../components/movie/Reviewsection';
 
+const toSlug = (name) =>
+  (name || 'unknown')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
 const C = {
   bg:          '#0a0a0a',
   surface:     '#111111',
@@ -27,11 +35,13 @@ const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 // ── PersonCard — chữ nhật kiểu TMDB ────────────────────────────
 const PersonCard = ({ person, isDirector = false }) => {
   const [err, setErr] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+      onClick={() => person.name && navigate(`/person/${toSlug(person.name)}`, { state: { actor: person } })}
       style={{
         width: 140,
         flexShrink: 0,
@@ -40,7 +50,7 @@ const PersonCard = ({ person, isDirector = false }) => {
         background: C.card,
         border: `1px solid ${C.borderCard}`,
         boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-        cursor: 'pointer',
+        cursor: person.name ? 'pointer' : 'default',
       }}
     >
       {/* Ảnh — tỉ lệ 2:3 như TMDB */}
@@ -227,10 +237,11 @@ export default function MovieDetailPage() {
         setMovie(movieData);
 
         if (movieData?.director) {
-          setDirs([{ name: movieData.director, profileUrl: null }]);
+          setDirs([{ id: movieData.directorId || null, name: movieData.director, profileUrl: null }]);
         }
         if (Array.isArray(movieData?.cast) && movieData.cast.length > 0) {
-          setActors(movieData.cast.sort((a, b) => a.order - b.order).map(c => ({
+          setActors(movieData.cast.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(c => ({
+            id: c.id ?? c.personId ?? c.tmdbPersonId ?? null,
             name: c.name, character: c.character, profileUrl: c.profileUrl,
           })));
         }
@@ -449,7 +460,9 @@ export default function MovieDetailPage() {
                 <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:11, fontWeight:700, letterSpacing:'0.1em', color:C.textDim, textTransform:'uppercase', marginBottom:16 }}>Đạo diễn</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                   {dirs.map((p, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div key={i}
+                      onClick={() => p.name && navigate(`/person/${toSlug(p.name)}`, { state: { actor: p } })}
+                      style={{ display:'flex', alignItems:'center', gap:12, cursor: p.name ? 'pointer' : 'default' }}>
                       <div style={{ width:56, height:56, borderRadius:'50%', border:`1.5px solid rgba(255,255,255,0.12)`, overflow:'hidden', background:C.surfaceMid, flexShrink:0 }}>
                         {p.profileUrl
                           ? <img src={p.profileUrl} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center 15%' }}/>
@@ -472,7 +485,9 @@ export default function MovieDetailPage() {
                 <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:11, fontWeight:700, letterSpacing:'0.1em', color:C.textDim, textTransform:'uppercase', marginBottom:16 }}>Diễn viên chính</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                   {actors.slice(0, 6).map((p, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div key={i}
+                      onClick={() => p.name && navigate(`/person/${toSlug(p.name)}`, { state: { actor: p } })}
+                      style={{ display:'flex', alignItems:'center', gap:12, cursor: p.name ? 'pointer' : 'default' }}>
                       <div style={{ width:56, height:56, borderRadius:'50%', border:`1.5px solid rgba(255,255,255,0.1)`, overflow:'hidden', background:C.surfaceMid, flexShrink:0 }}>
                         {p.profileUrl
                           ? <img src={p.profileUrl} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center 15%' }}/>

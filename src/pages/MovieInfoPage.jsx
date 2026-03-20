@@ -6,12 +6,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Star, Heart, ChevronLeft, Clock, Calendar,
-  Globe, Award, Users, ChevronRight, X, Volume2, VolumeX,
+  Globe, Award, Users, ChevronRight, X,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import movieService from '../services/movieService';
 import PersonScrollRow from '../components/movie/Personscrollrow';
 import ReviewSection from '../components/movie/Reviewsection';
+
+const toSlug = (name) =>
+  (name || 'unknown')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 // ── Design tokens (đồng bộ với Homepage & MovieDetailPage) ─────
 const C = {
@@ -199,6 +207,8 @@ const CastCard = ({ person, index }) => {
   );
 };
 
+
+
 // ── Review Card ───────────────────────────────────────────────
 const ReviewCard = ({ review, index }) => (
   <motion.div
@@ -334,13 +344,31 @@ export default function MovieInfoPage() {
       if (normalized.reviews?.length)  setReviews(normalized.reviews);
 
       // Cast từ raw (giống MovieDetailPage)
-      if (raw?.director) {
+      if (raw?.directorDetail) {
+        setDirectorsFromMovie([{
+          id:           raw.directorDetail.id ?? raw.directorDetail.personId ?? raw.directorDetail.tmdbPersonId ?? null,
+          name:         raw.directorDetail.name,
+          profileUrl:   raw.directorDetail.profileUrl,
+          biography:    raw.directorDetail.biography,
+          birthday:     raw.directorDetail.birthday,
+          placeOfBirth: raw.directorDetail.placeOfBirth,
+        }]);
+      } else if (raw?.director) {
         setDirectorsFromMovie([{ name: raw.director, profileUrl: null }]);
       }
       if (Array.isArray(raw?.cast) && raw.cast.length > 0) {
+        // DEBUG: log để kiểm tra tên field id từ API
         const sorted = [...raw.cast]
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          .map(c => ({ name: c.name, character: c.character, profileUrl: c.profileUrl }));
+          .map(c => ({
+            id:           c.id ?? c.personId ?? c.tmdbPersonId ?? null,
+            name:         c.name,
+            character:    c.character,
+            profileUrl:   c.profileUrl,
+            biography:    c.biography,
+            birthday:     c.birthday,
+            placeOfBirth: c.placeOfBirth,
+          }));
         setCast(sorted);
       }
 
@@ -639,23 +667,45 @@ export default function MovieInfoPage() {
                 {directors.length > 0 && (
                   <div style={{ marginBottom: 36 }}>
                     <SectionTitle>Đạo Diễn</SectionTitle>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 16 }}>
                       {directors.map((p, i) => (
                         <motion.div key={i}
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: i * 0.05 }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, minWidth: 220 }}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05, duration: 0.3 }}
+                          whileHover={{ y: -4, transition: { duration: 0.18 } }}
+                          onClick={() => p.name && navigate(`/person/${toSlug(p.name)}`, { state: { actor: p } })}
+                          style={{
+                            width: 140, flexShrink: 0,
+                            borderRadius: 10, overflow: 'hidden',
+                            background: C.card,
+                            border: `1px solid ${C.border}`,
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                            cursor: p.name ? 'pointer' : 'default',
+                          }}
                         >
-                          <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', background: C.surfaceMid, flexShrink: 0, border: `2px solid ${C.accentGlow}` }}>
-                            {p.profileUrl
-                              ? <img src={p.profileUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }} />
-                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 22, fontWeight: 900, color: C.textDim }}>{p.name?.charAt(0)}</div>
-                            }
+                          {/* Ảnh 2:3 */}
+                          <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, overflow: 'hidden', position: 'relative' }}>
+                            {p.profileUrl ? (
+                              <img src={p.profileUrl} alt={p.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }} />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1c1c' }}>
+                                <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+                                  <circle cx="12" cy="8" r="4" fill="#3a3a3a"/>
+                                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3a3a3a" strokeWidth="1.5" strokeLinecap="round"/>
+                                </svg>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 3 }}>{p.name}</p>
-                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.accent, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Đạo diễn</p>
+                          {/* Info */}
+                          <div style={{ padding: '12px 12px 14px' }}>
+                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {p.name}
+                            </p>
+                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11.5, color: C.textSub, fontStyle: 'italic' }}>
+                              Đạo diễn
+                            </p>
                           </div>
                         </motion.div>
                       ))}

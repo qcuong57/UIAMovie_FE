@@ -60,6 +60,23 @@ const movieService = {
   },
 
   /**
+   * Tìm phim theo tên diễn viên
+   * @param {string} actorName - Tên diễn viên
+   */
+  searchMoviesByActor: async (actorName) => {
+    try {
+      if (!actorName?.trim()) return [];
+      const response = await axiosInstance.get('/movies/search/actor', {
+        params: { actorName },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error searching movies by actor:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy phim theo genre
    * @param {string} genreId - Genre ID
    */

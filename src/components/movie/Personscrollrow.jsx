@@ -3,6 +3,15 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+
+const toSlug = (name) =>
+  (name || 'unknown')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // bỏ dấu tiếng Việt
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 // ── Design tokens — khớp với MovieInfoPage & MovieDetailPage ──────────────────
 const C = {
@@ -18,12 +27,23 @@ const C = {
 // ── CastCard ──────────────────────────────────────────────────────────────────
 const CastCard = ({ person, index }) => {
   const [imgErr, setImgErr] = useState(false);
+  const navigate = useNavigate();
+
+  // Có thể bấm vào nếu có đủ thông tin để hiển thị trang
+  const isClickable = !!(person.name);
+
+  const handleClick = () => {
+    if (!isClickable) return;
+    navigate(`/person/${toSlug(person.name)}`, { state: { actor: person } });
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.28 }}
       whileHover={{ y: -6, transition: { duration: 0.18 } }}
+      onClick={handleClick}
       style={{
         width: 120,
         flexShrink: 0,
@@ -31,8 +51,9 @@ const CastCard = ({ person, index }) => {
         overflow: 'hidden',
         background: C.card,
         border: `1px solid ${C.border}`,
-        cursor: 'pointer',
+        cursor: isClickable ? 'pointer' : 'default',
         boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
+        position: 'relative',
       }}
     >
       {/* Avatar 2:3 */}
@@ -51,6 +72,15 @@ const CastCard = ({ person, index }) => {
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#2e2e2e" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
+        )}
+        {/* Dot indicator — luôn hiển thị nếu có tên */}
+        {isClickable && (
+          <div style={{
+            position: 'absolute', bottom: 6, right: 6,
+            width: 7, height: 7, borderRadius: '50%',
+            background: C.accent,
+            boxShadow: '0 0 6px rgba(229,24,30,0.8)',
+          }} />
         )}
       </div>
 
@@ -87,8 +117,10 @@ const CastCard = ({ person, index }) => {
 // ── PersonScrollRow ───────────────────────────────────────────────────────────
 /**
  * Props:
- *   people   — array of { name, character?, role?, profileUrl? }
+ *   people    — array of { id, name, character?, role?, profileUrl? }
  *   cardWidth — optional override (default 120)
+ *
+ * NOTE: onPersonClick đã bị loại bỏ. Click vào card sẽ navigate thẳng sang /person/:id
  */
 const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
   const scrollRef = useRef(null);
@@ -167,7 +199,7 @@ const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
       >
         <style>{`.psr-row::-webkit-scrollbar{display:none}`}</style>
         {people.map((p, i) => (
-          <CastCard key={i} person={p} index={i} />
+          <CastCard key={p.id ?? i} person={p} index={i} />
         ))}
       </div>
 
