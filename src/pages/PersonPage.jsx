@@ -5,6 +5,7 @@ import { ChevronLeft, Film, Calendar, MapPin, Star, ExternalLink, Camera, BookOp
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import personService from '../services/personService';
 import movieService from '../services/movieService';
+import BackButton from '../components/common/BackButton';
 
 // ── Tokens ────────────────────────────────────────────────────────
 const C = {
@@ -190,6 +191,11 @@ export default function PersonPage() {
     return () => window.removeEventListener('scroll', handler);
   }, []);
 
+  // Scroll lên đầu trang mỗi khi chuyển sang diễn viên khác
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [id]);
+
   useEffect(() => {
     setLoading(true);
     setBioExpanded(false);
@@ -300,7 +306,7 @@ export default function PersonPage() {
   const allFilms = films.length > 0 ? films : extraMovies;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, overflowX: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, overflowX: 'hidden', paddingTop: 56 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,600;0,700;0,800;0,900;1,400&family=Nunito:wght@400;500;600;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -313,25 +319,16 @@ export default function PersonPage() {
 
       {/* ══ STICKY HEADER ══════════════════════════════════════════ */}
       <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
-        height: 56,
-        background: headerSolid ? 'rgba(8,8,8,0.96)' : 'transparent',
+        position: 'sticky', top: 0, left: 0, right: 0, zIndex: 100,
+        height: 52,
+        background: headerSolid ? 'rgba(8,8,8,0.96)' : 'rgba(8,8,8,0.0)',
         backdropFilter: headerSolid ? 'blur(20px)' : 'none',
+        WebkitBackdropFilter: headerSolid ? 'blur(20px)' : 'none',
         borderBottom: `1px solid ${headerSolid ? C.border : 'transparent'}`,
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 28px',
         transition: 'background 0.3s, border-color 0.3s',
       }}>
-        <motion.button
-          whileHover={{ x: -2 }} whileTap={{ scale: 0.94 }}
-          onClick={() => navigate(-1)}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: C.textSub, fontFamily: FB, fontSize: 13, padding: 0,
-          }}
-        >
-          <ChevronLeft size={17} /> Quay lại
-        </motion.button>
+        <BackButton />
         <AnimatePresence>
           {headerSolid && person && (
             <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
@@ -372,7 +369,7 @@ export default function PersonPage() {
         <div style={{
           position: 'relative', zIndex: 1,
           maxWidth: 1120, margin: '0 auto',
-          padding: '100px 28px 56px',
+          padding: '48px 28px 56px',
           display: 'flex', gap: 44, alignItems: 'flex-end', flexWrap: 'wrap',
         }}>
 
@@ -481,7 +478,7 @@ export default function PersonPage() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.25, duration: 0.45 }}
-          style={{ width: 220, flexShrink: 0, position: 'sticky', top: 76 }}
+          style={{ width: 220, flexShrink: 0, position: 'sticky', top: 60 }}
         >
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

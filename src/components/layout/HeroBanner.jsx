@@ -91,20 +91,59 @@ const HeroBanner = ({ movie, movies }) => {
           transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
           className="relative z-10 px-4 md:px-8 pb-24 md:pb-28 max-w-3xl"
         >
-          {/* Rating + Year */}
-          <div className="flex items-center gap-4 mb-4 flex-wrap">
-            <div className="flex items-center gap-1 bg-yellow-500/30 px-3 py-1 rounded-full">
-              <Star size={16} className="fill-yellow-400 text-yellow-400" />
-              <span className="font-bold text-yellow-400 text-base">{activeMovie.rating || 8.8}</span>
-            </div>
-            <span className="text-gray-400 text-sm">
-              {activeMovie.releaseDate
-                ? new Date(activeMovie.releaseDate).getFullYear()
-                : activeMovie.year || ''}
-            </span>
-            {activeMovie.genres?.[0] && (
-              <span className="text-gray-400 text-sm">{activeMovie.genres[0]}</span>
+          {/* Rating + Year + Duration + Genres — pill badges */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {/* Rating */}
+            {(activeMovie.rating) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 11px', borderRadius: 99,
+                background: 'rgba(245,197,24,0.15)',
+                border: '1px solid rgba(245,197,24,0.35)',
+              }}>
+                <Star size={12} style={{ fill: '#f5c518', color: '#f5c518', flexShrink: 0 }} />
+                <span style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#f5c518' }}>
+                  {activeMovie.rating}
+                </span>
+              </div>
             )}
+            {/* Năm */}
+            {(activeMovie.releaseDate || activeMovie.year) && (
+              <span style={{
+                fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)',
+                padding: '5px 11px', borderRadius: 99,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+              }}>
+                {activeMovie.releaseDate
+                  ? new Date(activeMovie.releaseDate).getFullYear()
+                  : activeMovie.year}
+              </span>
+            )}
+            {/* Thời lượng */}
+            {activeMovie.duration && (
+              <span style={{
+                fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)',
+                padding: '5px 11px', borderRadius: 99,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+              }}>
+                {Math.floor(activeMovie.duration / 60) > 0
+                  ? `${Math.floor(activeMovie.duration / 60)}g ${activeMovie.duration % 60}p`
+                  : `${activeMovie.duration} phút`}
+              </span>
+            )}
+            {/* Thể loại — tối đa 3 */}
+            {activeMovie.genres?.slice(0, 3).map(g => (
+              <span key={g} style={{
+                fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)',
+                padding: '5px 11px', borderRadius: 99,
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.15)',
+              }}>
+                {g}
+              </span>
+            ))}
           </div>
 
           {/* Title */}

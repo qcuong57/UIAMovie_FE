@@ -1,297 +1,288 @@
-// src/pages/HomePage.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/home/HomePage.jsx
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { MovieCarousel } from '../components/movie';
-import Navbar from '../components/layout/Navbar';
-import HeroBanner from '../components/layout/HeroBanner';
-import Footer from '../components/layout/Footer';
+import HeroBanner   from '../components/layout/HeroBanner';
+import Footer       from '../components/layout/Footer';
 import movieService from '../services/movieService';
 import genreService from '../services/genreService';
 
-// ── Design tokens ──────────────────────────────────────────────
-const C = {
-  bg: '#000000',        // pure black
-  surface: '#0a0a0a',   // card surfaces
-  surfaceHigh: '#111111',
-  border: 'rgba(255,255,255,0.06)',
-  borderHover: 'rgba(229,24,30,0.5)',
-  accent: '#e5181e',
-  accentSoft: 'rgba(229,24,30,0.12)',
-  text: '#e8eaf0',
-  textMuted: '#555c6e',
-  textDim: '#8b909e',
-};
+import { C, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS } from '../context/homeTokens';
+import GenreSection      from '../components/home/GenreSection';
+import TopRankedRow      from '../components/home/TopRankedRow';
+import MovieRow          from '../components/home/MovieRow';
+import CountryMovieRows  from '../components/home/CountryMovieRows';
 
-// ── Genre icon map ─────────────────────────────────────────────
-const GENRE_ICONS = {
-  Action: '🔫', Fantasy: '🧙', Comedy: '😂', Drama: '🎭',
-  Mystery: '🔍', Romance: '❤️', Horror: '👻', Thriller: '🎯',
-  'Sci-Fi': '🚀', Animation: '🎨', Documentary: '📽️', Adventure: '🌍',
-};
+const normalizeMovie = m => ({
+  id:          m.id,
+  title:       m.title,
+  year:        m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
+  rating:      m.rating ?? m.imdbRating ?? 0,
+  posterUrl:   m.posterUrl   || null,
+  backdropUrl: m.backdropUrl || null,
+  genres:      m.genres      || [],
+  description: m.description || '',
+  duration:    m.duration    || null,
+});
 
-// ── Genre count labels (mock) ──────────────────────────────────
-const GENRE_COUNTS = {
-  Action: '1,300+', Fantasy: '800+', Comedy: '1,000+', Drama: '1,500+',
-  Mystery: '500+', Romance: '900+', Horror: '750+', Thriller: '500+',
-};
+const byRating = arr => [...arr].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+const byNewest = arr => [...arr].sort((a, b) => (b.year   || 0) - (a.year   || 0));
 
-// ── Section header ─────────────────────────────────────────────
-const SectionHead = ({ label, sub }) => (
-  <div className="flex flex-col md:flex-row md:items-end justify-between gap-2 mb-8">
-    <div>
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-[3px] h-6 rounded-full" style={{ background: C.accent }} />
-        <h2
-          className="text-2xl md:text-3xl font-black uppercase tracking-wider"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif", color: C.text, letterSpacing: '0.04em' }}
-        >
-          {label}
-        </h2>
-      </div>
-      {sub && (
-        <p
-          className="text-sm ml-6 max-w-sm"
-          style={{ color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}
-        >
-          {sub}
-        </p>
-      )}
+// ── Loading ───────────────────────────────────────────────────────────────────
+const LoadingScreen = () => (
+  <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      <motion.div
+        style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${C.accent}`, borderTopColor: 'transparent' }}
+        animate={{ rotate: 360 }}
+        transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }}
+      />
+      <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: C.textDim, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+        Đang tải
+      </p>
     </div>
   </div>
 );
 
-// ── Genre card ─────────────────────────────────────────────────
-const GenreCard = ({ genre, isSelected, onClick }) => {
-  const [hovered, setHovered] = useState(false);
-  const active = isSelected || hovered;
+// ── Error ─────────────────────────────────────────────────────────────────────
+const ErrorScreen = ({ message, onRetry }) => (
+  <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
+    <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      <p style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 700, color: C.text }}>Có lỗi xảy ra</p>
+      <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.textSub }}>{message}</p>
+      <button onClick={onRetry} style={{
+        padding: '10px 28px', borderRadius: 6, background: C.accent,
+        border: 'none', cursor: 'pointer', fontFamily: FONT_BODY,
+        fontSize: 13, fontWeight: 700, color: 'white',
+      }}>
+        Thử lại
+      </button>
+    </div>
+  </div>
+);
 
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 w-full"
-      style={{
-        background: active ? C.accentSoft : C.surface,
-        border: `1px solid ${active ? C.borderHover : C.border}`,
-        transform: hovered ? 'translateY(-1px)' : 'none',
-      }}
-    >
-      <span className="text-xl leading-none select-none">{GENRE_ICONS[genre.name] || '🎬'}</span>
-      <div className="min-w-0">
-        <p
-          className="font-bold text-[13px] leading-none mb-1 truncate transition-colors"
-          style={{ color: active ? C.accent : C.text, fontFamily: "'DM Sans', sans-serif" }}
-        >
-          {genre.name}
-        </p>
-        <p
-          className="text-[11px] font-medium leading-none"
-          style={{ color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}
-        >
-          {GENRE_COUNTS[genre.name] || '500+'} Movies
-        </p>
-      </div>
-    </button>
+const SectionDivider = () => (
+  <div style={{
+    margin: '0 48px', height: 1,
+    background: 'linear-gradient(to right, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 60%, transparent 100%)',
+  }} />
+);
+
+// ── Recommendation engine (client-side) ───────────────────────────────────────
+// Input:  movies[]     — trending (đã normalize, có genres[])
+//         watchHistory — WatchHistoryDTO[] { movieId, ... }
+//         highlyRated  — top 10 (để tránh trùng)
+// Output: mảng phim gợi ý, max 20
+const buildForYou = (movies, watchHistory, highlyRated) => {
+  if (!movies.length) return [];
+
+  const watchedIds    = new Set(watchHistory.map(h => h.movieId));
+  const top10Ids      = new Set(highlyRated.slice(0, 10).map(m => m.id));
+
+  // ── Không có history → fallback: rated cao, không trùng top 10 ───────────
+  if (!watchedIds.size) {
+    return byRating(movies)
+      .filter(m => !top10Ids.has(m.id))
+      .slice(0, 20);
+  }
+
+  // ── Đếm tần suất genre từ lịch sử xem ────────────────────────────────────
+  // WatchHistoryDTO không có genres → cross-ref với trending list
+  const genreFreq = {};
+  movies
+    .filter(m => watchedIds.has(m.id))
+    .forEach(m => {
+      (m.genres || []).forEach(g => {
+        // genres có thể là string hoặc object { id, name }
+        const key = typeof g === 'string' ? g.toLowerCase() : (g?.name || g?.id || '').toLowerCase();
+        if (key) genreFreq[key] = (genreFreq[key] || 0) + 1;
+      });
+    });
+
+  const hasGenreData = Object.keys(genreFreq).length > 0;
+
+  // ── Score phim chưa xem ───────────────────────────────────────────────────
+  const candidates = movies.filter(m => !watchedIds.has(m.id));
+
+  const scored = candidates.map(m => {
+    const genreScore = hasGenreData
+      ? (m.genres || []).reduce((acc, g) => {
+          const key = typeof g === 'string' ? g.toLowerCase() : (g?.name || g?.id || '').toLowerCase();
+          return acc + (genreFreq[key] || 0);
+        }, 0)
+      : 0;
+    return { ...m, _score: genreScore };
+  });
+
+  // Sort: genre score cao → rating cao
+  scored.sort((a, b) =>
+    b._score !== a._score
+      ? b._score - a._score
+      : (b.rating || 0) - (a.rating || 0)
   );
+
+  // Nếu ít hơn 8 phim có genre khớp → bổ sung bằng rated cao
+  const meaningful = scored.filter(m => m._score > 0);
+  if (meaningful.length < 8) {
+    const usedIds = new Set(meaningful.map(m => m.id));
+    const filler  = byRating(candidates)
+      .filter(m => !usedIds.has(m.id))
+      .slice(0, 20 - meaningful.length);
+    return [...meaningful, ...filler].slice(0, 20);
+  }
+
+  return scored.slice(0, 20);
 };
 
-// ── Main ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 export default function HomePage() {
-  const [trendingMovies, setTrendingMovies] = useState([]);
-  const [genres, setGenres] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedGenre, setSelectedGenre] = useState(null);
-  const [favorites, setFavorites] = useState(new Set());
+  const [movies,       setMovies]       = useState([]);
+  const [genres,       setGenres]       = useState([]);
+  const [watchHistory, setWatchHistory] = useState([]); // WatchHistoryDTO[]
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
+  const [favorites,    setFavorites]    = useState(new Set());
 
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true); setError(null);
+      const [moviesData, genresData, favsData, historyData] = await Promise.all([
+        movieService.getTrendingMovies(),
+        genreService.getAllGenres(),
+        movieService.getFavorites().catch(() => []),
+        // getWatchHistory yêu cầu đăng nhập — không throw nếu 401
+        movieService.getWatchHistory().catch(() => []),
+      ]);
 
-      const moviesData = await movieService.getTrendingMovies();
-      const raw = Array.isArray(moviesData) ? moviesData : moviesData?.movies || [];
-      setTrendingMovies(raw.map((m) => ({
-        id: m.id,
-        title: m.title,
-        year: new Date(m.releaseDate).getFullYear(),
-        rating: m.rating || 8.0,
-        posterUrl: m.posterUrl || null,
-        backdropUrl: m.backdropUrl || null,
-        genres: m.genres || [],
-        description: m.description,
-      })));
+      const rawMovies = Array.isArray(moviesData) ? moviesData : moviesData?.movies || [];
+      setMovies(rawMovies.map(normalizeMovie));
 
-      const genresData = await genreService.getAllGenres();
       const rawGenres = Array.isArray(genresData) ? genresData : genresData?.genres || [];
-      setGenres(rawGenres.slice(0, 8));
+      setGenres(rawGenres);
+
+      const rawFavs = Array.isArray(favsData) ? favsData : favsData?.data || favsData?.favorites || [];
+      setFavorites(new Set(rawFavs.map(f => f.movieId ?? f.id)));
+
+      // Parse watch history — WatchHistoryDTO shape: { movieId, movieTitle, ... }
+      const rawHistory = Array.isArray(historyData)
+        ? historyData
+        : historyData?.data || historyData?.history || [];
+      setWatchHistory(rawHistory);
+
     } catch (err) {
-      setError(err.message || 'Something went wrong');
+      setError(err.message || 'Không thể tải dữ liệu');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleFavorite = (movie) =>
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      next.has(movie.id) ? next.delete(movie.id) : next.add(movie.id);
-      return next;
-    });
+  const toggleFavorite = movie => setFavorites(prev => {
+    const next = new Set(prev);
+    next.has(movie.id) ? next.delete(movie.id) : next.add(movie.id);
+    return next;
+  });
+  const isFavorited = id => favorites.has(id);
 
-  const isFavorited = (id) => favorites.has(id);
+  const highlyRated = useMemo(() => byRating(movies).slice(0, 20), [movies]);
+  const newest      = useMemo(() => byNewest(movies).slice(0, 20), [movies]);
 
-  const filtered = selectedGenre
-    ? trendingMovies.filter((m) => m.genres?.includes(selectedGenre))
-    : trendingMovies;
+  // "Có Thể Bạn Thích" — genre-based từ watch history
+  const forYou = useMemo(
+    () => buildForYou(movies, watchHistory, highlyRated),
+    [movies, watchHistory, highlyRated]
+  );
 
-  const sorted = (arr, key, dir = -1) =>
-    [...arr].sort((a, b) => dir * ((a[key] || 0) - (b[key] || 0)));
+  if (loading) return <LoadingScreen />;
+  if (error)   return <ErrorScreen message={error} onRetry={fetchData} />;
 
-  /* ── Loading ── */
-  if (loading) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{ background: C.bg }}>
-        <motion.div
-          className="w-9 h-9 rounded-full border-[3px] border-t-transparent"
-          style={{ borderColor: `${C.accent} transparent transparent transparent` }}
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
-        />
-        <p
-          className="text-xs uppercase tracking-[0.2em]"
-          style={{ color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}
-        >
-          Loading
-        </p>
-      </div>
-    );
-  }
-
-  /* ── Error ── */
-  if (error) {
-    return (
-      <div className="h-screen flex items-center justify-center" style={{ background: C.bg }}>
-        <div className="text-center space-y-3">
-          <p className="text-sm" style={{ color: C.textMuted }}>Something went wrong</p>
-          <p className="text-base" style={{ color: C.accent }}>{error}</p>
-          <button
-            onClick={fetchData}
-            className="mt-2 px-5 py-2 rounded-full text-sm font-bold text-white transition hover:opacity-90"
-            style={{ background: C.accent, fontFamily: "'DM Sans', sans-serif" }}
-          >
-            Try again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ── Page ── */
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: C.bg, color: C.text }}>
-      {/* Google Fonts */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { display: none; }
-      `}</style>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, overflowX: 'hidden', position: 'relative' }}>
+      <style>{GOOGLE_FONTS}</style>
 
-      {/* <Navbar /> */}
-      <HeroBanner movie={trendingMovies[0]} movies={trendingMovies.slice(0, 5)} />
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+        backgroundSize: '256px 256px', opacity: 0.028, mixBlendMode: 'overlay',
+      }} />
 
-      {/* ── Content ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.55 }}
-      >
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <HeroBanner movie={movies[0]} movies={movies.slice(0, 5)} />
 
-        {/* ── Trending Carousel ── */}
-        <div className="pb-4 px-4 md:px-16">
-          <MovieCarousel
-            title="Trending Now"
-            emoji="🔥"
-            movies={trendingMovies}
-            onFavoriteToggle={toggleFavorite}
-            isFavorited={isFavorited}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15, duration: 0.5 }}>
+          <GenreSection
+            genres={genres}
+            selectedGenre={null}
+            onGenreSelect={() => {}}
+            movies={movies}
           />
-        </div>
 
-        {/* ─────────────── Choose Your Genre ─────────────── */}
-        {genres.length > 0 && (
-          <section className="py-10 px-4 md:px-16" style={{ background: C.surfaceHigh }}>
-            <SectionHead
-              label="Choose The Type Of Film You Liked"
-              sub="We present many films from various main categories, let's choose and search film of you liked"
+          <div style={{ padding: '8px 48px 56px' }}>
+            <TopRankedRow
+              title="Top 10 Hôm Nay"
+              movies={highlyRated}
+              onFavoriteToggle={toggleFavorite}
+              isFavorited={isFavorited}
             />
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {genres.map((genre) => (
-                <GenreCard
-                  key={genre.id}
-                  genre={genre}
-                  isSelected={selectedGenre === genre.id}
-                  onClick={() => setSelectedGenre(selectedGenre === genre.id ? null : genre.id)}
-                />
-              ))}
-            </div>
+            <SectionDivider />
+            <div style={{ height: 40 }} />
 
-            {/* Filter indicator */}
-            {selectedGenre && (
-              <div className="mt-5 flex items-center gap-3">
-                <span className="text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: C.accentSoft, color: C.accent, fontFamily: "'DM Sans', sans-serif" }}>
-                  Filtering: {genres.find((g) => g.id === selectedGenre)?.name}
-                </span>
-                <button
-                  onClick={() => setSelectedGenre(null)}
-                  className="text-xs font-medium hover:underline"
-                  style={{ color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}
-                >
-                  Clear ×
-                </button>
-              </div>
-            )}
-          </section>
-        )}
+               {/* Phim mới theo quốc gia */}
+            <CountryMovieRows
+              favIds={favorites}
+              onFavToggle={(movie, isNowFav) => {
+                setFavorites(prev => {
+                  const next = new Set(prev);
+                  isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
+                  return next;
+                });
+              }}
+            />
 
-        {/* ── More Carousels ── */}
-        <div className="pt-10 px-4 md:px-16">
-          <MovieCarousel
-            title="Highly Rated"
-            emoji="⭐"
-            movies={sorted(filtered, 'rating')}
-            onFavoriteToggle={toggleFavorite}
-            isFavorited={isFavorited}
-          />
+            <MovieRow
+              title="Được Đánh Giá Cao"
+              subtitle="Khán giả yêu thích nhất"
+              movies={highlyRated}
+              onFavoriteToggle={toggleFavorite}
+              isFavorited={isFavorited}
+              accentColor="#f5c518"
+              seeAllSort="rating"
+            />
 
-          {/* Divider */}
-          <div className="mx-4 md:mx-16 my-2 h-px" style={{ background: C.border }} />
+            <SectionDivider />
+            <div style={{ height: 40 }} />
 
-          <MovieCarousel
-            title="Drama & Stories"
-            emoji="🎭"
-            movies={filtered}
-            onFavoriteToggle={toggleFavorite}
-            isFavorited={isFavorited}
-          />
+            <MovieRow
+              title="Mới Ra Mắt"
+              subtitle="Cập nhật liên tục"
+              movies={newest}
+              onFavoriteToggle={toggleFavorite}
+              isFavorited={isFavorited}
+              accentColor="#38bdf8"
+              seeAllSort="releaseDate"
+            />
 
-          <div className="mx-4 md:mx-16 my-2 h-px" style={{ background: C.border }} />
+            <SectionDivider />
+            <div style={{ height: 40 }} />
 
-          <MovieCarousel
-            title="Sci-Fi Adventures"
-            emoji="🚀"
-            movies={[...filtered].reverse()}
-            onFavoriteToggle={toggleFavorite}
-            isFavorited={isFavorited}
-          />
-        </div>
+            <MovieRow
+              title="Có Thể Bạn Thích"
+              subtitle={watchHistory.length > 0 ? 'Dựa trên lịch sử xem của bạn' : 'Khám phá thêm'}
+              movies={forYou}
+              onFavoriteToggle={toggleFavorite}
+              isFavorited={isFavorited}
+              accentColor="#a78bfa"
+              seeAllSort="rating"
+            />
 
-        <Footer />
-      </motion.div>
+            <SectionDivider />
+            <div style={{ height: 40 }} />
+          </div>
+
+          <Footer />
+        </motion.div>
+      </div>
     </div>
   );
 }

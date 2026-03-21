@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bell, User, Settings, LogOut, Shield, ChevronDown, X } from 'lucide-react';
+import { Search, Bell, User, Settings, LogOut, Shield, ChevronDown, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as variants from '../../motion-configs/variants';
 import * as transitions from '../../motion-configs/transitions';
@@ -85,6 +85,11 @@ const Navbar = () => {
       onClick: () => navigate('/profile'),
     },
     {
+      icon: <Clock size={15} />,
+      label: 'Lịch sử xem',
+      onClick: () => navigate('/watch-history'),
+    },
+    {
       icon: <Shield size={15} />,
       label: 'Bảo mật & 2FA',
       onClick: () => navigate('/settings/security'),
@@ -153,8 +158,8 @@ const Navbar = () => {
         <div className="hidden md:flex items-center gap-1">
           {[
             { label: 'Trang chủ', path: '/' },
-            { label: 'Trending', path: '/search?sort=trending' },
-            { label: 'Yêu thích', path: '/search?filter=favorites' },
+            { label: 'Trending', path: '/trending' },
+            { label: 'Yêu thích', path: '/favorites' },
             { label: 'Watchlist', path: '/search?filter=watchlist' },
           ].map(({ label, path }, i) => (
             <motion.button

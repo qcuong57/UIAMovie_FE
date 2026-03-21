@@ -1,13 +1,43 @@
 // src/components/movie/MovieCard.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star } from 'lucide-react';
+import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import movieService from '../../services/movieService';
 
 const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
+  const [localFav, setLocalFav] = useState(isFavorited);
   const navigate = useNavigate();
+
+  // Sync khi parent cập nhật lại isFavorited
+  useEffect(() => {
+    setLocalFav(isFavorited);
+  }, [isFavorited]);
+
+  const handleFavoriteClick = async (e) => {
+    e.stopPropagation();
+    if (favLoading) return;
+    setFavLoading(true);
+    try {
+      if (localFav) {
+        await movieService.removeFavorite(movie.id);
+        setLocalFav(false);
+        onFavoriteToggle?.(movie, false);
+      } else {
+        await movieService.addFavorite(movie.id);
+        setLocalFav(true);
+        onFavoriteToggle?.(movie, true);
+        navigate('/favorites');
+      }
+    } catch (err) {
+      console.error('Favorite toggle error:', err);
+    } finally {
+      setFavLoading(false);
+    }
+  };
 
   if (!movie) return null;
 
@@ -96,16 +126,22 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick }) =>
 
                   {/* Add / Favourite */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); onFavoriteToggle?.(movie); }}
+                    onClick={handleFavoriteClick}
+                    disabled={favLoading}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
                     style={{
-                      background: isFavorited ? '#e5181e' : 'transparent',
-                      border: `1.5px solid ${isFavorited ? '#e5181e' : 'rgba(255,255,255,0.4)'}`,
+                      background: localFav ? '#e5181e' : 'transparent',
+                      border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.4)'}`,
+                      opacity: favLoading ? 0.7 : 1,
+                      cursor: favLoading ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {isFavorited
-                      ? <Heart size={14} fill="white" color="white" />
-                      : <Plus size={15} color="white" strokeWidth={2.5} />}
+                    {favLoading
+                      ? <Loader size={14} color="white" className="animate-spin" />
+                      : localFav
+                        ? <Heart size={14} fill="white" color="white" />
+                        : <Plus size={15} color="white" strokeWidth={2.5} />
+                    }
                   </button>
 
                   {/* Thumbs up */}

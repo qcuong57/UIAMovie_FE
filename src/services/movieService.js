@@ -28,6 +28,33 @@ const movieService = {
   },
 
   /**
+   * Lấy phim theo quốc gia sản xuất
+   * @param {string} countryCode - Mã ISO 3166-1 alpha-2, VD: "KR", "US", "JP"
+   */
+  getMoviesByCountry: async (countryCode) => {
+    try {
+      const response = await axiosInstance.get(`/movies/country/${countryCode}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching movies by country:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Lấy danh sách quốc gia có phim trong DB
+   */
+  getAvailableCountries: async () => {
+    try {
+      const response = await axiosInstance.get('/movies/countries');
+      return response;
+    } catch (error) {
+      console.error('Error fetching available countries:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy top 20 phim trending
    */
   getTrendingMovies: async () => {
@@ -176,6 +203,33 @@ const movieService = {
       return response;
     } catch (error) {
       console.error('Error updating watch progress:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Xóa 1 mục khỏi lịch sử xem
+   * @param {string} historyId - ID của WatchHistoryDTO (không phải movieId)
+   */
+  deleteWatchHistory: async (historyId) => {
+    try {
+      const response = await axiosInstance.delete(`/movies/history/${historyId}`);
+      return response;
+    } catch (error) {
+      console.error('Error deleting watch history:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Xóa toàn bộ lịch sử xem của user hiện tại
+   */
+  clearWatchHistory: async () => {
+    try {
+      const response = await axiosInstance.delete('/movies/history');
+      return response;
+    } catch (error) {
+      console.error('Error clearing watch history:', error);
       throw error;
     }
   },

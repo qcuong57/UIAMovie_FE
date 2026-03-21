@@ -1,11 +1,12 @@
 // src/pages/MovieDetailPage.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, Maximize, ChevronLeft, Star, Heart, SkipForward, SkipBack } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, ChevronLeft, Star, SkipForward, SkipBack, Info } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import movieService from '../services/movieService';
 import PersonScrollRow from '../components/movie/Personscrollrow';
 import ReviewSection from '../components/movie/Reviewsection';
+import BackButton from '../components/common/BackButton';
 
 const toSlug = (name) =>
   (name || 'unknown')
@@ -122,7 +123,11 @@ const VideoPlayer = ({ movie }) => {
   const [show, setShow]         = useState(true);
   const [vol, setVol]           = useState(80);
   const [buffered]              = useState(65);
-  const timerRef = useRef(null);
+  const timerRef     = useRef(null);
+  const saveTimerRef = useRef(null);
+  const progressRef  = useRef(0); // luôn giữ giá trị mới nhất để dùng trong cleanup
+
+  const totalSec = movie?.duration ? movie.duration * 60 : 7200;
 
   const resetTimer = useCallback(() => {
     setShow(true);
@@ -130,13 +135,52 @@ const VideoPlayer = ({ movie }) => {
     timerRef.current = setTimeout(() => { if (playing) setShow(false); }, 3500);
   }, [playing]);
 
+  // ── Sync progressRef ──────────────────────────────────────────
+  useEffect(() => { progressRef.current = progress; }, [progress]);
+
+  // ── Mô phỏng playback ─────────────────────────────────────────
   useEffect(() => {
     if (!playing) { setShow(true); return; }
-    const iv = setInterval(() => setProgress(p => p >= 100 ? 0 : p + 0.08), 200);
+    const iv = setInterval(() => setProgress(p => p >= 100 ? 100 : p + 0.08), 200);
     return () => clearInterval(iv);
   }, [playing]);
 
-  const totalSec = 7200;
+  // ── Helper lưu tiến độ ────────────────────────────────────────
+  const saveProgress = useCallback((pct, forceComplete = false) => {
+    if (!movie?.id || pct < 1) return;
+    const minutes     = Math.floor(pct / 100 * totalSec / 60);
+    const isCompleted = forceComplete || pct >= 95;
+    movieService.updateWatchProgress(movie.id, minutes, isCompleted)
+      .catch(e => console.warn('[VideoPlayer] saveProgress:', e));
+  }, [movie?.id, totalSec]);
+
+  // ── Lưu mỗi 30 giây khi đang phát ───────────────────────────
+  useEffect(() => {
+    if (!playing) { clearInterval(saveTimerRef.current); return; }
+    saveTimerRef.current = setInterval(() => saveProgress(progressRef.current), 30_000);
+    return () => clearInterval(saveTimerRef.current);
+  }, [playing, saveProgress]);
+
+  // ── Lưu khi xem xong (>= 95%) ────────────────────────────────
+  useEffect(() => {
+    if (progress >= 95) {
+      saveProgress(progress, true);
+      setPlaying(false);
+    }
+  }, [progress >= 95]);
+
+  // ── Lưu khi rời trang (unmount) ───────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (progressRef.current > 1 && movie?.id) {
+        movieService.updateWatchProgress(
+          movie.id,
+          Math.floor(progressRef.current / 100 * totalSec / 60),
+          progressRef.current >= 95,
+        ).catch(() => {});
+      }
+    };
+  }, [movie?.id]);
   const curSec   = Math.floor(progress / 100 * totalSec);
   const fmt      = s => `${Math.floor(s/3600)}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
@@ -213,12 +257,16 @@ export default function MovieDetailPage() {
   const [actors, setActors]   = useState([]);
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fav, setFav]         = useState(false);
   const [tab, setTab]         = useState('cast');
   const [currentUser] = useState(() => {
     try { const r = localStorage.getItem('currentUser'); return r ? JSON.parse(r) : null; }
     catch { return null; }
   });
+
+  // Scroll lên đầu trang mỗi khi đổi phim
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [id]);
 
   useEffect(() => {
     (async () => {
@@ -241,8 +289,19 @@ export default function MovieDetailPage() {
         }
         if (Array.isArray(movieData?.cast) && movieData.cast.length > 0) {
           setActors(movieData.cast.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(c => ({
-            id: c.id ?? c.personId ?? c.tmdbPersonId ?? null,
-            name: c.name, character: c.character, profileUrl: c.profileUrl,
+            id:           c.id ?? c.personId ?? c.tmdbPersonId ?? null,
+            tmdbPersonId: c.tmdbPersonId ?? c.personId ?? null,
+            name:         c.name,
+            character:    c.character,
+            profileUrl:   c.profileUrl,
+            biography:    c.biography    ?? c.bio      ?? null,
+            birthday:     c.birthday     ?? c.dob      ?? null,
+            deathday:     c.deathday     ?? null,
+            placeOfBirth: c.placeOfBirth ?? null,
+            knownFor:     c.knownForDepartment ?? c.knownFor ?? null,
+            popularity:   c.popularity   ?? null,
+            profileImages:c.profileImages ?? [],
+            movies:       c.movies       ?? c.filmography ?? [],
           })));
         }
         const tRaw   = trendingRes?.data ?? trendingRes;
@@ -252,6 +311,11 @@ export default function MovieDetailPage() {
           year: x.releaseDate ? new Date(x.releaseDate).getFullYear() : x.year,
           rating: x.rating, posterUrl: x.posterUrl,
         })));
+      // ── Ghi lịch sử xem ngay khi vào trang ──────────────────────
+        if (movieData?.id) {
+          movieService.updateWatchProgress(movieData.id, 0, false)
+            .catch(() => {}); // silent — không ảnh hưởng UX
+        }
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -286,14 +350,8 @@ export default function MovieDetailPage() {
 
       {/* Nav */}
       <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(10,10,10,0.92)', backdropFilter:'blur(20px)', borderBottom:`1px solid ${C.border}`, padding:'0 32px', height:56, display:'flex', alignItems:'center', gap:16 }}>
-        <button onClick={() => navigate(-1)} style={{ background:'none', border:'none', cursor:'pointer', color:C.textSub, display:'flex', alignItems:'center', gap:6, padding:'6px 0' }}>
-          <ChevronLeft size={18}/>
-          <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:14, fontWeight:500 }}>Quay lại</span>
-        </button>
+        <BackButton />
         <div style={{ flex:1 }}/>
-        <button onClick={() => setFav(!fav)} style={{ background:'none', border:`1.5px solid ${fav ? C.accent : 'rgba(255,255,255,0.15)'}`, borderRadius:'50%', width:36, height:36, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s' }}>
-          <Heart size={15} fill={fav ? C.accent : 'none'} color={fav ? C.accent : C.textSub}/>
-        </button>
       </div>
 
       <div style={{ maxWidth:1280, margin:'0 auto', padding:'32px 32px 64px' }}>
@@ -310,20 +368,33 @@ export default function MovieDetailPage() {
               <h1 style={{ fontFamily:"'Be Vietnam Pro',sans-serif", fontSize:38, letterSpacing:'0.02em', lineHeight:1, marginBottom:12 }}>
                 {movie?.title}
               </h1>
-              <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+                {/* Rating badge */}
                 {movie?.rating && (
-                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                    <Star size={13} style={{ fill:'#f5c518', color:'#f5c518' }}/>
-                    <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:14, fontWeight:700, color:'#f5c518' }}>{movie.rating.toFixed(1)}</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:99, background:'rgba(245,197,24,0.12)', border:'1px solid rgba(245,197,24,0.3)' }}>
+                    <Star size={12} style={{ fill:'#f5c518', color:'#f5c518', flexShrink:0 }}/>
+                    <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, fontWeight:700, color:'#f5c518' }}>{movie.rating.toFixed(1)}</span>
                   </div>
                 )}
-                {year && <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.textSub }}>{year}</span>}
-                {movie?.duration && <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.textSub }}>{movie.duration} phút</span>}
+                {/* Năm */}
+                {year && (
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                    {year}
+                  </span>
+                )}
+                {/* Thời lượng */}
+                {movie?.duration && (
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                    {movie.duration} phút
+                  </span>
+                )}
+                {/* Genres */}
                 {movie?.genres?.slice(0,2).map(g => (
-                  <span key={g} style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, color:C.textSub, padding:'2px 10px', border:`1px solid rgba(255,255,255,0.12)`, borderRadius:20 }}>{g}</span>
+                  <span key={g} style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.6)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)' }}>{g}</span>
                 ))}
+                {/* % phù hợp */}
                 {movie?.rating && (
-                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:700, color:C.green }}>
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:700, color:C.green, padding:'4px 10px', borderRadius:99, background:'rgba(70,211,105,0.1)', border:'1px solid rgba(70,211,105,0.25)' }}>
                     {Math.round(movie.rating * 10)}% phù hợp
                   </span>
                 )}
@@ -335,13 +406,9 @@ export default function MovieDetailPage() {
               )}
               <div style={{ display:'flex', gap:10, marginTop:20 }}>
                 <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }}
+                  onClick={() => navigate(`/movie/${id}/info`)}
                   style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 28px', background:'white', color:'black', border:'none', borderRadius:6, cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontSize:15, fontWeight:700 }}>
-                  <Play size={18} fill="black"/> Phát
-                </motion.button>
-                <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.97 }} onClick={() => setFav(!fav)}
-                  style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 24px', background:'rgba(109,109,110,0.7)', color:'white', border:'none', borderRadius:6, cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontSize:15, fontWeight:600 }}>
-                  <Heart size={17} fill={fav ? C.accent : 'none'} color={fav ? C.accent : 'white'}/>
-                  {fav ? 'Đã thêm' : 'Yêu thích'}
+                  <Info size={18} color="black"/> Thông tin
                 </motion.button>
               </div>
             </motion.div>

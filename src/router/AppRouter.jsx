@@ -1,21 +1,34 @@
 // src/router/AppRouter.jsx
-import React from "react";
+import React, { useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
   Outlet,
+  useLocation,
 } from "react-router-dom";
+
+/** Scroll lên đầu trang mỗi khi route thay đổi */
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [pathname]);
+  return null;
+};
 import HomePage from "../pages/Homepage";
 import MovieInfoPage from "../pages/MovieInfoPage";
 import MovieDetailPage from "../pages/MovieDetailPage";
 import LandingPage from "../pages/Landingpage";
 import Navbar from "../components/layout/Navbar";
 import SearchPage from "../pages/Searchpage";
+import BrowsePage from "../pages/BrowsePage";
 import ProfilePage from "../pages/ProfilePage";
 import SecurityPage from "../pages/SecurityPage";
 import PersonPage from "../pages/PersonPage";
+import FavoritesPage from "../pages/FavoritesPage";
+import WatchHistoryPage from "../pages/WatchHistoryPage";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const isLoggedIn = () => {
@@ -46,6 +59,7 @@ const GuestRoute = ({ children }) =>
 
 const AppRouter = () => (
   <BrowserRouter>
+    <ScrollToTop />
     <Routes>
       {/* ── Trang guest (không Navbar) ── */}
       <Route
@@ -67,9 +81,12 @@ const AppRouter = () => (
       >
         <Route path="/" element={<HomePage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/browse" element={<BrowsePage />} />
         <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
+        <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/watch-history" element={<WatchHistoryPage />} />
       </Route>
 
       {/* ── Trang cài đặt (có top bar riêng, không cần Navbar) ── */}

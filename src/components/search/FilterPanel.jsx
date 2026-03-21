@@ -1,8 +1,26 @@
 // src/components/search/FilterPanel.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Star, X } from 'lucide-react';
+import { ChevronDown, Star, X, Globe } from 'lucide-react';
 import { C, FONT_BODY, SORT_OPTIONS, YEAR_OPTIONS } from './searchConstants';
+
+// ── Danh sách quốc gia phổ biến ────────────────────────────────
+export const COUNTRY_OPTIONS = [
+  { value: 'US', label: '🇺🇸 Mỹ' },
+  { value: 'KR', label: '🇰🇷 Hàn Quốc' },
+  { value: 'JP', label: '🇯🇵 Nhật Bản' },
+  { value: 'CN', label: '🇨🇳 Trung Quốc' },
+  { value: 'VN', label: '🇻🇳 Việt Nam' },
+  { value: 'FR', label: '🇫🇷 Pháp' },
+  { value: 'GB', label: '🇬🇧 Anh' },
+  { value: 'IN', label: '🇮🇳 Ấn Độ' },
+  { value: 'TH', label: '🇹🇭 Thái Lan' },
+  { value: 'IT', label: '🇮🇹 Ý' },
+  { value: 'DE', label: '🇩🇪 Đức' },
+  { value: 'ES', label: '🇪🇸 Tây Ban Nha' },
+  { value: 'HK', label: '🇭🇰 Hồng Kông' },
+  { value: 'TW', label: '🇹🇼 Đài Loan' },
+];
 
 // ── FilterSelect — dropdown không bị clip ──────────────────────
 // FIX: dùng position:fixed + tính toán tọa độ thay vì position:absolute
@@ -190,10 +208,11 @@ export const Chip = ({ label, onRemove }) => (
 // ══════════════════════════════════════════════════════════════════
 export default function FilterPanel({
   show, genres,
-  selGenre,  onGenreChange,
-  selYear,   onYearChange,
-  sortBy,    onSortChange,
-  minRating, onRatingChange,
+  selGenre,   onGenreChange,
+  selYear,    onYearChange,
+  sortBy,     onSortChange,
+  minRating,  onRatingChange,
+  selCountry, onCountryChange,
   filterCount, onClearAll,
 }) {
   const genreOptions = genres.map(g => ({ value: g.id, label: g.name }));
@@ -240,6 +259,13 @@ export default function FilterPanel({
               value={selYear}
               onChange={onYearChange}
               options={YEAR_OPTIONS}
+            />
+
+            <FilterSelect
+              label="🌏 Quốc gia"
+              value={selCountry}
+              onChange={onCountryChange}
+              options={COUNTRY_OPTIONS}
             />
 
             <FilterSelect

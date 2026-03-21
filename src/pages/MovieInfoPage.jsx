@@ -12,6 +12,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import movieService from '../services/movieService';
 import PersonScrollRow from '../components/movie/Personscrollrow';
 import ReviewSection from '../components/movie/Reviewsection';
+import BackButton from '../components/common/BackButton';
 
 const toSlug = (name) =>
   (name || 'unknown')
@@ -478,15 +479,7 @@ export default function MovieInfoPage() {
 
         {/* Nav bar */}
         <div style={{ position: 'relative', zIndex: 10, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <motion.button
-            whileHover={{ x: -3 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(-1)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 40, background: 'rgba(255,255,255,0.07)', border: `1px solid ${C.border}`, cursor: 'pointer', color: C.text }}
-          >
-            <ChevronLeft size={16} />
-            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 500 }}>Quay lại</span>
-          </motion.button>
+          <BackButton />
 
           {/* Fav button */}
           <motion.button
@@ -768,32 +761,6 @@ export default function MovieInfoPage() {
 
           </AnimatePresence>
         </motion.div>
-
-        {/* ──── BOTTOM CTA ──── */}
-        {/* <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          style={{ marginTop: 56, padding: '36px 40px', borderRadius: 20, background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(229,24,30,0.04) 100%)`, border: `1px solid ${C.accentGlow}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}
-        >
-          <div>
-            <p style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 28, fontWeight: 900, color: C.text, marginBottom: 6, letterSpacing: '0.03em' }}>
-              Sẵn sàng xem chưa?
-            </p>
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 14, color: C.textSub }}>
-              Chất lượng cao · Không quảng cáo · Xem ngay
-            </p>
-          </div>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => navigate(`/movie/${id}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 36px', borderRadius: 6, background: 'white', color: 'black', border: 'none', cursor: 'pointer', fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 18, fontWeight: 700, flexShrink: 0 }}
-          >
-            <Play size={18} fill="black" color="black" />
-            Xem Ngay
-          </motion.button>
-        </motion.div> */}
 
       </div>
 
