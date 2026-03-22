@@ -158,7 +158,7 @@ const Navbar = () => {
         <div className="hidden md:flex items-center gap-1">
           {[
             { label: 'Trang chủ', path: '/' },
-            { label: 'Trending', path: '/trending' },
+            // { label: 'Trending', path: '/trending' },
             { label: 'Yêu thích', path: '/favorites' },
             { label: 'Watchlist', path: '/search?filter=watchlist' },
           ].map(({ label, path }, i) => (
