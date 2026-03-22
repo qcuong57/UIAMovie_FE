@@ -282,7 +282,7 @@ export default function HomePage() {
             <div style={{ height: 40 }} />
           </div>
 
-          <Footer />
+          {/* <Footer /> */}
         </motion.div>
       </div>
     </div>
