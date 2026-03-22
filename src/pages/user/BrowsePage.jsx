@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeft, SlidersHorizontal, X, Heart, Loader, Star as StarIcon } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import movieService from '../../services/movieService';
@@ -13,6 +13,7 @@ import { SkeletonCard, GRID_STYLE } from '../../components/search/SearchUI';
 import Pagination   from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const PAGE_SIZE = 24;
 const ACCENT    = '#e5181e';
@@ -92,50 +93,77 @@ const FilterBtn = ({ active, onClick, children }) => (
 
 const Divider = () => <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 22 }} />;
 
-const FilterSidebar = ({ show, genres, selGenre, onGenreChange, selYear, onYearChange, sortBy, onSortChange, minRating, onRatingChange, onClearAll, filterCount, lockedGenreId }) => (
+// Nội dung filter — dùng chung cho sidebar desktop và bottom sheet mobile
+const FilterContent = ({ genres, selGenre, onGenreChange, selYear, onYearChange, sortBy, onSortChange, minRating, onRatingChange, onClearAll, filterCount, lockedGenreId, onClose }) => (
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+      <span style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700, color: 'white' }}>Bộ lọc</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {filterCount > 0 && <button onClick={onClearAll} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_BODY, fontSize: 11, color: ACCENT, fontWeight: 600 }}>Xóa tất cả</button>}
+        {onClose && <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', display: 'flex' }}><X size={18} /></button>}
+      </div>
+    </div>
+    <FilterGroup label="Sắp xếp">
+      {SORT_OPTIONS.map(o => <FilterBtn key={o.value} active={sortBy === o.value} onClick={() => onSortChange(o.value)}>{o.label}</FilterBtn>)}
+    </FilterGroup>
+    <Divider />
+    {!lockedGenreId && (
+      <>
+        <FilterGroup label="Thể loại" scrollable>
+          <FilterBtn active={!selGenre} onClick={() => onGenreChange(null)}>Tất cả</FilterBtn>
+          {genres.map(g => <FilterBtn key={g.id} active={selGenre === g.id} onClick={() => onGenreChange(g.id)}>{g.name}</FilterBtn>)}
+        </FilterGroup>
+        <Divider />
+      </>
+    )}
+    <FilterGroup label="Năm phát hành">
+      <select value={selYear || ''} onChange={e => onYearChange(e.target.value || null)}
+        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: selYear ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: FONT_BODY, fontSize: 13, outline: 'none', cursor: 'pointer' }}>
+        <option value="">Tất cả năm</option>
+        {YEARS.map(y => <option key={y} value={y} style={{ background: '#111' }}>{y}</option>)}
+      </select>
+    </FilterGroup>
+    <Divider />
+    <FilterGroup label={<>Điểm tối thiểu{minRating > 0 && <span style={{ color: ACCENT, marginLeft: 6 }}>≥ {minRating}</span>}</>}>
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        {[0, 5, 6, 7, 8, 9].map(r => (
+          <button key={r} onClick={() => onRatingChange(r)} style={{ padding: '5px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', background: minRating === r ? 'rgba(229,24,30,0.18)' : 'rgba(255,255,255,0.06)', color: minRating === r ? ACCENT : 'rgba(255,255,255,0.4)', fontFamily: FONT_BODY, fontSize: 12, fontWeight: minRating === r ? 700 : 400, transition: 'all 0.15s' }}>
+            {r === 0 ? 'Tất cả' : `${r}+`}
+          </button>
+        ))}
+      </div>
+    </FilterGroup>
+  </>
+);
+
+const FilterSidebar = ({ show, isMobile, onClose, ...props }) => (
   <AnimatePresence>
     {show && (
-      <motion.aside key="sidebar" initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }} transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
-        style={{ width: 256, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px 18px', alignSelf: 'flex-start', position: 'sticky', top: 88 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-          <span style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700, color: 'white' }}>Bộ lọc</span>
-          {filterCount > 0 && <button onClick={onClearAll} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT_BODY, fontSize: 11, color: ACCENT, fontWeight: 600 }}>Xóa tất cả</button>}
-        </div>
-
-        <FilterGroup label="Sắp xếp">
-          {SORT_OPTIONS.map(o => <FilterBtn key={o.value} active={sortBy === o.value} onClick={() => onSortChange(o.value)}>{o.label}</FilterBtn>)}
-        </FilterGroup>
-        <Divider />
-
-        {!lockedGenreId && (
-          <>
-            <FilterGroup label="Thể loại" scrollable>
-              <FilterBtn active={!selGenre} onClick={() => onGenreChange(null)}>Tất cả</FilterBtn>
-              {genres.map(g => <FilterBtn key={g.id} active={selGenre === g.id} onClick={() => onGenreChange(g.id)}>{g.name}</FilterBtn>)}
-            </FilterGroup>
-            <Divider />
-          </>
-        )}
-
-        <FilterGroup label="Năm phát hành">
-          <select value={selYear || ''} onChange={e => onYearChange(e.target.value || null)}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: selYear ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: FONT_BODY, fontSize: 13, outline: 'none', cursor: 'pointer' }}>
-            <option value="">Tất cả năm</option>
-            {YEARS.map(y => <option key={y} value={y} style={{ background: '#111' }}>{y}</option>)}
-          </select>
-        </FilterGroup>
-        <Divider />
-
-        <FilterGroup label={<>Điểm tối thiểu{minRating > 0 && <span style={{ color: ACCENT, marginLeft: 6 }}>≥ {minRating}</span>}</>}>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {[0, 5, 6, 7, 8, 9].map(r => (
-              <button key={r} onClick={() => onRatingChange(r)} style={{ padding: '5px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', background: minRating === r ? 'rgba(229,24,30,0.18)' : 'rgba(255,255,255,0.06)', color: minRating === r ? ACCENT : 'rgba(255,255,255,0.4)', fontFamily: FONT_BODY, fontSize: 12, fontWeight: minRating === r ? 700 : 400, transition: 'all 0.15s' }}>
-                {r === 0 ? 'Tất cả' : `${r}+`}
-              </button>
-            ))}
-          </div>
-        </FilterGroup>
-      </motion.aside>
+      isMobile ? (
+        <>
+          <motion.div key="backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 9998 }}
+          />
+          <motion.div key="sheet"
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, background: '#111', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px 20px 0 0', padding: '20px 20px 44px', maxHeight: '85vh', overflowY: 'auto' }}
+          >
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 20px' }} />
+            <FilterContent {...props} onClose={onClose} />
+          </motion.div>
+        </>
+      ) : (
+        <motion.aside key="sidebar"
+          initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+          style={{ width: 256, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px 18px', alignSelf: 'flex-start', position: 'sticky', top: 88 }}
+        >
+          <FilterContent {...props} />
+        </motion.aside>
+      )
     )}
   </AnimatePresence>
 );
@@ -154,7 +182,68 @@ const EmptyState = ({ error, onAction }) => (
 );
 
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ── BrowseMobileCard — card mobile cho BrowsePage có nút tim ─────
+const BrowseMobileCard = ({ movie, isFavorited, onFavoriteToggle, navigate }) => {
+  const [imgErr, setImgErr] = React.useState(false);
+  const [favLoading, setFavLoading] = React.useState(false);
+  const [localFav, setLocalFav] = React.useState(isFavorited);
+
+  React.useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
+
+  const handleFav = async (e) => {
+    e.stopPropagation();
+    if (favLoading) return;
+    setFavLoading(true);
+    try {
+      if (localFav) {
+        await movieService.removeFavorite(movie.id);
+        setLocalFav(false);
+        onFavoriteToggle?.(movie, false);
+      } else {
+        await movieService.addFavorite(movie.id);
+        setLocalFav(true);
+        onFavoriteToggle?.(movie, true);
+      }
+    } catch (err) { console.error(err); }
+    finally { setFavLoading(false); }
+  };
+
+  return (
+    <div onClick={() => navigate(`/movie/${movie.id}/info`)} style={{ cursor: 'pointer' }}>
+      <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '2/3', background: '#181818' }}>
+        {movie.posterUrl && !imgErr
+          ? <img src={movie.posterUrl} alt={movie.title} onError={() => setImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>🎬</div>
+        }
+        {movie.rating > 0 && (
+          <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 99, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="#f5c518"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
+          </div>
+        )}
+        {/* Nút tim */}
+        <button
+          onClick={handleFav}
+          disabled={favLoading}
+          style={{ position: 'absolute', bottom: 6, right: 6, width: 30, height: 30, borderRadius: '50%', background: localFav ? '#e5181e' : 'rgba(0,0,0,0.65)', border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: favLoading ? 'not-allowed' : 'pointer' }}
+        >
+          {favLoading
+            ? <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+            : <Heart size={13} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
+          }
+        </button>
+      </div>
+      <div style={{ paddingTop: 7, paddingBottom: 4 }}>
+        <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 2 }}>{movie.title}</p>
+        {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>}
+      </div>
+    </div>
+  );
+};
+
 export default function BrowsePage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -305,9 +394,9 @@ export default function BrowsePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: C.text, paddingTop: 68 }}>
       <style>{GOOGLE_FONTS}</style>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '32px 48px 80px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '32px 48px 80px' }}>
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -361,7 +450,7 @@ export default function BrowsePage() {
 
         {/* Main layout */}
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, width: '100%', overflowX: 'hidden' }}>
 
             {/* Skeleton */}
             {loading && (
@@ -378,23 +467,41 @@ export default function BrowsePage() {
             {/* Cards + Pagination */}
             {!loading && movies.length > 0 && (
               <>
-                <div style={GRID_STYLE}>
+                <div style={isMobile
+                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }
+                  : GRID_STYLE
+                }>
                   <AnimatePresence mode="popLayout">
                     {movies.map((m, i) => (
                       <motion.div key={m.id || i}
                         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
                         transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}>
-                        <MovieCard
-                          movie={m}
-                          isFavorited={favIds.has(String(m.id))}
-                          onFavoriteToggle={(movie, isNowFav) => {
-                            setFavIds(prev => {
-                              const next = new Set(prev);
-                              isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
-                              return next;
-                            });
-                          }}
-                        />
+                        {isMobile ? (
+                          <BrowseMobileCard
+                            movie={m}
+                            isFavorited={favIds.has(String(m.id))}
+                            onFavoriteToggle={(movie, isNowFav) => {
+                              setFavIds(prev => {
+                                const next = new Set(prev);
+                                isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
+                                return next;
+                              });
+                            }}
+                            navigate={navigate}
+                          />
+                        ) : (
+                          <MovieCard
+                            movie={m}
+                            isFavorited={favIds.has(String(m.id))}
+                            onFavoriteToggle={(movie, isNowFav) => {
+                              setFavIds(prev => {
+                                const next = new Set(prev);
+                                isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
+                                return next;
+                              });
+                            }}
+                          />
+                        )}
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -414,6 +521,8 @@ export default function BrowsePage() {
 
           <FilterSidebar
             show={showFilter} genres={genres}
+            isMobile={isMobile}
+            onClose={() => setShowFilter(false)}
             selGenre={selGenre}   onGenreChange={setSelGenre}
             selYear={selYear}     onYearChange={setSelYear}
             sortBy={sortBy}       onSortChange={setSortBy}

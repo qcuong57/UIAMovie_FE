@@ -1,5 +1,6 @@
 // src/pages/SecurityPage.jsx
 import React, { useState, useEffect } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, ShieldCheck, ShieldOff, Check, X, AlertTriangle, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -479,6 +480,7 @@ function DisableFlow({ user, onSuccess, onCancel, showToast }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function SecurityPage() {
+  const isMobile = useIsMobile();
   const navigate     = useNavigate();
   const canGoBack    = window.history.length > 1;
   const currentUser  = authService.getCurrentUser();
@@ -530,7 +532,7 @@ export default function SecurityPage() {
         background: 'rgba(7,7,7,0.92)', backdropFilter: 'blur(16px)',
         borderBottom: `1px solid ${C.border}`,
         display: 'flex', alignItems: 'center', gap: 14,
-        padding: '0 28px', height: 58,
+        padding: isMobile ? '0 16px' : '0 28px', height: 58,
       }}>
         <motion.button
           whileHover={{ x: -2 }} whileTap={{ scale: 0.95 }}
@@ -550,7 +552,7 @@ export default function SecurityPage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        style={{ maxWidth: 620, margin: '0 auto', padding: '36px 20px 60px' }}
+        style={{ maxWidth: 620, margin: '0 auto', padding: isMobile ? '20px 16px 48px' : '36px 20px 60px' }}
       >
 
         {/* ── 2FA Status ── */}

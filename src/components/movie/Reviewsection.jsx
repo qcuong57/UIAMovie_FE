@@ -8,6 +8,7 @@
 //   DELETE /api/ratingreview/{reviewId}            → xóa review
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Edit2, Trash2, AlertTriangle, ChevronDown, LogIn } from 'lucide-react';
 import reviewService from '../../services/reviewService';
@@ -37,9 +38,10 @@ const fmtDate = (dateStr) =>
 
 // ── StarPicker — chọn số sao khi viết review ──────────────────────────────
 const StarPicker = ({ value, onChange, size = 28 }) => {
+  const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(0);
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
+    <div style={{ display: 'flex', gap: isMobile ? 2 : 4, flexWrap: 'wrap' }}>
       {[1,2,3,4,5,6,7,8,9,10].map(n => (
         <button key={n}
           type="button"
@@ -93,6 +95,7 @@ const AvatarCircle = ({ name, avatarUrl, size = 38 }) => {
 
 // ── ReviewCard ─────────────────────────────────────────────────────────────
 const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
+  const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
   const isLong = (review.reviewText?.length || 0) > 280;
   const isOwn  = currentUserId && review.userId === currentUserId;
@@ -156,7 +159,7 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
 
           {/* Edit / Delete buttons — chỉ hiện cho chủ review */}
           {isOwn && (
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div style={{ display: 'flex', gap: isMobile ? 2 : 4, flexWrap: 'wrap' }}>
               <button onClick={() => onEdit(review)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textDim, padding: 4,
                   display: 'flex', alignItems: 'center', borderRadius: 6,
@@ -405,6 +408,7 @@ const RatingDistribution = ({ distribution = {}, total }) => {
  *   currentUser  — { id, name } | null  (null = chưa đăng nhập)
  */
 const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
+  const isMobile = useIsMobile();
   const [reviews,    setReviews]    = useState([]);
   const [stats,      setStats]      = useState(null);
   const [myReview,   setMyReview]   = useState(null);
@@ -491,7 +495,7 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '0 40px', alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: isMobile ? '24px 0' : '0 40px', alignItems: 'start' }}>
 
       {/* ── LEFT: form luôn hiển thị + list ─────────────────────────── */}
       <div>
@@ -668,4 +672,4 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
   );
 };
 
-export default ReviewSection; 
+export default ReviewSection;

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Film, Shield, Zap, Star, Check, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const C = {
   bg:      '#070707',
@@ -541,6 +542,7 @@ const FEATURES = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   // view: 'login' | 'register' | 'otp' | 'forgot' | 'reset'
   const [view,    setView]    = useState('login');
   const [otpData, setOtpData] = useState(null);   // { userId, email }
@@ -555,14 +557,6 @@ export default function LandingPage() {
     setOtpData({ userId, email });
     setView('otp');
   };
-
-  const cardTitle = {
-    login:    'Đăng nhập',
-    register: 'Đăng ký',
-    otp:      'Xác thực OTP',
-    forgot:   'Quên mật khẩu',
-    reset:    'Đặt lại mật khẩu',
-  }[view];
 
   return (
     <div style={{
@@ -580,7 +574,7 @@ export default function LandingPage() {
       {/* NAVBAR */}
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 40px', height: 60, flexShrink: 0,
+        padding: isMobile ? '0 16px' : '0 40px', height: 60, flexShrink: 0,
         borderBottom: `1px solid ${C.border}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -590,7 +584,7 @@ export default function LandingPage() {
         <div style={{ display: 'flex', gap: 4 }}>
           {['login','register'].map(t => (
             <button key={t} onClick={() => setView(t)} style={{
-              padding: '7px 18px', borderRadius: 4, cursor: 'pointer',
+              padding: isMobile ? '6px 12px' : '7px 18px', borderRadius: 4, cursor: 'pointer',
               background: view === t ? C.accent : 'none',
               border: view === t ? 'none' : `1px solid ${C.border}`,
               color: view === t ? '#fff' : C.sub,
@@ -603,79 +597,84 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* MAIN — 2 cột */}
+      {/* MAIN */}
       <div style={{
         flex: 1, display: 'grid',
-        gridTemplateColumns: '1fr 420px',
-        maxWidth: 1060, width: '100%',
-        margin: '0 auto', padding: '0 40px',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 420px',
+        maxWidth: isMobile ? '100%' : 1060,
+        width: '100%',
+        margin: '0 auto',
+        padding: isMobile ? '24px 16px' : '0 40px',
         alignItems: 'center', gap: 0,
       }}>
 
-        {/* LEFT */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          style={{ paddingRight: 64 }}
-        >
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '5px 14px', borderRadius: 40, marginBottom: 28,
-            background: C.accentL, border: '1px solid rgba(229,9,20,0.22)',
-          }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              Xem phim không giới hạn
-            </span>
-          </div>
+        {/* LEFT — ẩn trên mobile */}
+        {!isMobile && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            style={{ paddingRight: 64 }}
+          >
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '5px 14px', borderRadius: 40, marginBottom: 28,
+              background: C.accentL, border: '1px solid rgba(229,9,20,0.22)',
+            }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Xem phim không giới hạn
+              </span>
+            </div>
 
-          <h1 style={{
-            fontSize: 'clamp(40px, 4.5vw, 62px)', fontWeight: 900,
-            lineHeight: 1.06, letterSpacing: '-0.03em',
-            color: C.text, marginBottom: 20,
-          }}>
-            Trải nghiệm<br />
-            phim ảnh<br />
-            <span style={{ color: C.accent }}>đỉnh cao.</span>
-          </h1>
+            <h1 style={{
+              fontSize: 'clamp(40px, 4.5vw, 62px)', fontWeight: 900,
+              lineHeight: 1.06, letterSpacing: '-0.03em',
+              color: C.text, marginBottom: 20,
+            }}>
+              Trải nghiệm<br />
+              phim ảnh<br />
+              <span style={{ color: C.accent }}>đỉnh cao.</span>
+            </h1>
 
-          <p style={{
-            fontFamily: "'Nunito', sans-serif",
-            fontSize: 15, color: C.sub, lineHeight: 1.75,
-            marginBottom: 36, maxWidth: 380,
-          }}>
-            Kho phim khổng lồ, chất lượng HD,<br />cộng đồng đánh giá sôi động.
-          </p>
+            <p style={{
+              fontFamily: "'Nunito', sans-serif",
+              fontSize: 15, color: C.sub, lineHeight: 1.75,
+              marginBottom: 36, maxWidth: 380,
+            }}>
+              Kho phim khổng lồ, chất lượng HD,<br />cộng đồng đánh giá sôi động.
+            </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-            {FEATURES.map(({ icon: Icon, label }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                  background: C.accentL, border: '1px solid rgba(229,9,20,0.18)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Icon size={14} style={{ color: C.accent }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+              {FEATURES.map(({ icon: Icon, label }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                    background: C.accentL, border: '1px solid rgba(229,9,20,0.18)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Icon size={14} style={{ color: C.accent }} />
+                  </div>
+                  <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#999' }}>
+                    {label}
+                  </span>
                 </div>
-                <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#999' }}>
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* RIGHT — Auth card */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, x: isMobile ? 0 : 20, y: isMobile ? 20 : 0 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           style={{
             background: C.card, borderRadius: 16,
             border: `1px solid ${C.border}`,
-            padding: '36px 32px',
+            padding: isMobile ? '28px 20px' : '36px 32px',
             boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
+            width: '100%',
           }}
         >
           <AnimatePresence mode="wait">

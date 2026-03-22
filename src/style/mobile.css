@@ -1,0 +1,106 @@
+/* src/styles/mobile.css
+   Import 1 lần duy nhất trong main.jsx hoặc App.jsx:
+   import './styles/mobile.css';
+*/
+
+@media (max-width: 767px) {
+
+  /* ── Navbar ── */
+  nav {
+    padding: 0 16px !important;
+  }
+
+  /* ── Tất cả trang — padding chung ── */
+  [data-page] {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* ── Grid phim: 2 cột trên mobile ── */
+  [data-movie-grid] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* ── Grid 6 cột (Favorites) → 2 cột ── */
+  [data-grid-6] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* ── Filter sidebar: ẩn hẳn, dùng bottom sheet ── */
+  [data-filter-sidebar] {
+    display: none !important;
+  }
+
+  /* ── HeroBanner ── */
+  [data-hero] {
+    height: 56vw !important;
+    min-height: 240px !important;
+  }
+
+  [data-hero-content] {
+    padding: 16px !important;
+  }
+
+  [data-hero-title] {
+    font-size: 22px !important;
+  }
+
+  /* ── LandingPage: 1 cột ── */
+  [data-landing-grid] {
+    grid-template-columns: 1fr !important;
+    padding: 0 16px !important;
+  }
+
+  [data-landing-left] {
+    display: none !important;
+  }
+
+  /* ── WatchHistoryPage stats ── */
+  [data-stats-bar] {
+    flex-direction: column !important;
+  }
+
+  [data-stats-bar] > div {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  }
+
+  /* ── Heading sizes ── */
+  [data-page-title] {
+    font-size: 22px !important;
+  }
+
+  /* ── MovieRow / CountryMovieRows: 2 cột ── */
+  [data-movie-row-grid] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ── TopRankedRow: 2 cards ── */
+  [data-top-ranked-grid] {
+    flex-wrap: wrap !important;
+  }
+
+  [data-top-ranked-grid] > * {
+    flex: 0 0 50% !important;
+    width: 50% !important;
+  }
+
+  /* ── FavRow list view ── */
+  [data-fav-row-date],
+  [data-fav-row-actions] {
+    display: none !important;
+  }
+
+  /* ── Pagination ── */
+  [data-pagination] {
+    gap: 4px !important;
+  }
+
+  [data-pagination] button {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 12px !important;
+  }
+}

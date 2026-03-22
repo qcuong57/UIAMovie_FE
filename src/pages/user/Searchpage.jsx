@@ -4,12 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import movieService  from '../../services/movieService';
+import { Heart } from 'lucide-react';
 import genreService   from '../../services/genreService';
 import BackButton     from '../../components/common/BackButton';
 import Pagination     from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 
 import { C, FONT_TITLE, FONT_BODY } from '../../components/search/searchConstants';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import SearchBar    from '../../components/search/SearchBar';
 import SearchTabs   from '../../components/search/SearchTabs';
 import FilterPanel, { Chip } from '../../components/search/FilterPanel';
@@ -18,11 +20,11 @@ import ActorCard    from '../../components/search/ActorCard';
 import { SkeletonCard, EmptySearch, NoResults } from '../../components/search/SearchUI';
 
 // ── Grids — responsive ─────────────────────────────────────────
-const MOVIE_GRID = {
+const movieGrid = (isMobile) => ({
   display: 'grid',
-  gridTemplateColumns: 'repeat(7, 1fr)',
+  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(7, 1fr)',
   gap: 12,
-};
+});
 const ACTOR_GRID = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
@@ -60,7 +62,63 @@ const toSlug = (name) =>
     .replace(/^-|-$/g, '');
 
 // ══════════════════════════════════════════════════════════════
+
+// ── SearchMobileCard — card mobile có nút tim ────────────────────
+const SearchMobileCard = ({ movie, navigate }) => {
+  const [imgErr, setImgErr] = React.useState(false);
+  const [favLoading, setFavLoading] = React.useState(false);
+  const [localFav, setLocalFav] = React.useState(false);
+
+  const handleFav = async (e) => {
+    e.stopPropagation();
+    if (favLoading) return;
+    setFavLoading(true);
+    try {
+      if (localFav) {
+        await movieService.removeFavorite(movie.id);
+        setLocalFav(false);
+      } else {
+        await movieService.addFavorite(movie.id);
+        setLocalFav(true);
+      }
+    } catch (err) { console.error(err); }
+    finally { setFavLoading(false); }
+  };
+
+  return (
+    <div onClick={() => navigate(`/movie/${movie.id}/info`)} style={{ cursor: 'pointer' }}>
+      <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '2/3', background: '#181818' }}>
+        {movie.posterUrl && !imgErr
+          ? <img src={movie.posterUrl} alt={movie.title} onError={() => setImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>🎬</div>
+        }
+        {movie.rating > 0 && (
+          <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 99, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="#f5c518"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
+          </div>
+        )}
+        <button
+          onClick={handleFav}
+          disabled={favLoading}
+          style={{ position: 'absolute', bottom: 6, right: 6, width: 30, height: 30, borderRadius: '50%', background: localFav ? '#e5181e' : 'rgba(0,0,0,0.65)', border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: favLoading ? 'not-allowed' : 'pointer' }}
+        >
+          {favLoading
+            ? <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+            : <Heart size={13} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
+          }
+        </button>
+      </div>
+      <div style={{ paddingTop: 7, paddingBottom: 4 }}>
+        <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 2 }}>{movie.title}</p>
+        {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>}
+      </div>
+    </div>
+  );
+};
+
 export default function SearchPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -274,7 +332,7 @@ export default function SearchPage() {
         @keyframes spin    { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
       `}</style>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 28px 100px' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '20px 16px 80px' : '32px 28px 100px' }}>
 
         {/* Header */}
         <motion.div
@@ -357,8 +415,8 @@ export default function SearchPage() {
               {!debouncedQuery && filterCount === 0 && !loading && allMovies.length === 0 && <EmptySearch />}
 
               {loading && allMovies.length === 0 && (
-                <div style={MOVIE_GRID}>
-                  {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
+                <div style={movieGrid(isMobile)}>
+                  {Array.from({ length: isMobile ? 8 : 12 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               )}
 
@@ -368,20 +426,24 @@ export default function SearchPage() {
 
               {allMovies.length > 0 && (
                 <>
-                  <div style={{ ...MOVIE_GRID, opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                  <div style={{ ...movieGrid(isMobile), opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                     <AnimatePresence mode="popLayout">
                       {pageMovies.map((m, i) => (
                         <motion.div key={m.id ?? i}
                           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ delay: Math.min(i * 0.018, 0.2), duration: 0.22 }}
-                          style={{ zoom: 0.78 }}
+                          style={isMobile ? {} : { zoom: 0.78 }}
                         >
-                          <MovieCard
-                            movie={m}
-                            index={i}
-                            onClick={(movie) => navigate(`/movie/${movie.id}/info`)}
-                          />
+                          {isMobile ? (
+                            <SearchMobileCard movie={m} navigate={navigate} />
+                          ) : (
+                            <MovieCard
+                              movie={m}
+                              index={i}
+                              onClick={(movie) => navigate(`/movie/${movie.id}/info`)}
+                            />
+                          )}
                         </motion.div>
                       ))}
                     </AnimatePresence>

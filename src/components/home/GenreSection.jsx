@@ -1,6 +1,7 @@
 // src/components/home/GenreSection.jsx
 // ─── Genre cards: refined, elegant — không in hoa, tinh tế hơn ───────────────
 import React, { useRef, useState, useEffect } from "react";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
@@ -13,7 +14,7 @@ import {
 } from "../../context/homeTokens";
 
 // ── GenreCard ─────────────────────────────────────────────────────────────────
-const GenreCard = ({ genre, onClick, index, movies = [] }) => {
+const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => {
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
 
@@ -53,8 +54,8 @@ const GenreCard = ({ genre, onClick, index, movies = [] }) => {
       onMouseLeave={() => setHovered(false)}
       style={{
         flexShrink: 0,
-        width: 260,
-        height: 148,
+        width: isMobile ? 160 : 260,
+        height: isMobile ? 110 : 148,
         borderRadius: 12,
         overflow: "hidden",
         position: "relative",
@@ -209,6 +210,7 @@ const GenreCard = ({ genre, onClick, index, movies = [] }) => {
 
 // ── MoreCard ──────────────────────────────────────────────────────────────────
 const MoreCard = () => {
+  const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
   return (
@@ -221,7 +223,7 @@ const MoreCard = () => {
       style={{
         flexShrink: 0,
         width: 160,
-        height: 148,
+        height: isMobile ? 110 : 148,
         borderRadius: 12,
         cursor: "pointer",
         border: `1px solid ${hovered ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"}`,
@@ -358,6 +360,7 @@ export default function GenreSection({
   movies = [],
 }) {
   const scrollRef = useRef(null);
+  const isMobile = useIsMobile();
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
@@ -389,19 +392,20 @@ export default function GenreSection({
 
   return (
     <section style={{ padding: "44px 0 48px" }} className="group/genre">
-      <div style={{ paddingLeft: 48, paddingRight: 48 }}>
+      <div style={{ paddingLeft: isMobile ? 16 : 48, paddingRight: isMobile ? 16 : 48 }}>
         <SectionLabel text="Bạn đang quan tâm gì?" />
       </div>
 
-      <div className="relative" style={{ paddingLeft: 48 }}>
-        <ArrowBtn dir={-1} onClick={() => scroll(-1)} disabled={!canLeft} />
+      <div className="relative" style={{ paddingLeft: isMobile ? 16 : 48 }}>
+        <ArrowBtn dir={-1}
+            onClick={() => scroll(-1)} disabled={!canLeft} />
 
         <div
           ref={scrollRef}
           style={{
             display: "flex",
             gap: 10,
-            paddingRight: 48,
+            paddingRight: isMobile ? 16 : 48,
             paddingTop: 4,
             paddingBottom: 12,
             overflowX: "auto",
@@ -421,7 +425,8 @@ export default function GenreSection({
               genre={genre}
               index={i}
               movies={movies}
-              onClick={() =>
+              isMobile={isMobile}
+            onClick={() =>
                 onGenreSelect?.(selectedGenre === genre.id ? null : genre.id)
               }
             />
@@ -429,7 +434,8 @@ export default function GenreSection({
           <MoreCard />
         </div>
 
-        <ArrowBtn dir={1} onClick={() => scroll(1)} disabled={!canRight} />
+        <ArrowBtn dir={1}
+            onClick={() => scroll(1)} disabled={!canRight} />
       </div>
     </section>
   );

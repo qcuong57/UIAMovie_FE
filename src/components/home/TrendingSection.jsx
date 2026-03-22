@@ -1,5 +1,6 @@
 // src/components/home/TrendingSection.jsx
 import React, { useState, useRef } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Plus, Heart, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +9,7 @@ import MovieRow from './MovieRow';
 
 // ── HeroSpotlight — phim nổi bật kiểu Netflix hero ───────────────────────────
 const HeroSpotlight = ({ movies = [], isFavorited, onFavoriteToggle }) => {
+  const isMobile = useIsMobile();
   const [activeIdx, setActiveIdx] = useState(0);
   const navigate  = useNavigate();
   const movie     = movies[activeIdx] || movies[0];
@@ -16,7 +18,7 @@ const HeroSpotlight = ({ movies = [], isFavorited, onFavoriteToggle }) => {
   const favorited = isFavorited?.(movie.id);
 
   return (
-    <div style={{ position: 'relative', width: '100%', aspectRatio: '16/7', minHeight: 380 }}>
+    <div style={{ position: 'relative', width: '100%', aspectRatio: isMobile ? '16/9' : '16/7', minHeight: isMobile ? 220 : 380 }}>
       {/* Backdrop with crossfade */}
       <AnimatePresence mode="sync">
         <motion.div
@@ -50,8 +52,8 @@ const HeroSpotlight = ({ movies = [], isFavorited, onFavoriteToggle }) => {
       <div style={{
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-        padding: '0 48px 48px',
-        maxWidth: '52%',
+        padding: isMobile ? '0 16px 20px' : '0 48px 48px',
+        maxWidth: isMobile ? '90%' : '52%',
       }}>
         {/* Genre tags */}
         {movie.genres?.length > 0 && (
@@ -200,9 +202,9 @@ const HeroSpotlight = ({ movies = [], isFavorited, onFavoriteToggle }) => {
         </motion.div>
       </div>
 
-      {/* Thumbnail strip — bottom right */}
+      {/* Thumbnail strip — bottom right, ẩn trên mobile */}
       <div style={{
-        position: 'absolute', bottom: 40, right: 48,
+        position: 'absolute', bottom: 40, right: 48, display: isMobile ? 'none' : 'flex',
         display: 'flex', gap: 8, alignItems: 'center',
       }}>
         {movies.slice(0, 5).map((m, i) => (
@@ -243,6 +245,7 @@ const HeroSpotlight = ({ movies = [], isFavorited, onFavoriteToggle }) => {
 // TrendingSection — exported
 // ══════════════════════════════════════════════════════════════════════════════
 export default function TrendingSection({ movies = [], isFavorited, onFavoriteToggle }) {
+  const isMobile = useIsMobile();
   if (!movies.length) return null;
 
   return (
@@ -255,7 +258,7 @@ export default function TrendingSection({ movies = [], isFavorited, onFavoriteTo
       />
 
       {/* Trending row — slightly overlapping hero bottom */}
-      <div style={{ position: 'relative', marginTop: -20, zIndex: 2, padding: '0 48px' }}>
+      <div style={{ position: 'relative', marginTop: -20, zIndex: 2, padding: isMobile ? '0 16px' : '0 48px' }}>
         <MovieRow
           title="Trending Now"
           emoji="🔥"

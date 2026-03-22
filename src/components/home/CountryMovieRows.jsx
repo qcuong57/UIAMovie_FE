@@ -2,6 +2,7 @@
 // Phong cách Netflix — tinh tế, sang trọng, dark luxury
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -70,6 +71,7 @@ const Skeleton = () => (
 
 // ── Single country block ──────────────────────────────────────
 const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [movies,  setMovies]  = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,10 +115,10 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
 
   if (!loading && movies.length === 0) return null;
 
-  const COLS    = 5;
+  const COLS = isMobile ? 2 : 5;
   const maxPage = Math.max(0, Math.ceil(movies.length / COLS) - 1);
-  const visible = movies.slice(page * COLS, page * COLS + COLS);
-  const canNext = page < maxPage;
+  const visible = isMobile ? movies : movies.slice(page * COLS, page * COLS + COLS);
+  const canNext = !isMobile && page < maxPage;
 
   return (
     <motion.section
@@ -198,70 +200,103 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
         }} />
 
         {/* Card grid + next arrow */}
-        <div ref={rowRef} style={{ position: 'relative', zIndex: 1 }}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={page}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${COLS}, 1fr)`,
-                gap: 4,
-              }}
-            >
+        <div ref={rowRef} style={{ position: 'relative', zIndex: 1, overflow: isMobile ? 'hidden' : 'visible' }}>
+          {isMobile ? (
+            /* Mobile: scroll ngang tự do, không có nút mũi tên */
+            <div style={{
+              display: 'flex',
+              gap: 10,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+              paddingBottom: 4,
+            }}>
+              <style>{`.cmr-scroll::-webkit-scrollbar{display:none}`}</style>
               {loading
-                ? Array.from({ length: COLS }).map((_, i) => <Skeleton key={i} />)
-                : visible.map((m, i) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.06, duration: 0.3 }}
-                    >
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} style={{ width: 110, flexShrink: 0 }}><Skeleton /></div>
+                  ))
+                : movies.map((m) => (
+                    <div key={m.id} style={{ flexShrink: 0 }}>
                       <MovieCard
                         movie={m}
                         isFavorited={favIds?.has(String(m.id))}
                         onFavoriteToggle={onFavToggle}
+                        cardWidth={160}
                       />
-                    </motion.div>
+                    </div>
                   ))
               }
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Fade + next arrow — chỉ hiện khi còn trang */}
-          {!loading && canNext && (
-            <div style={{
-              position: 'absolute', right: 0, top: 0, bottom: 0, width: 100,
-              background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.92))',
-              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-              paddingRight: 8, zIndex: 2,
-            }}>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.94 }}
-                onClick={() => setPage(p => p + 1)}
-                style={{
-                  width: 40, height: 40, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.1)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  cursor: 'pointer', color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-                }}
-              >
-                <ChevronRight size={18} strokeWidth={2} />
-              </motion.button>
             </div>
+          ) : (
+            /* Desktop: grid có nút mũi tên */
+            <>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={page}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+                    gap: 4,
+                  }}
+                >
+                  {loading
+                    ? Array.from({ length: COLS }).map((_, i) => <Skeleton key={i} />)
+                    : visible.map((m, i) => (
+                        <motion.div
+                          key={m.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.06, duration: 0.3 }}
+                        >
+                          <MovieCard
+                            movie={m}
+                            isFavorited={favIds?.has(String(m.id))}
+                            onFavoriteToggle={onFavToggle}
+                          />
+                        </motion.div>
+                      ))
+                  }
+                </motion.div>
+              </AnimatePresence>
+
+              {!loading && canNext && (
+                <div style={{
+                  position: 'absolute', right: 0, top: 0, bottom: 0, width: 100,
+                  background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.92))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                  paddingRight: 8, zIndex: 2,
+                }}>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => setPage(p => p + 1)}
+                    style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.1)',
+                      backdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      cursor: 'pointer', color: 'white',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <ChevronRight size={18} strokeWidth={2} />
+                  </motion.button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* ── Dot pagination ── */}
-        {!loading && maxPage > 0 && (
+        {!isMobile && !loading && maxPage > 0 && (
           <div style={{ display: 'flex', gap: 6, marginTop: 16, paddingLeft: 2 }}>
             {Array.from({ length: maxPage + 1 }).map((_, i) => (
               <motion.button

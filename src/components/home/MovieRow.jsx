@@ -1,5 +1,6 @@
 // src/components/home/MovieRow.jsx
 import React, { useRef, useState, useEffect } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MovieCard from '../movie/MovieCard';
@@ -22,6 +23,7 @@ export default function MovieRow({
   seeAllSort, seeAllGenreId, seeAllGenreName,
 }) {
   const navigate   = useNavigate();
+  const isMobile   = useIsMobile();
   const scrollRef  = useRef(null);
   const [canLeft,  setCanLeft]  = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -73,14 +75,14 @@ export default function MovieRow({
         {/* Left: title + subtitle */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
           <h2 style={{
-            fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 700,
+            fontFamily: FONT_DISPLAY, fontSize: isMobile ? 15 : 20, fontWeight: 700,
             color: C.text, letterSpacing: '-0.01em', lineHeight: 1,
             borderLeft: `2.5px solid ${accentColor || C.accent}`,
             paddingLeft: 11,
           }}>
             {title}
           </h2>
-          {subtitle && (
+          {subtitle && !isMobile && (
             <span style={{
               fontFamily: FONT_BODY, fontSize: 12,
               color: 'rgba(255,255,255,0.28)',
@@ -126,58 +128,61 @@ export default function MovieRow({
       </div>
 
       {/* ── Scroll area ── */}
-      <div className="relative" style={{ overflowX: 'clip' }}>
-        <div className="absolute left-0 top-0 bottom-0 w-20 z-[60] pointer-events-none transition-opacity duration-300"
-          style={{ background: 'linear-gradient(to right, #080808, transparent)', opacity: canLeft ? 1 : 0 }} />
-
-        <button onClick={() => scroll(-1)} disabled={!canLeft}
-          className="absolute left-1 top-1/2 -translate-y-1/2 z-[70]
-            w-10 h-10 rounded-full flex items-center justify-center
-            transition-all duration-150 hover:scale-110 active:scale-95
-            opacity-0 group-hover/row:opacity-100 disabled:opacity-0 disabled:pointer-events-none"
-          style={{
-            background: 'rgba(8,8,8,0.9)', border: '1px solid rgba(255,255,255,0.15)',
-            backdropFilter: 'blur(8px)', color: C.text,
-            pointerEvents: canLeft ? 'auto' : 'none',
-          }}
-        >
-          <ChevronLeft size={18} strokeWidth={2} />
-        </button>
+      <div className="relative" style={{ overflow: isMobile ? 'hidden' : 'clip' }}>
+        {/* Fade + nav — chỉ desktop */}
+        {!isMobile && <>
+          <div className="absolute left-0 top-0 bottom-0 w-20 z-[60] pointer-events-none transition-opacity duration-300"
+            style={{ background: 'linear-gradient(to right, #080808, transparent)', opacity: canLeft ? 1 : 0 }} />
+          <button onClick={() => scroll(-1)} disabled={!canLeft}
+            className="absolute left-1 top-1/2 -translate-y-1/2 z-[70]
+              w-10 h-10 rounded-full flex items-center justify-center
+              transition-all duration-150 hover:scale-110 active:scale-95
+              opacity-0 group-hover/row:opacity-100 disabled:opacity-0 disabled:pointer-events-none"
+            style={{ background: 'rgba(8,8,8,0.9)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', color: C.text, pointerEvents: canLeft ? 'auto' : 'none' }}
+          >
+            <ChevronLeft size={18} strokeWidth={2} />
+          </button>
+        </>}
 
         <div ref={scrollRef} style={{
-          display: 'flex', gap: 8,
-          paddingTop: 52, paddingBottom: 52,
-          marginTop: -52, marginBottom: -52,
-          overflowX: 'auto', overflowY: 'visible',
+          display: 'flex',
+          gap: isMobile ? 56 : 8,
+          paddingTop: isMobile ? 4 : 52,
+          paddingBottom: isMobile ? 4 : 52,
+          marginTop: isMobile ? 0 : -52,
+          marginBottom: isMobile ? 0 : -52,
+          overflowX: 'auto',
+          overflowY: isMobile ? 'hidden' : 'visible',
           scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
         }}>
           {movies.filter(Boolean).map(movie => (
-            <div key={movie.id} style={{ flexShrink: 0 }}>
+            <div key={movie.id} style={{ flexShrink: 0, width: isMobile ? 110 : undefined }}>
               <MovieCard
                 movie={movie}
                 isFavorited={isFavorited?.(movie.id)}
                 onFavoriteToggle={onFavoriteToggle}
+                cardWidth={isMobile ? 160 : undefined}
               />
             </div>
           ))}
         </div>
 
-        <div className="absolute right-0 top-0 bottom-0 w-20 z-[60] pointer-events-none transition-opacity duration-300"
-          style={{ background: 'linear-gradient(to left, #080808, transparent)', opacity: canRight ? 1 : 0 }} />
-
-        <button onClick={() => scroll(1)} disabled={!canRight}
-          className="absolute right-1 top-1/2 -translate-y-1/2 z-[70]
-            w-10 h-10 rounded-full flex items-center justify-center
-            transition-all duration-150 hover:scale-110 active:scale-95
-            opacity-0 group-hover/row:opacity-100 disabled:opacity-0 disabled:pointer-events-none"
-          style={{
-            background: 'rgba(8,8,8,0.9)', border: '1px solid rgba(255,255,255,0.15)',
-            backdropFilter: 'blur(8px)', color: C.text,
-            pointerEvents: canRight ? 'auto' : 'none',
-          }}
-        >
-          <ChevronRight size={18} strokeWidth={2} />
-        </button>
+        {/* Fade + nav phải — chỉ desktop */}
+        {!isMobile && <>
+          <div className="absolute right-0 top-0 bottom-0 w-20 z-[60] pointer-events-none transition-opacity duration-300"
+            style={{ background: 'linear-gradient(to left, #080808, transparent)', opacity: canRight ? 1 : 0 }} />
+          <button onClick={() => scroll(1)} disabled={!canRight}
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-[70]
+              w-10 h-10 rounded-full flex items-center justify-center
+              transition-all duration-150 hover:scale-110 active:scale-95
+              opacity-0 group-hover/row:opacity-100 disabled:opacity-0 disabled:pointer-events-none"
+            style={{ background: 'rgba(8,8,8,0.9)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', color: C.text, pointerEvents: canRight ? 'auto' : 'none' }}
+          >
+            <ChevronRight size={18} strokeWidth={2} />
+          </button>
+        </>}
       </div>
     </section>
   );

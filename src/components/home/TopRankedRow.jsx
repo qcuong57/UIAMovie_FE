@@ -2,6 +2,7 @@
 // ─── Top 10: 5 phim/trang, không scroll nội bộ, poster xéo, hover đầy đủ ───
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Plus, Heart, ThumbsUp, ChevronDown,
@@ -23,17 +24,19 @@ const rankStroke = rank =>
 // ══════════════════════════════════════════════════════════════════════════════
 // RankCard
 // ══════════════════════════════════════════════════════════════════════════════
-const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
+const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle, isMobile }) => {
   const [hovered,    setHovered]    = useState(false);
   const [imgError,   setImgError]   = useState(false);
   const [favLoading, setFavLoading] = useState(false);
-  const [localFav,   setLocalFav]   = useState(isFavorited?.(movie.id));
+  const [localFav,   setLocalFav]   = useState(
+    typeof isFavorited === 'function' ? isFavorited(movie.id) : isFavorited
+  );
   const navigate  = useNavigate();
   const matchPct  = movie.rating ? Math.round(movie.rating * 10) : null;
 
   // Sync khi parent cập nhật favorites
   useEffect(() => {
-    setLocalFav(isFavorited?.(movie.id));
+    setLocalFav(typeof isFavorited === 'function' ? isFavorited(movie.id) : isFavorited);
   }, [isFavorited, movie.id]);
 
   const handleFavoriteClick = async (e) => {
@@ -59,7 +62,7 @@ const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
   };
 
   // Chiều rộng khoảng lùi cho số rank
-  const rankW = rank >= 10 ? 88 : 68;
+  const rankW = isMobile ? (rank >= 10 ? 58 : 46) : (rank >= 10 ? 88 : 68);
 
   return (
     <div
@@ -91,7 +94,7 @@ const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
           {/* Lớp shadow */}
           <span style={{
             fontFamily: FONT_BEBAS,
-            fontSize: 'clamp(110px, 10.5vw, 158px)',
+            fontSize: isMobile ? 'clamp(72px, 18vw, 100px)' : 'clamp(110px, 10.5vw, 158px)',
             fontWeight: 400,
             color: 'transparent',
             WebkitTextStroke: '1px rgba(0,0,0,0.95)',
@@ -105,7 +108,7 @@ const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
           {/* Số chính (outline stroke) */}
           <span style={{
             fontFamily: FONT_BEBAS,
-            fontSize: 'clamp(110px, 10.5vw, 158px)',
+            fontSize: isMobile ? 'clamp(72px, 18vw, 100px)' : 'clamp(110px, 10.5vw, 158px)',
             fontWeight: 400,
             color: 'transparent',
             WebkitTextStroke: `2.5px ${rankStroke(rank)}`,
@@ -179,6 +182,29 @@ const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
                 {movie.rating.toFixed(1)}
               </span>
             </div>
+          )}
+
+          {/* Nút tim — chỉ mobile, góc dưới trái */}
+          {isMobile && (
+            <button
+              onClick={e => { e.stopPropagation(); handleFavoriteClick(e); }}
+              disabled={favLoading}
+              style={{
+                position: 'absolute', bottom: 8, left: 8, zIndex: 10,
+                width: 28, height: 28, borderRadius: '50%',
+                background: localFav ? '#e5181e' : 'rgba(0,0,0,0.65)',
+                border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`,
+                backdropFilter: 'blur(6px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: favLoading ? 'not-allowed' : 'pointer',
+                opacity: favLoading ? 0.7 : 1,
+              }}
+            >
+              {favLoading
+                ? <Loader size={11} color="white" style={{ animation: 'spin 0.7s linear infinite' }} />
+                : <Heart size={12} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
+              }
+            </button>
           )}
 
           {/* Vignette đáy */}
@@ -324,11 +350,13 @@ export default function TopRankedRow({
   isFavorited,
   onFavoriteToggle,
 }) {
+  const isMobile = useIsMobile();
+  const PER_PAGE_RESP = isMobile ? 2 : PER_PAGE;
   const [page,      setPage]      = useState(0);
   const [direction, setDirection] = useState(1);
 
   const top10  = movies.slice(0, 10);
-  const pages  = Math.ceil(top10.length / PER_PAGE);
+  const pages  = Math.ceil(top10.length / PER_PAGE_RESP);
   const canLeft  = page > 0;
   const canRight = page < pages - 1;
 
@@ -337,7 +365,7 @@ export default function TopRankedRow({
     setPage(p => Math.min(Math.max(p + dir, 0), pages - 1));
   }, [pages]);
 
-  const slice = top10.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+  const slice = top10.slice(page * PER_PAGE_RESP, page * PER_PAGE_RESP + PER_PAGE_RESP);
 
   if (!top10.length) return null;
 
@@ -360,7 +388,7 @@ export default function TopRankedRow({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 3, height: 20, borderRadius: 99, background: C.accent, flexShrink: 0 }} />
           <h2 style={{
-            fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 800,
+            fontFamily: FONT_DISPLAY, fontSize: isMobile ? 16 : 20, fontWeight: 800,
             color: C.text, lineHeight: 1, margin: 0,
           }}>
             {title}
@@ -442,13 +470,14 @@ export default function TopRankedRow({
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06, duration: 0.38, ease: [0.215, 0.61, 0.355, 1] }}
-                style={{ flex: '0 0 20%', width: '20%', minWidth: 0, overflow: 'visible' }}
+                style={{ flex: isMobile ? '0 0 50%' : '0 0 20%', width: isMobile ? '50%' : '20%', minWidth: 0, overflow: 'visible' }}
               >
                 <RankCard
                   movie={movie}
-                  rank={page * PER_PAGE + i + 1}
+                  rank={page * PER_PAGE_RESP + i + 1}
                   isFavorited={isFavorited}
                   onFavoriteToggle={onFavoriteToggle}
+                  isMobile={isMobile}
                 />
               </motion.div>
             ))}

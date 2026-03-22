@@ -1,6 +1,7 @@
 // src/components/movie/PersonScrollRow.jsx
 // Component scroll ngang cho diễn viên / đạo diễn — dùng chung ở mọi trang
 import React, { useRef, useState, useEffect } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -26,6 +27,7 @@ const C = {
 
 // ── CastCard ──────────────────────────────────────────────────────────────────
 const CastCard = ({ person, index }) => {
+  const isMobile = useIsMobile();
   const [imgErr, setImgErr] = useState(false);
   const navigate = useNavigate();
 
@@ -45,7 +47,7 @@ const CastCard = ({ person, index }) => {
       whileHover={{ y: -6, transition: { duration: 0.18 } }}
       onClick={handleClick}
       style={{
-        width: 120,
+        width: isMobile ? 88 : 120,
         flexShrink: 0,
         borderRadius: 10,
         overflow: 'hidden',
@@ -85,9 +87,9 @@ const CastCard = ({ person, index }) => {
       </div>
 
       {/* Info */}
-      <div style={{ padding: '10px 10px 12px' }}>
+      <div style={{ padding: isMobile ? '8px 8px 10px' : '10px 10px 12px' }}>
         <p style={{
-          fontFamily: "'Nunito', sans-serif", fontSize: 12, fontWeight: 700,
+          fontFamily: "'Nunito', sans-serif", fontSize: isMobile ? 11 : 12, fontWeight: 700,
           color: C.text, lineHeight: 1.35, marginBottom: 3,
           display: '-webkit-box', WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical', overflow: 'hidden',
@@ -96,7 +98,7 @@ const CastCard = ({ person, index }) => {
         </p>
         {person.character && (
           <p style={{
-            fontFamily: "'Nunito', sans-serif", fontSize: 11,
+            fontFamily: "'Nunito', sans-serif", fontSize: isMobile ? 10 : 11,
             color: C.textSub, fontStyle: 'italic',
             display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4,
@@ -105,7 +107,7 @@ const CastCard = ({ person, index }) => {
           </p>
         )}
         {person.role && (
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.accent, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: isMobile ? 10 : 11, color: C.accent, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             {person.role}
           </p>
         )}
@@ -123,6 +125,7 @@ const CastCard = ({ person, index }) => {
  * NOTE: onPersonClick đã bị loại bỏ. Click vào card sẽ navigate thẳng sang /person/:id
  */
 const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
+  const isMobile = useIsMobile();
   const scrollRef = useRef(null);
   const [canLeft,  setCanLeft]  = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -154,7 +157,7 @@ const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
   if (!people.length) return null;
 
   return (
-    <div className="group/scroll" style={{ position: 'relative' }}>
+    <div className="group/scroll" style={{ position: 'relative', overflow: 'hidden', marginLeft: -2, marginRight: -2 }}>
 
       {/* Left fade */}
       <div style={{
@@ -186,7 +189,7 @@ const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
         ref={scrollRef}
         style={{
           display: 'flex',
-          gap: 12,
+          gap: isMobile ? 10 : 12,
           overflowX: 'auto',
           overflowY: 'visible',
           scrollbarWidth: 'none',
@@ -195,6 +198,8 @@ const PersonScrollRow = ({ people = [], cardWidth = 120 }) => {
           paddingBottom: 12,
           paddingLeft: 2,
           paddingRight: 2,
+          WebkitOverflowScrolling: 'touch',
+          width: '100%',
         }}
       >
         <style>{`.psr-row::-webkit-scrollbar{display:none}`}</style>

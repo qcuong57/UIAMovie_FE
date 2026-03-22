@@ -10,15 +10,16 @@ import BackButton   from '../../components/common/BackButton';
 import Pagination   from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../../context/homeTokens';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 // 6 cột giống BrowsePage
-const GRID_6 = {
+const grid6 = (isMobile) => ({
   display: 'grid',
-  gridTemplateColumns: 'repeat(6, 1fr)',
+  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
   gap: 12,
-};
+});
 
-const PAGE_SIZE = 24; // 4 hàng × 6 cột
+const PAGE_SIZE = 24;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const normalizeFav = f => ({
@@ -72,7 +73,7 @@ const EmptyState = ({ onBrowse }) => (
 );
 
 // ── List row (view mode = list) ───────────────────────────────────────────────
-const FavRow = ({ fav, onRemove, index }) => {
+const FavRow = ({ fav, onRemove, index, isMobile }) => {
   const [hovered, setHovered] = useState(false);
   const [imgErr,  setImgErr]  = useState(false);
   const navigate = useNavigate();
@@ -84,9 +85,9 @@ const FavRow = ({ fav, onRemove, index }) => {
       transition={{ delay: Math.min(index * 0.03, 0.4), duration: 0.28 }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onClick={() => navigate(`/movie/${fav.movieId}/info`)}
-      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 14px', borderRadius: 12, cursor: 'pointer', background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${hovered ? 'rgba(255,255,255,0.07)' : 'transparent'}`, transition: 'all 0.2s' }}
+      style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 16, padding: isMobile ? '8px 10px' : '10px 14px', borderRadius: 12, cursor: 'pointer', background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${hovered ? 'rgba(255,255,255,0.07)' : 'transparent'}`, transition: 'all 0.2s' }}
     >
-      <span style={{ fontFamily: FONT_BEBAS, fontSize: 24, color: 'rgba(255,255,255,0.14)', width: 30, textAlign: 'right', flexShrink: 0, lineHeight: 1 }}>{index + 1}</span>
+      {!isMobile && <span style={{ fontFamily: FONT_BEBAS, fontSize: 24, color: 'rgba(255,255,255,0.14)', width: 30, textAlign: 'right', flexShrink: 0, lineHeight: 1 }}>{index + 1}</span>}
       <div style={{ width: 50, height: 75, borderRadius: 7, overflow: 'hidden', flexShrink: 0, background: '#1a1a1a' }}>
         {fav.posterUrl && !imgErr
           ? <img src={fav.posterUrl} alt={fav.title} onError={() => setImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -102,20 +103,20 @@ const FavRow = ({ fav, onRemove, index }) => {
           {fav.genres?.[0] && <span style={{ fontFamily: FONT_BODY, fontSize: 11, padding: '1px 8px', borderRadius: 99, background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.42)' }}>{fav.genres[0]}</span>}
         </div>
       </div>
-      {fav.addedAt && <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.2)', flexShrink: 0, minWidth: 80, textAlign: 'right' }}>{fav.addedAt.toLocaleDateString('vi-VN')}</span>}
+      {fav.addedAt && !isMobile && <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.2)', flexShrink: 0, minWidth: 80, textAlign: 'right' }}>{fav.addedAt.toLocaleDateString('vi-VN')}</span>}
       <AnimatePresence>
-        {hovered && (
+        {(hovered || isMobile) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ display: 'flex', gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            {!isMobile && <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={e => { e.stopPropagation(); navigate(`/movie/${fav.movieId}`); }}
               style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Play size={13} fill="#000" color="#000" style={{ marginLeft: 1 }} />
-            </motion.button>
+            </motion.button>}
             <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={e => { e.stopPropagation(); onRemove(fav.movieId); }}
-              style={{ width: 34, height: 34, borderRadius: '50%', cursor: 'pointer', background: 'rgba(229,24,30,0.1)', border: '1.5px solid rgba(229,24,30,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Trash2 size={13} color={C.accent} strokeWidth={2} />
+              style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', cursor: 'pointer', background: 'rgba(229,24,30,0.1)', border: '1.5px solid rgba(229,24,30,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Trash2 size={isMobile ? 12 : 13} color={C.accent} strokeWidth={2} />
             </motion.button>
           </motion.div>
         )}
@@ -126,11 +127,12 @@ const FavRow = ({ fav, onRemove, index }) => {
 
 // ══════════════════════════════════════════════════════════════════════════════
 export default function FavoritesPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [favorites, setFavorites] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [sortBy,    setSortBy]    = useState('addedAt');
-  const [viewMode,  setViewMode]  = useState('grid');
+  const [viewMode,  setViewMode]  = useState(isMobile ? 'grid' : 'grid');
   const [showSort,  setShowSort]  = useState(false);
 
   // ── Load data ───────────────────────────────────────────────────────────────
@@ -173,9 +175,9 @@ export default function FavoritesPage() {
     <div style={{ minHeight: '100vh', background: '#000', paddingTop: 68 }}>
       <style>{GOOGLE_FONTS}</style>
       <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '40px 48px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px' : '40px 48px' }}>
         <div style={{ height: 36, width: 240, borderRadius: 8, marginBottom: 36, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
-        <div style={GRID_6}>
+        <div style={grid6(isMobile)}>
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} style={{ aspectRatio: '2/3', borderRadius: 10, animationDelay: `${i * 0.07}s`, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.03) 100%)' }} />
           ))}
@@ -190,7 +192,7 @@ export default function FavoritesPage() {
       <style>{GOOGLE_FONTS}</style>
       <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '40px 48px 80px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 48px 80px' }}>
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }}
@@ -201,7 +203,7 @@ export default function FavoritesPage() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                 <Heart size={22} fill={C.accent} color={C.accent} />
-                <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>Yêu Thích</h1>
+                <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 22 : 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>Yêu Thích</h1>
               </div>
               <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.3)', paddingLeft: 32 }}>
                 {favorites.length > 0 ? `${favorites.length} phim` : 'Chưa có phim nào'}
@@ -236,15 +238,15 @@ export default function FavoritesPage() {
                 </AnimatePresence>
               </div>
 
-              {/* View toggle */}
-              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, overflow: 'hidden' }}>
+              {/* View toggle — ẩn trên mobile */}
+              {!isMobile && <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, overflow: 'hidden' }}>
                 {[{ m: 'grid', icon: <LayoutGrid size={15} /> }, { m: 'list', icon: <List size={15} /> }].map(({ m, icon }) => (
                   <button key={m} onClick={() => setViewMode(m)}
                     style={{ width: 36, height: 36, border: 'none', cursor: 'pointer', background: viewMode === m ? 'rgba(255,255,255,0.11)' : 'transparent', color: viewMode === m ? 'white' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
                     {icon}
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
           )}
         </motion.div>
@@ -256,7 +258,7 @@ export default function FavoritesPage() {
           {/* Grid view */}
           {sorted.length > 0 && viewMode === 'grid' && (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div style={GRID_6}>
+              <div style={grid6(isMobile)}>
                 <AnimatePresence mode="popLayout">
                   {pageItems.map((fav, i) => (
                     <motion.div key={fav.movieId}
@@ -288,13 +290,13 @@ export default function FavoritesPage() {
           {sorted.length > 0 && viewMode === 'list' && (
             <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 14px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
-                {[['#', 30], ['', 50], ['Phim', null], ['Ngày thêm', 90], ['', 88]].map(([t, w], i) => (
+                {(isMobile ? [['', 50], ['Phim', null], ['', 30]] : [['#', 30], ['', 50], ['Phim', null], ['Ngày thêm', 90], ['', 88]]).map(([t, w], i) => (
                   <span key={i} style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '0.1em', ...(w ? { width: w, flexShrink: 0 } : { flex: 1 }) }}>{t}</span>
                 ))}
               </div>
               <AnimatePresence>
                 {pageItems.map((fav, i) => (
-                  <FavRow key={fav.movieId} fav={fav} index={(pagination.page - 1) * PAGE_SIZE + i} onRemove={handleRemove} />
+                  <FavRow key={fav.movieId} fav={fav} index={(pagination.page - 1) * PAGE_SIZE + i} onRemove={handleRemove} isMobile={isMobile} />
                 ))}
               </AnimatePresence>
 

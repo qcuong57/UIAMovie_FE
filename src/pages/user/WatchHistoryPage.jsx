@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import movieService from '../../services/movieService';
 import BackButton   from '../../components/common/BackButton';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (date) => {
@@ -87,6 +88,7 @@ const ProgressBar = ({ progress, isCompleted, color = C.accent }) => (
 
 // ── HistoryCard ───────────────────────────────────────────────────────────────
 const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
+  const isMobile = useIsMobile();
   const [hov,    setHov]    = useState(false);
   const [imgErr, setImgErr] = useState(false);
   const navigate            = useNavigate();
@@ -137,14 +139,14 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
-          fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700,
+          fontFamily: FONT_DISPLAY, fontSize: isMobile ? 13 : 15, fontWeight: 700,
           color: C.text, marginBottom: 5,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {item.movieTitle || 'Không có tên'}
         </p>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.28)', display: 'flex', alignItems: 'center', gap: 4 }}>
             <Clock size={10} strokeWidth={2} />
             {fmtTime(item.watchedAt)}
@@ -170,19 +172,19 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
         <ProgressBar progress={progressPct} isCompleted={item.isCompleted} />
       </div>
 
-      {/* Action buttons — chỉ hiện khi hover */}
+      {/* Action buttons — luôn hiện trên mobile */}
       <AnimatePresence>
-        {hov && (
+        {(hov || isMobile) && (
           <motion.div
             initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 6 }}
-            style={{ display: 'flex', gap: 8, flexShrink: 0 }}
+            style={{ display: 'flex', gap: isMobile ? 6 : 8, flexShrink: 0 }}
             onClick={e => e.stopPropagation()}
           >
             <motion.button
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={e => { e.stopPropagation(); onRewatch(item.movieId); }}
               title="Xem phim"
-              style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Play size={13} fill="#000" color="#000" style={{ marginLeft: 1 }} />
             </motion.button>
 
@@ -190,7 +192,7 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={e => { e.stopPropagation(); onDelete(item.id); }}
               title="Xóa khỏi lịch sử"
-              style={{ width: 34, height: 34, borderRadius: '50%', cursor: 'pointer', background: 'rgba(229,24,30,0.1)', border: '1.5px solid rgba(229,24,30,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', cursor: 'pointer', background: 'rgba(229,24,30,0.1)', border: '1.5px solid rgba(229,24,30,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Trash2 size={13} color={C.accent} strokeWidth={2} />
             </motion.button>
           </motion.div>
@@ -218,6 +220,7 @@ const DayHeader = ({ label, count }) => (
 
 // ── Stats bar ─────────────────────────────────────────────────────────────────
 const StatsBar = ({ history }) => {
+  const isMobile = useIsMobile();
   const completed  = history.filter(h => h.isCompleted).length;
   const totalMins  = history.reduce((a, h) => a + (h.progressMinutes || 0), 0);
   const totalHours = Math.floor(totalMins / 60);
@@ -229,15 +232,15 @@ const StatsBar = ({ history }) => {
   ];
 
   return (
-    <div style={{ display: 'flex', gap: 1, marginBottom: 36, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', gap: 1, marginBottom: 36, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
       {stats.map((s, i) => (
         <div key={i} style={{
-          flex: 1, padding: '16px 20px',
+          flex: 1, padding: isMobile ? '12px 8px' : '16px 20px',
           background: 'rgba(255,255,255,0.025)',
           borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
           textAlign: 'center',
         }}>
-          <p style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 800, color: C.text, lineHeight: 1, marginBottom: 4 }}>
+          <p style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 20 : 26, fontWeight: 800, color: C.text, lineHeight: 1, marginBottom: 4 }}>
             {s.value.toLocaleString()}
             <span style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.35)', marginLeft: 4 }}>
               {s.unit}
@@ -254,6 +257,7 @@ const StatsBar = ({ history }) => {
 
 // ══════════════════════════════════════════════════════════════════════════════
 export default function WatchHistoryPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [history,     setHistory]     = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -309,7 +313,7 @@ export default function WatchHistoryPage() {
     <div style={{ minHeight: '100vh', background: '#000', paddingTop: 68 }}>
       <style>{GOOGLE_FONTS}</style>
       <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 48px' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '20px 16px' : '32px 48px' }}>
         <div style={{ height: 18, width: 60, borderRadius: 6, marginBottom: 32, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
         <div style={{ height: 32, width: 200, borderRadius: 8, marginBottom: 32, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
         {Array.from({ length: 6 }).map((_, i) => (
@@ -330,7 +334,7 @@ export default function WatchHistoryPage() {
     <div style={{ minHeight: '100vh', background: '#000', color: C.text, paddingTop: 68 }}>
       <style>{GOOGLE_FONTS}</style>
 
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 48px 80px' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '32px 48px 80px' }}>
 
         {/* ── Back button — luôn nằm góc trái, tách biệt với title ── */}
         <motion.div
@@ -352,7 +356,7 @@ export default function WatchHistoryPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <Clock size={22} color="rgba(255,255,255,0.5)" strokeWidth={1.5} />
-              <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 30, fontWeight: 800, color: C.text, lineHeight: 1 }}>
+              <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 22 : 30, fontWeight: 800, color: C.text, lineHeight: 1 }}>
                 Lịch sử xem
               </h1>
             </div>

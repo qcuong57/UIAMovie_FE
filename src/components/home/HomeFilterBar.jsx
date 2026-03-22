@@ -2,6 +2,7 @@
 // ─── Thanh lọc phim nằm ngay dưới Banner ──────────────────────────────────────
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SlidersHorizontal, ChevronDown, Star, X, Search } from 'lucide-react';
 import { C, FONT_BODY } from '../../context/homeTokens';
@@ -180,6 +181,7 @@ export default function HomeFilterBar({
   minRating,     onRatingChange,
 }) {
   const genreOptions = genres.map(g => ({ value: g.id, label: g.name }));
+  const isMobile = useIsMobile();
 
   const activeFilters = [
     selectedGenre && { key: 'genre', label: genres.find(g => g.id === selectedGenre)?.name, onRemove: () => onGenreChange(null) },
@@ -191,13 +193,13 @@ export default function HomeFilterBar({
 
   return (
     <div style={{
-      padding: '16px 0',
+      padding: isMobile ? '12px 0' : '16px 0',
       background: C.bg,
       borderBottom: `1px solid ${C.border}`,
       position: 'sticky', top: 0, zIndex: 40,
       backdropFilter: 'blur(12px)',
     }}>
-      <div style={{ padding: '0 16px', maxWidth: 1400, margin: '0 auto' }}>
+      <div style={{ padding: isMobile ? '0 12px' : '0 16px', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Row 1 — search + filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

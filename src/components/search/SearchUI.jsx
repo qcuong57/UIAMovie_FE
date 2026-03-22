@@ -10,25 +10,23 @@ export const GRID_STYLE = {
   gap: 35,
 };
 
-// ── Skeleton card ───────────────────────────────────────────────
+// ── Skeleton card — khớp với mobile card mới ───────────────────
 export const SkeletonCard = () => (
-  <div style={{
-    borderRadius: 10, overflow: 'hidden',
-    background: C.card, border: `1px solid ${C.border}`,
-  }}>
+  <div style={{ borderRadius: 8, overflow: 'hidden' }}>
     <div style={{
-      width: '100%', aspectRatio: '2/3', background: C.surfaceMid,
+      width: '100%', aspectRatio: '2/3', background: '#181818',
       backgroundImage: 'linear-gradient(90deg,#181818 25%,#222 50%,#181818 75%)',
       backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite',
+      borderRadius: 8,
     }} />
-    <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ paddingTop: 7, display: 'flex', flexDirection: 'column', gap: 5 }}>
       <div style={{
-        height: 13, borderRadius: 4, width: '80%', background: C.surfaceMid,
+        height: 12, borderRadius: 4, width: '85%', background: '#181818',
         backgroundImage: 'linear-gradient(90deg,#181818 25%,#222 50%,#181818 75%)',
         backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite',
       }} />
       <div style={{
-        height: 10, borderRadius: 4, width: '50%', background: C.surfaceMid,
+        height: 10, borderRadius: 4, width: '40%', background: '#181818',
         backgroundImage: 'linear-gradient(90deg,#181818 25%,#222 50%,#181818 75%)',
         backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite',
       }} />

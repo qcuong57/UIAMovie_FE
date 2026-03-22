@@ -1,5 +1,6 @@
 // src/components/movie/MovieCarousel.jsx
 import React, { useRef, useState, useEffect } from "react";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import MovieCard from "./MovieCard";
 
@@ -13,6 +14,7 @@ const MovieCarousel = ({
   isFavorited,
 }) => {
   const scrollRef = useRef(null);
+  const isMobile = useIsMobile();
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
@@ -44,9 +46,9 @@ const MovieCarousel = ({
   };
 
   return (
-    <section className="mb-16 group/row">
+    <section className="group/row" style={{ marginBottom: isMobile ? 32 : 64 }}>
       {/* ── Section header ── */}
-      <div className="flex items-center justify-between px-6 md:px-16 mb-5">
+      <div className="flex items-center justify-between mb-5" style={{ paddingLeft: isMobile ? 16 : 64, paddingRight: isMobile ? 16 : 64 }}>
         <div className="flex items-center gap-3">
           {/* Red left-bar accent */}
           <div
@@ -67,108 +69,122 @@ const MovieCarousel = ({
         </div>
 
         {/* "See all" link */}
-        <button
-          className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-all duration-200 hover:gap-2.5"
-          style={{ color: "#e5181e", fontFamily: "'DM Sans', sans-serif" }}
-        >
-          See all <ArrowRight size={12} strokeWidth={2.5} />
-        </button>
+        {!isMobile && (
+          <button
+            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-all duration-200 hover:gap-2.5"
+            style={{ color: "#e5181e", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            See all <ArrowRight size={12} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
 
-      {/* ── Scroll area — outer clips X, inner allows Y for hover scale ── */}
-      <div className="relative" style={{ overflowX: 'clip' }}>
-        {/* Left fade */}
-        <div
-          className="absolute left-0 top-0 bottom-0 w-16 md:w-20 z-[60] pointer-events-none transition-opacity duration-200"
-          style={{
-            background: "linear-gradient(to right, #000000 0%, transparent 100%)",
-            opacity: canLeft ? 1 : 0,
-            visibility: canLeft ? 'visible' : 'hidden',
-          }}
-        />
+      {/* ── Scroll area ── */}
+      <div className="relative" style={{ overflow: 'visible' }}>
+        {/* Left fade — desktop only */}
+        {!isMobile && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-16 md:w-20 z-[60] pointer-events-none transition-opacity duration-200"
+            style={{
+              background: "linear-gradient(to right, #000000 0%, transparent 100%)",
+              opacity: canLeft ? 1 : 0,
+            }}
+          />
+        )}
 
-        {/* Left nav */}
-        <button
-          onClick={() => scroll("left")}
-          className="absolute left-3 top-1/2 -translate-y-1/2 z-[70]
-            w-10 h-10 rounded-full flex items-center justify-center
-            border transition-all duration-150 hover:scale-110 active:scale-95
-            group-hover/row:opacity-100 opacity-0
-            disabled:opacity-0 disabled:pointer-events-none"
-          disabled={!canLeft}
-          style={{
-            background: "rgba(10,10,12,0.88)",
-            borderColor: "rgba(255,255,255,0.18)",
-            backdropFilter: "blur(8px)",
-            color: "#e8eaf0",
-            pointerEvents: canLeft ? "auto" : "none",
-          }}
-        >
-          <ChevronLeft size={18} strokeWidth={2.5} />
-        </button>
+        {/* Left nav — desktop only */}
+        {!isMobile && (
+          <button
+            onClick={() => scroll("left")}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-[70]
+              w-10 h-10 rounded-full flex items-center justify-center
+              border transition-all duration-150 hover:scale-110 active:scale-95
+              group-hover/row:opacity-100 opacity-0
+              disabled:opacity-0 disabled:pointer-events-none"
+            disabled={!canLeft}
+            style={{
+              background: "rgba(10,10,12,0.88)",
+              borderColor: "rgba(255,255,255,0.18)",
+              backdropFilter: "blur(8px)",
+              color: "#e8eaf0",
+              pointerEvents: canLeft ? "auto" : "none",
+            }}
+          >
+            <ChevronLeft size={18} strokeWidth={2.5} />
+          </button>
+        )}
 
         {/* Cards scroll row */}
         <div
           ref={scrollRef}
           style={{
             display: 'flex',
-            gap: '24px',
-            paddingLeft: '64px',
-            paddingRight: '64px',
-            paddingTop: '52px',
-            paddingBottom: '52px',
-            marginTop: '-52px',
-            marginBottom: '-52px',
+            gap: isMobile ? '10px' : '24px',
+            paddingLeft: isMobile ? '16px' : '64px',
+            paddingRight: isMobile ? '16px' : '64px',
+            paddingTop: isMobile ? '4px' : '52px',
+            paddingBottom: isMobile ? '4px' : '52px',
+            marginTop: isMobile ? 0 : '-52px',
+            marginBottom: isMobile ? 0 : '-52px',
             overflowX: 'auto',
-            overflowY: 'visible',
+            overflowY: isMobile ? 'hidden' : 'visible',
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
             scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           <style>{`div::-webkit-scrollbar{display:none}`}</style>
           {movies.filter(Boolean).map((movie) => (
-            <div key={movie.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
+            <div key={movie.id} style={{
+              scrollSnapAlign: 'start',
+              flexShrink: 0,
+              width: isMobile ? 120 : undefined,
+            }}>
               <MovieCard
                 movie={movie}
                 isFavorited={isFavorited?.(movie.id)}
                 onFavoriteToggle={onFavoriteToggle}
                 onPlay={onPlay}
                 onClick={onClick}
+                cardWidth={isMobile ? 120 : undefined}
               />
             </div>
           ))}
         </div>
 
-        {/* Right fade */}
-        <div
-          className="absolute right-0 top-0 bottom-0 w-16 md:w-20 z-[60] pointer-events-none transition-opacity duration-200"
-          style={{
-            background: "linear-gradient(to left, #000000 0%, transparent 100%)",
-            opacity: canRight ? 1 : 0,
-            visibility: canRight ? 'visible' : 'hidden',
-          }}
-        />
+        {/* Right fade — desktop only */}
+        {!isMobile && (
+          <div
+            className="absolute right-0 top-0 bottom-0 w-16 md:w-20 z-[60] pointer-events-none transition-opacity duration-200"
+            style={{
+              background: "linear-gradient(to left, #000000 0%, transparent 100%)",
+              opacity: canRight ? 1 : 0,
+            }}
+          />
+        )}
 
-        {/* Right nav */}
-        <button
-          onClick={() => scroll("right")}
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-[70]
-            w-10 h-10 rounded-full flex items-center justify-center
-            border transition-all duration-150 hover:scale-110 active:scale-95
-            group-hover/row:opacity-100 opacity-0
-            disabled:opacity-0 disabled:pointer-events-none"
-          disabled={!canRight}
-          style={{
-            background: "rgba(10,10,12,0.88)",
-            borderColor: "rgba(255,255,255,0.18)",
-            backdropFilter: "blur(8px)",
-            color: "#e8eaf0",
-            pointerEvents: canRight ? "auto" : "none",
-          }}
-        >
-          <ChevronRight size={18} strokeWidth={2.5} />
-        </button>
+        {/* Right nav — desktop only */}
+        {!isMobile && (
+          <button
+            onClick={() => scroll("right")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-[70]
+              w-10 h-10 rounded-full flex items-center justify-center
+              border transition-all duration-150 hover:scale-110 active:scale-95
+              group-hover/row:opacity-100 opacity-0
+              disabled:opacity-0 disabled:pointer-events-none"
+            disabled={!canRight}
+            style={{
+              background: "rgba(10,10,12,0.88)",
+              borderColor: "rgba(255,255,255,0.18)",
+              backdropFilter: "blur(8px)",
+              color: "#e8eaf0",
+              pointerEvents: canRight ? "auto" : "none",
+            }}
+          >
+            <ChevronRight size={18} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
     </section>
   );

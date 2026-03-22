@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bell, User, Settings, LogOut, Shield, ChevronDown, X, Clock } from 'lucide-react';
+import { Search, Bell, User, Settings, LogOut, Shield, ChevronDown, X, Clock, Menu } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useNavigate } from 'react-router-dom';
 import * as variants from '../../motion-configs/variants';
 import * as transitions from '../../motion-configs/transitions';
@@ -12,6 +13,8 @@ const Navbar = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const isMobile = useIsMobile();
   const [scrolled, setScrolled] = useState(false);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -262,6 +265,18 @@ const Navbar = () => {
             )}
           </AnimatePresence>
 
+          {/* Hamburger — mobile only */}
+          {isMobile && (
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setShowMobileMenu(v => !v)}
+              className="p-2 rounded-lg md:hidden"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)' }}
+            >
+              {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
+            </motion.button>
+          )}
+
           {/* Bell */}
           <motion.button
             whileHover={{ scale: 1.08, backgroundColor: 'rgba(255,255,255,0.1)' }}
@@ -441,6 +456,57 @@ const Navbar = () => {
           </div>
         </div>
       </div>
+      {/* ── Mobile menu panel ── */}
+      <AnimatePresence>
+        {isMobile && showMobileMenu && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'absolute', top: '100%', left: 0, right: 0,
+              background: 'rgba(8,8,8,0.98)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px)',
+              padding: '12px 16px 20px',
+              zIndex: 9998,
+            }}
+          >
+            {[
+              { label: 'Trang chủ', path: '/' },
+              { label: 'Yêu thích', path: '/favorites' },
+              { label: 'Watchlist', path: '/search?filter=watchlist' },
+              { label: 'Lịch sử xem', path: '/watch-history' },
+            ].map(({ label, path }) => (
+              <button
+                key={label}
+                onClick={() => { navigate(path); setShowMobileMenu(false); }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '12px 8px', background: 'none', border: 'none',
+                  cursor: 'pointer', color: 'rgba(255,255,255,0.75)',
+                  fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              onClick={() => { handleLogout(); setShowMobileMenu(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                marginTop: 8, padding: '12px 8px', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#e5181e',
+                fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+              }}
+            >
+              <LogOut size={16} /> Đăng xuất
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.nav>
   );
 };

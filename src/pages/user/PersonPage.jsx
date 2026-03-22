@@ -1,5 +1,6 @@
 // src/pages/PersonPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Film, Calendar, MapPin, Star, ExternalLink, Camera, BookOpen } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -147,14 +148,15 @@ const FilmCard = ({ movie, navigate, index }) => {
 // ── Tab button ────────────────────────────────────────────────────
 const TabBtn = ({ active, onClick, icon: Icon, label, count }) => (
   <button onClick={onClick} style={{
-    display: 'flex', alignItems: 'center', gap: 7,
-    padding: '10px 18px', border: 'none', cursor: 'pointer', background: 'none',
-    fontFamily: FT, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+    display: 'flex', alignItems: 'center', gap: 5,
+    padding: '9px 12px', border: 'none', cursor: 'pointer', background: 'none',
+    fontFamily: FT, fontSize: 12, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
     color: active ? C.text : C.textDim,
     borderBottom: `2px solid ${active ? C.accent : 'transparent'}`,
     marginBottom: -1, transition: 'color 0.18s, border-color 0.18s',
+    whiteSpace: 'nowrap', flex: 1, justifyContent: 'center',
   }}>
-    {Icon && <Icon size={13} style={{ opacity: active ? 1 : 0.5 }} />}
+    {Icon && <Icon size={12} style={{ opacity: active ? 1 : 0.5 }} />}
     {label}
     {count > 0 && (
       <span style={{
@@ -170,6 +172,7 @@ const TabBtn = ({ active, onClick, icon: Icon, label, count }) => (
 // Main
 // ══════════════════════════════════════════════════════════════════
 export default function PersonPage() {
+  const isMobile = useIsMobile();
   const { id }   = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -325,7 +328,7 @@ export default function PersonPage() {
         backdropFilter: headerSolid ? 'blur(20px)' : 'none',
         WebkitBackdropFilter: headerSolid ? 'blur(20px)' : 'none',
         borderBottom: `1px solid ${headerSolid ? C.border : 'transparent'}`,
-        display: 'flex', alignItems: 'center', gap: 12, padding: '0 28px',
+        display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '0 16px' : '0 28px',
         transition: 'background 0.3s, border-color 0.3s',
       }}>
         <BackButton />
@@ -346,7 +349,7 @@ export default function PersonPage() {
       </div>
 
       {/* ══ HERO ════════════════════════════════════════════════════ */}
-      <div ref={heroRef} style={{ position: 'relative', minHeight: 480, overflow: 'hidden' }}>
+      <div ref={heroRef} style={{ position: 'relative', minHeight: isMobile ? 'auto' : 480, overflow: 'hidden' }}>
 
         {/* Backdrop blurred bg */}
         {person?.profileUrl && (
@@ -361,7 +364,7 @@ export default function PersonPage() {
 
         {/* Bottom fade */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: 200,
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: isMobile ? 60 : 200,
           background: `linear-gradient(to bottom, transparent, ${C.bg})`,
         }} />
 
@@ -369,8 +372,10 @@ export default function PersonPage() {
         <div style={{
           position: 'relative', zIndex: 1,
           maxWidth: 1120, margin: '0 auto',
-          padding: '48px 28px 56px',
-          display: 'flex', gap: 44, alignItems: 'flex-end', flexWrap: 'wrap',
+          padding: isMobile ? '20px 16px 16px' : '48px 28px 56px',
+          display: 'flex', gap: isMobile ? 16 : 44,
+          alignItems: isMobile ? 'flex-start' : 'flex-end',
+          flexDirection: 'row', flexWrap: isMobile ? 'wrap' : 'nowrap',
         }}>
 
           {/* ── Avatar ── */}
@@ -384,7 +389,7 @@ export default function PersonPage() {
               style={{ flexShrink: 0, position: 'relative' }}
             >
               <div style={{
-                width: 200, height: 290, borderRadius: 14,
+                width: isMobile ? 110 : 200, height: isMobile ? 160 : 290, borderRadius: 14,
                 overflow: 'hidden', background: C.surfaceMid,
                 boxShadow: '0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08)',
               }}>
@@ -421,13 +426,13 @@ export default function PersonPage() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              style={{ flex: 1, minWidth: 260, paddingBottom: 4 }}
+              style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}
             >
 
 
               <h1 style={{
-                fontFamily: FT, fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 900,
-                color: C.text, letterSpacing: '-0.02em', lineHeight: 1.05, marginBottom: 16,
+                fontFamily: FT, fontSize: isMobile ? 'clamp(20px, 6vw, 28px)' : 'clamp(32px, 5vw, 52px)', fontWeight: 900,
+                color: C.text, letterSpacing: '-0.02em', lineHeight: 1.05, marginBottom: isMobile ? 10 : 16,
               }}>
                 {person.name}
               </h1>
@@ -438,14 +443,17 @@ export default function PersonPage() {
                     {person.deathday ? `${age} tuổi · đã mất` : `${age} tuổi`}
                   </Chip>
                 )}
-                {person.placeOfBirth && <Chip icon={MapPin}>{person.placeOfBirth}</Chip>}
+                {person.placeOfBirth && !isMobile && <Chip icon={MapPin}>{person.placeOfBirth}</Chip>}
                 {allFilms.length > 0 && <Chip icon={Film}>{allFilms.length} phim</Chip>}
                 {images.length > 0 && <Chip icon={Camera}>{images.length} ảnh</Chip>}
               </div>
 
-              {bioText && (
+              {bioText && !isMobile && (
                 <div style={{ maxWidth: 640 }}>
-                  <p style={{ fontFamily: FB, fontSize: 14, color: C.textSub, lineHeight: 1.85 }}>
+                  <p style={{
+                    fontFamily: FB, fontSize: 14,
+                    color: C.textSub, lineHeight: 1.85,
+                  }}>
                     {bioExpanded || bioText.length <= BIO_LIMIT
                       ? bioText
                       : bioText.slice(0, BIO_LIMIT) + '...'}
@@ -466,11 +474,34 @@ export default function PersonPage() {
         </div>
       </div>
 
+      {/* Bio mobile — full width, sau hero */}
+      {isMobile && bioText && person && (
+        <div style={{ padding: '16px 16px 4px', background: C.bg }}>
+          <p style={{
+            fontFamily: FB, fontSize: 13, color: C.textSub, lineHeight: 1.75,
+            display: bioExpanded ? 'block' : '-webkit-box',
+            WebkitLineClamp: bioExpanded ? undefined : 5,
+            WebkitBoxOrient: 'vertical',
+            overflow: bioExpanded ? 'visible' : 'hidden',
+          }}>
+            {bioText}
+          </p>
+          <button onClick={() => setBioExpanded(v => !v)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: C.accent, fontFamily: FB, fontSize: 12, fontWeight: 700,
+            padding: '6px 0 0', display: 'block',
+          }}>
+            {bioExpanded ? '▲ Thu gọn' : '▼ Đọc thêm'}
+          </button>
+        </div>
+      )}
+
       {/* ══ BODY ════════════════════════════════════════════════════ */}
       <div style={{
         maxWidth: 1120, margin: '0 auto',
-        padding: '0 28px 100px',
+        padding: isMobile ? '0 16px 60px' : '0 28px 100px',
         display: 'flex', gap: 40, alignItems: 'flex-start',
+        flexDirection: isMobile ? 'column' : 'row',
       }}>
 
         {/* ── Sidebar ───────────────────────────────────────────── */}
@@ -478,7 +509,7 @@ export default function PersonPage() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.25, duration: 0.45 }}
-          style={{ width: 220, flexShrink: 0, position: 'sticky', top: 60 }}
+          style={{ width: 220, flexShrink: 0, position: 'sticky', top: 60, display: isMobile ? 'none' : undefined }}
         >
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -547,14 +578,26 @@ export default function PersonPage() {
           ) : (
             <>
               {/* Tab bar */}
-              <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, marginBottom: 36, gap: 2 }}>
-                <TabBtn active={tab === 'films'}  onClick={() => setTab('films')}  icon={Film}     label="Phim tham gia" count={allFilms.length} />
-                <TabBtn active={tab === 'photos'} onClick={() => setTab('photos')} icon={Camera}   label="Ảnh"           count={images.length} />
-                {bioText && (
-                  <TabBtn active={tab === 'bio'} onClick={() => setTab('bio')} icon={BookOpen} label="Tiểu sử" count={0} />
-                )}
+              <div style={{
+                position: 'sticky', top: 52, zIndex: 40,
+                background: C.bg,
+                borderBottom: `1px solid ${C.border}`,
+                marginBottom: 24,
+                marginLeft: isMobile ? -16 : 0,
+                marginRight: isMobile ? -16 : 0,
+                paddingLeft: isMobile ? 16 : 0,
+                paddingRight: isMobile ? 16 : 0,
+              }}>
+                <div style={{ display: 'flex', gap: 0, width: '100%' }}>
+                  <TabBtn active={tab === 'films'}  onClick={() => setTab('films')}  icon={Film}     label="Phim tham gia" count={allFilms.length} />
+                  <TabBtn active={tab === 'photos'} onClick={() => setTab('photos')} icon={Camera}   label="Ảnh"           count={images.length} />
+                  {bioText && (
+                    <TabBtn active={tab === 'bio'} onClick={() => setTab('bio')} icon={BookOpen} label="Tiểu sử" count={0} />
+                  )}
+                </div>
               </div>
 
+              <div style={{ minHeight: 400 }}>
               <AnimatePresence mode="wait">
 
                 {/* ── Films ── */}
@@ -598,7 +641,7 @@ export default function PersonPage() {
                         Chưa có ảnh
                       </div>
                     ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8 }}>
                         {images.map((src, i) => (
                           <motion.div
                             key={i}
@@ -649,6 +692,7 @@ export default function PersonPage() {
                 )}
 
               </AnimatePresence>
+              </div>
             </>
           )}
         </motion.div>

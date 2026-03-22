@@ -6,11 +6,13 @@ import { Play, Info, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as variants from '../../motion-configs/variants';
 import * as transitions from '../../motion-configs/transitions';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const AUTO_PLAY_INTERVAL = 6000; // 6 giây mỗi slide
 
 const HeroBanner = ({ movie, movies }) => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   // Dùng movies[] nếu có, fallback về movie đơn
   // Sắp xếp theo releaseDate mới nhất trước, rồi lấy 5 phim đầu
   const slides = movies
@@ -54,7 +56,7 @@ const HeroBanner = ({ movie, movies }) => {
   if (!activeMovie) return null;
 
   return (
-    <div className="relative h-screen bg-cover bg-center flex items-end overflow-hidden">
+    <div className="relative bg-cover bg-center flex items-end overflow-hidden" style={{ height: isMobile ? '75vw' : '100vh', minHeight: isMobile ? 320 : 500 }}>
 
       <AnimatePresence custom={direction} initial={false}>
         <motion.div
@@ -89,10 +91,10 @@ const HeroBanner = ({ movie, movies }) => {
           animate="center"
           exit="exit"
           transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-          className="relative z-10 px-4 md:px-8 pb-24 md:pb-28 max-w-3xl"
+          className="relative z-10 max-w-3xl" style={{ paddingLeft: isMobile ? 16 : 32, paddingRight: isMobile ? 16 : 32, paddingBottom: isMobile ? 48 : 112 }}
         >
           {/* Rating + Year + Duration + Genres — pill badges */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: isMobile ? 8 : 16, display: 'flex' }}>
             {/* Rating */}
             {(activeMovie.rating) && (
               <div style={{
@@ -120,8 +122,8 @@ const HeroBanner = ({ movie, movies }) => {
                   : activeMovie.year}
               </span>
             )}
-            {/* Thời lượng */}
-            {activeMovie.duration && (
+            {/* Thời lượng — ẩn trên mobile */}
+            {activeMovie.duration && !isMobile && (
               <span style={{
                 fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)',
                 padding: '5px 11px', borderRadius: 99,
@@ -133,13 +135,15 @@ const HeroBanner = ({ movie, movies }) => {
                   : `${activeMovie.duration} phút`}
               </span>
             )}
-            {/* Thể loại — tối đa 3 */}
-            {activeMovie.genres?.slice(0, 3).map(g => (
+            {/* Thể loại — mobile 1, desktop 3 */}
+            {activeMovie.genres?.slice(0, isMobile ? 1 : 3).map(g => (
               <span key={g} style={{
-                fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)',
-                padding: '5px 11px', borderRadius: 99,
+                fontSize: isMobile ? 11 : 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)',
+                padding: isMobile ? '3px 8px' : '5px 11px', borderRadius: 99,
                 background: 'rgba(255,255,255,0.1)',
                 border: '1px solid rgba(255,255,255,0.15)',
+                maxWidth: isMobile ? 90 : 'none',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {g}
               </span>
@@ -147,12 +151,12 @@ const HeroBanner = ({ movie, movies }) => {
           </div>
 
           {/* Title */}
-          <h1 className="text-5xl md:text-7xl font-black mb-4 leading-tight text-white drop-shadow-lg">
+          <h1 className="font-black mb-3 leading-tight text-white drop-shadow-lg" style={{ fontSize: isMobile ? 'clamp(22px, 6vw, 36px)' : 'clamp(40px, 6vw, 72px)', marginBottom: isMobile ? 8 : 16 }}>
             {activeMovie.title || 'Inception'}
           </h1>
 
           {/* Description */}
-          <p className="text-base text-gray-200 mb-8 max-w-xl leading-relaxed line-clamp-3">
+          <p className="text-base text-gray-200 max-w-xl leading-relaxed" style={{ display: 'block', marginBottom: isMobile ? 10 : 32, fontSize: isMobile ? 11 : 16, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: isMobile ? 2 : 3, WebkitBoxOrient: 'vertical' }}>
             {activeMovie.description || ''}
           </p>
 
@@ -162,7 +166,7 @@ const HeroBanner = ({ movie, movies }) => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate(`/movie/${activeMovie.id}`)}
-              className="px-8 py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 flex items-center gap-2 text-base"
+              className="bg-white text-black font-bold rounded-lg hover:bg-gray-200 flex items-center gap-2" style={{ padding: isMobile ? '8px 16px' : '12px 32px', fontSize: isMobile ? 13 : 16 }}
             >
               <Play size={20} fill="currentColor" />
               Phát
@@ -171,7 +175,7 @@ const HeroBanner = ({ movie, movies }) => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate(`/movie/${activeMovie.id}/info`)}
-              className="px-8 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 flex items-center gap-2 border border-white/30 text-base"
+              className="bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 flex items-center gap-2 border border-white/30" style={{ padding: isMobile ? '8px 16px' : '12px 32px', fontSize: isMobile ? 13 : 16 }}
             >
               <Info size={20} />
               Chi tiết
@@ -182,7 +186,7 @@ const HeroBanner = ({ movie, movies }) => {
 
       {/* ── Dot indicators + prev/next gộp chung ── */}
       {slides.length > 1 && (
-        <div className="absolute bottom-8 right-8 z-20 flex items-center gap-3">
+        <div className="absolute z-20 flex items-center gap-3" style={{ bottom: isMobile ? 12 : 32, right: isMobile ? 'auto' : 32, left: isMobile ? 16 : 'auto' }}>
           {/* Dots */}
           <div className="flex items-center gap-2">
             {slides.map((_, i) => (

@@ -7,6 +7,7 @@ import movieService from '../../services/movieService';
 import genreService from '../../services/genreService';
 
 import { C, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS } from '../../context/homeTokens';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import GenreSection      from '../../components/home/GenreSection';
 import TopRankedRow      from '../../components/home/TopRankedRow';
 import MovieRow          from '../../components/home/MovieRow';
@@ -141,6 +142,7 @@ export default function HomePage() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
   const [favorites,    setFavorites]    = useState(new Set());
+  const isMobile = useIsMobile();
 
   useEffect(() => { fetchData(); }, []);
 
@@ -162,7 +164,7 @@ export default function HomePage() {
       setGenres(rawGenres);
 
       const rawFavs = Array.isArray(favsData) ? favsData : favsData?.data || favsData?.favorites || [];
-      setFavorites(new Set(rawFavs.map(f => f.movieId ?? f.id)));
+      setFavorites(new Set(rawFavs.map(f => String(f.movieId ?? f.id))));
 
       // Parse watch history — WatchHistoryDTO shape: { movieId, movieTitle, ... }
       const rawHistory = Array.isArray(historyData)
@@ -179,10 +181,10 @@ export default function HomePage() {
 
   const toggleFavorite = movie => setFavorites(prev => {
     const next = new Set(prev);
-    next.has(movie.id) ? next.delete(movie.id) : next.add(movie.id);
+    next.has(String(movie.id)) ? next.delete(String(movie.id)) : next.add(String(movie.id));
     return next;
   });
-  const isFavorited = id => favorites.has(id);
+  const isFavorited = id => favorites.has(String(id));
 
   const highlyRated = useMemo(() => byRating(movies).slice(0, 20), [movies]);
   const newest      = useMemo(() => byNewest(movies).slice(0, 20), [movies]);
@@ -217,7 +219,7 @@ export default function HomePage() {
             movies={movies}
           />
 
-          <div style={{ padding: '8px 48px 56px' }}>
+          <div style={{ padding: isMobile ? '8px 16px 40px' : '8px 48px 56px' }}>
             <TopRankedRow
               title="Top 10 Hôm Nay"
               movies={highlyRated}

@@ -1,5 +1,6 @@
 // src/pages/MovieDetailPage.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX, Maximize, ChevronLeft, Star, SkipForward, SkipBack, Info } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -117,6 +118,7 @@ const PersonCard = ({ person, isDirector = false }) => {
 
 // ── VideoPlayer ─────────────────────────────────────────────────
 const VideoPlayer = ({ movie }) => {
+  const isMobile = useIsMobile();
   const [playing, setPlaying]   = useState(false);
   const [muted, setMuted]       = useState(false);
   const [progress, setProgress] = useState(0);
@@ -217,21 +219,30 @@ const VideoPlayer = ({ movie }) => {
               <div style={{ position:'absolute', top:'50%', left:`${progress}%`, transform:'translate(-50%,-50%)', width:12, height:12, borderRadius:'50%', background:'white', transition:'left 0.2s' }}/>
             </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 10 : 16 }}>
                 <button onClick={() => setProgress(p => Math.max(0,p-1.4))} style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.7)',padding:0,display:'flex' }}><SkipBack size={18}/></button>
                 <button onClick={() => setPlaying(!playing)} style={{ background:'none',border:'none',cursor:'pointer',color:'white',padding:0,display:'flex' }}>
                   {playing ? <Pause size={22} fill="white"/> : <Play size={22} fill="white"/>}
                 </button>
                 <button onClick={() => setProgress(p => Math.min(100,p+1.4))} style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.7)',padding:0,display:'flex' }}><SkipForward size={18}/></button>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                {!isMobile && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <button onClick={() => setMuted(!muted)} style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.8)',padding:0,display:'flex' }}>
+                      {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
+                    </button>
+                    <input type="range" min="0" max="100" value={muted ? 0 : vol}
+                      onChange={e => { setVol(+e.target.value); setMuted(false); }}
+                      style={{ width:72, accentColor:'white', cursor:'pointer' }} />
+                  </div>
+                )}
+                {isMobile && (
                   <button onClick={() => setMuted(!muted)} style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.8)',padding:0,display:'flex' }}>
                     {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
                   </button>
-                  <input type="range" min="0" max="100" value={muted ? 0 : vol}
-                    onChange={e => { setVol(+e.target.value); setMuted(false); }}
-                    style={{ width:72, accentColor:'white', cursor:'pointer' }} />
-                </div>
-                <span style={{ color:'rgba(255,255,255,0.7)', fontSize:12, fontFamily:"'Nunito',sans-serif" }}>{fmt(curSec)} / {fmt(totalSec)}</span>
+                )}
+                {!isMobile && (
+                  <span style={{ color:'rgba(255,255,255,0.7)', fontSize:12, fontFamily:"'Nunito',sans-serif" }}>{fmt(curSec)} / {fmt(totalSec)}</span>
+                )}
               </div>
               <button onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.querySelector('video')?.requestFullscreen?.()}
                 style={{ background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.7)',padding:0,display:'flex' }}>
@@ -249,6 +260,7 @@ const VideoPlayer = ({ movie }) => {
 // MAIN
 // ══════════════════════════════════════════════════════════════
 export default function MovieDetailPage() {
+  const isMobile = useIsMobile();
   const { id }   = useParams();
   const navigate = useNavigate();
 
@@ -337,7 +349,7 @@ export default function MovieDetailPage() {
   ];
 
   return (
-    <div style={{ minHeight:'100vh', background:C.bg, color:C.text, paddingTop:56 }}>
+    <div style={{ minHeight:'100vh', background:C.bg, color:C.text, paddingTop:56, overflowX:'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,600;0,700;0,800;0,900;1,600&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -349,58 +361,58 @@ export default function MovieDetailPage() {
       `}</style>
 
       {/* Nav */}
-      <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(10,10,10,0.92)', backdropFilter:'blur(20px)', borderBottom:`1px solid ${C.border}`, padding:'0 32px', height:56, display:'flex', alignItems:'center', gap:16 }}>
+      <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(10,10,10,0.92)', backdropFilter:'blur(20px)', borderBottom:`1px solid ${C.border}`, padding: isMobile ? '0 16px' : '0 32px', height:56, display:'flex', alignItems:'center', gap:16 }}>
         <BackButton />
         <div style={{ flex:1 }}/>
       </div>
 
-      <div style={{ maxWidth:1280, margin:'0 auto', padding:'32px 32px 64px' }}>
-        <div style={{ display:'flex', gap:40, alignItems:'flex-start' }}>
+      <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 16px 48px' : '32px 32px 64px' }}>
+        <div style={{ display:'flex', gap:40, alignItems:'flex-start', flexDirection: isMobile ? 'column' : 'row' }}>
 
           {/* LEFT */}
-          <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ flex:1, minWidth:0, width: isMobile ? '100%' : 'auto', overflow:'hidden' }}>
             <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration:0.5 }}>
               <VideoPlayer movie={movie}/>
             </motion.div>
 
             {/* Title block */}
             <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration:0.5, delay:0.1 }} style={{ marginTop:24, marginBottom:28 }}>
-              <h1 style={{ fontFamily:"'Be Vietnam Pro',sans-serif", fontSize:38, letterSpacing:'0.02em', lineHeight:1, marginBottom:12 }}>
+              <h1 style={{ fontFamily:"'Be Vietnam Pro',sans-serif", fontSize: isMobile ? 22 : 38, letterSpacing:'0.02em', lineHeight:1.2, marginBottom:12, wordBreak:'break-word', overflowWrap:'break-word' }}>
                 {movie?.title}
               </h1>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 8, marginBottom:16, flexWrap:'wrap', width:'100%' }}>
                 {/* Rating badge */}
                 {movie?.rating && (
-                  <div style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:99, background:'rgba(245,197,24,0.12)', border:'1px solid rgba(245,197,24,0.3)' }}>
-                    <Star size={12} style={{ fill:'#f5c518', color:'#f5c518', flexShrink:0 }}/>
-                    <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, fontWeight:700, color:'#f5c518' }}>{movie.rating.toFixed(1)}</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 8px', borderRadius:99, background:'rgba(245,197,24,0.12)', border:'1px solid rgba(245,197,24,0.3)', flexShrink:0 }}>
+                    <Star size={11} style={{ fill:'#f5c518', color:'#f5c518', flexShrink:0 }}/>
+                    <span style={{ fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight:700, color:'#f5c518' }}>{movie.rating.toFixed(1)}</span>
                   </div>
                 )}
                 {/* Năm */}
                 {year && (
-                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 11 : 12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'3px 8px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', flexShrink:0 }}>
                     {year}
                   </span>
                 )}
                 {/* Thời lượng */}
                 {movie?.duration && (
-                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 11 : 12, fontWeight:600, color:'rgba(255,255,255,0.55)', padding:'3px 8px', borderRadius:99, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', flexShrink:0 }}>
                     {movie.duration} phút
                   </span>
                 )}
-                {/* Genres */}
-                {movie?.genres?.slice(0,2).map(g => (
-                  <span key={g} style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.6)', padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)' }}>{g}</span>
+                {/* Genres — trên mobile chỉ show 1, desktop show 2 */}
+                {movie?.genres?.slice(0, isMobile ? 1 : 2).map(g => (
+                  <span key={g} style={{ fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 11 : 12, fontWeight:600, color:'rgba(255,255,255,0.6)', padding:'3px 8px', borderRadius:99, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', maxWidth: isMobile ? 110 : 'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{g}</span>
                 ))}
-                {/* % phù hợp */}
-                {movie?.rating && (
-                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:700, color:C.green, padding:'4px 10px', borderRadius:99, background:'rgba(70,211,105,0.1)', border:'1px solid rgba(70,211,105,0.25)' }}>
+                {/* % phù hợp — ẩn trên mobile nếu không đủ chỗ */}
+                {movie?.rating && !isMobile && (
+                  <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:700, color:C.green, padding:'3px 8px', borderRadius:99, background:'rgba(70,211,105,0.1)', border:'1px solid rgba(70,211,105,0.25)', flexShrink:0 }}>
                     {Math.round(movie.rating * 10)}% phù hợp
                   </span>
                 )}
               </div>
               {movie?.description && (
-                <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:14, color:C.textSub, lineHeight:1.7, maxWidth:680 }}>
+                <p style={{ fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 13 : 14, color:C.textSub, lineHeight:1.7, maxWidth:680 }}>
                   {movie.description}
                 </p>
               )}
@@ -418,7 +430,7 @@ export default function MovieDetailPage() {
               <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:32 }}>
                 {TABS.map(t => (
                   <button key={t.key} onClick={() => setTab(t.key)}
-                    style={{ background:'none', border:'none', borderBottom:`2px solid ${tab===t.key ? C.accent : 'transparent'}`, padding:'12px 20px', cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontSize:14, fontWeight:tab===t.key ? 700 : 500, color:tab===t.key ? C.text : C.textSub, transition:'all 0.2s', marginBottom:-1 }}>
+                    style={{ background:'none', border:'none', borderBottom:`2px solid ${tab===t.key ? C.accent : 'transparent'}`, padding: isMobile ? '10px 12px' : '12px 20px', cursor:'pointer', fontFamily:"'Nunito',sans-serif", fontSize: isMobile ? 12 : 14, fontWeight:tab===t.key ? 700 : 500, color:tab===t.key ? C.text : C.textSub, transition:'all 0.2s', marginBottom:-1, whiteSpace:'nowrap' }}>
                     {t.label}
                   </button>
                 ))}
@@ -489,7 +501,7 @@ export default function MovieDetailPage() {
                 {/* MORE */}
                 {tab === 'more' && (
                   <motion.div key="more" initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }} transition={{ duration:0.2 }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 40px', maxWidth:560 }}>
+                    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:'12px 40px', maxWidth:560 }}>
                       {[
                         ['Thể loại',        movie?.genres?.join(', ') || '—'],
                         ['Năm phát hành',   year || '—'],
@@ -513,7 +525,7 @@ export default function MovieDetailPage() {
 
           {/* RIGHT sidebar */}
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ delay:0.15 }}
-            style={{ width:280, flexShrink:0, display:'flex', flexDirection:'column', gap:28 }}>
+            style={{ width: isMobile ? '100%' : 280, flexShrink:0, display: isMobile ? 'none' : 'flex', flexDirection:'column', gap:28 }}>
 
             {movie?.posterUrl && (
               <div style={{ borderRadius:8, overflow:'hidden' }}>
