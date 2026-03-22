@@ -3,10 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX, Maximize, ChevronLeft, Star, SkipForward, SkipBack, Info } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import movieService from '../services/movieService';
-import PersonScrollRow from '../components/movie/Personscrollrow';
-import ReviewSection from '../components/movie/Reviewsection';
-import BackButton from '../components/common/BackButton';
+import movieService from '../../services/movieService';
+import PersonScrollRow from '../../components/movie/Personscrollrow';
+import ReviewSection from '../../components/movie/Reviewsection';
+import BackButton from '../../components/common/BackButton';
 
 const toSlug = (name) =>
   (name || 'unknown')

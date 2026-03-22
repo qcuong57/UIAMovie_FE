@@ -4,12 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Play, Trash2, Star, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import movieService from '../services/movieService';
-import MovieCard    from '../components/movie/MovieCard';
-import BackButton   from '../components/common/BackButton';
-import Pagination   from '../components/common/Pagination';
-import { usePagination } from '../hooks/usePagination';
-import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../context/homeTokens';
+import movieService from '../../services/movieService';
+import MovieCard    from '../../components/movie/MovieCard';
+import BackButton   from '../../components/common/BackButton';
+import Pagination   from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
+import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../../context/homeTokens';
 
 // 6 cột giống BrowsePage
 const GRID_6 = {

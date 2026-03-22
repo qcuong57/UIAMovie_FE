@@ -17,18 +17,19 @@ const ScrollToTop = () => {
   }, [pathname]);
   return null;
 };
-import HomePage from "../pages/Homepage";
-import MovieInfoPage from "../pages/MovieInfoPage";
-import MovieDetailPage from "../pages/MovieDetailPage";
+import HomePage from "../pages/user/Homepage";
+import MovieInfoPage from "../pages/user/MovieInfoPage";
+import MovieDetailPage from "../pages/user/MovieDetailPage";
 import LandingPage from "../pages/Landingpage";
 import Navbar from "../components/layout/Navbar";
-import SearchPage from "../pages/Searchpage";
-import BrowsePage from "../pages/BrowsePage";
-import ProfilePage from "../pages/ProfilePage";
-import SecurityPage from "../pages/SecurityPage";
-import PersonPage from "../pages/PersonPage";
-import FavoritesPage from "../pages/FavoritesPage";
-import WatchHistoryPage from "../pages/WatchHistoryPage";
+import SearchPage from "../pages/user/Searchpage";
+import BrowsePage from "../pages/user/BrowsePage";
+import ProfilePage from "../pages/user/ProfilePage";
+import SecurityPage from "../pages/user/SecurityPage";
+import PersonPage from "../pages/user/PersonPage";
+import FavoritesPage from "../pages/user/FavoritesPage";
+import WatchHistoryPage from "../pages/user/WatchHistoryPage";
+import AdminPage from "../pages/admin/AdminPage";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const isLoggedIn = () => {
@@ -88,6 +89,16 @@ const AppRouter = () => (
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/watch-history" element={<WatchHistoryPage />} />
       </Route>
+
+      {/* ── Admin (layout riêng, không dùng Navbar) ── */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ── Trang cài đặt (có top bar riêng, không cần Navbar) ── */}
       <Route

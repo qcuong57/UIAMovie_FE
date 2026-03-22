@@ -9,10 +9,10 @@ import {
   Globe, Award, Users, ChevronRight, X,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import movieService from '../services/movieService';
-import PersonScrollRow from '../components/movie/Personscrollrow';
-import ReviewSection from '../components/movie/Reviewsection';
-import BackButton from '../components/common/BackButton';
+import movieService from '../../services/movieService';
+import PersonScrollRow from '../../components/movie/Personscrollrow';
+import ReviewSection from '../../components/movie/Reviewsection';
+import BackButton from '../../components/common/BackButton';
 
 const toSlug = (name) =>
   (name || 'unknown')
@@ -270,6 +270,142 @@ const SectionTitle = ({ children }) => (
   </div>
 );
 
+// ── Backdrop Carousel ─────────────────────────────────────────
+const BackdropCarousel = ({ backdrops }) => {
+  const scrollRef = useRef(null);
+  const [canLeft,  setCanLeft]  = useState(false);
+  const [canRight, setCanRight] = useState(true);
+
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 8);
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    el?.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el?.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [backdrops]);
+
+  const scroll = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // scroll ~3 cards at a time
+    el.scrollBy({ left: dir === 'left' ? -el.clientWidth : el.clientWidth, behavior: 'smooth' });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4, duration: 0.5 }}
+      style={{ marginBottom: 48 }}
+    >
+      <SectionTitle>Hình Ảnh</SectionTitle>
+
+      <div style={{ position: 'relative' }}>
+        {/* Left fade */}
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 80,
+          background: 'linear-gradient(to right, #000 0%, transparent 100%)',
+          zIndex: 10, pointerEvents: 'none',
+          opacity: canLeft ? 1 : 0, transition: 'opacity 0.2s',
+        }} />
+
+        {/* Left button */}
+        {canLeft && (
+          <button onClick={() => scroll('left')} style={{
+            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+            zIndex: 20, width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(10,10,12,0.88)', border: '1px solid rgba(255,255,255,0.18)',
+            backdropFilter: 'blur(8px)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#e8eaf0',
+          }}>
+            <ChevronLeft size={18} strokeWidth={2.5} />
+          </button>
+        )}
+
+        {/* Scroll row — 3 cards visible */}
+        <div
+          ref={scrollRef}
+          style={{
+            display: 'flex',
+            gap: 12,
+            overflowX: 'auto',
+            overflowY: 'visible',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            scrollSnapType: 'x mandatory',
+            paddingBottom: 4,
+          }}
+        >
+          <style>{`.backdrop-scroll::-webkit-scrollbar{display:none}`}</style>
+          {backdrops.map((img, i) => (
+            <a
+              key={i}
+              href={img.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                flexShrink: 0,
+                // ~3 per view: calc(33.333% - 8px)
+                width: 'calc(33.333% - 8px)',
+                scrollSnapAlign: 'start',
+                borderRadius: 10,
+                overflow: 'hidden',
+                display: 'block',
+                border: `1px solid ${C.border}`,
+                aspectRatio: '16/9',
+              }}
+            >
+              <motion.img
+                src={img.url}
+                alt=""
+                whileHover={{ scale: 1.04 }}
+                transition={{ duration: 0.25 }}
+                style={{
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', display: 'block',
+                }}
+              />
+            </a>
+          ))}
+        </div>
+
+        {/* Right fade */}
+        <div style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 80,
+          background: 'linear-gradient(to left, #000 0%, transparent 100%)',
+          zIndex: 10, pointerEvents: 'none',
+          opacity: canRight ? 1 : 0, transition: 'opacity 0.2s',
+        }} />
+
+        {/* Right button */}
+        {canRight && (
+          <button onClick={() => scroll('right')} style={{
+            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            zIndex: 20, width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(10,10,12,0.88)', border: '1px solid rgba(255,255,255,0.18)',
+            backdropFilter: 'blur(8px)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#e8eaf0',
+          }}>
+            <ChevronRight size={18} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
 // ══════════════════════════════════════════════════════════════
 // ── MAIN PAGE ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
@@ -339,6 +475,7 @@ export default function MovieInfoPage() {
                      ),
         trailers:    raw.trailers || [],
         reviews:     raw.reviews || [],
+        images:      raw.images || [],
       };
       setMovie(normalized);
       if (normalized.trailers?.length) setTrailers(normalized.trailers);
@@ -606,18 +743,25 @@ export default function MovieInfoPage() {
           transition={{ delay: 0.35, duration: 0.5 }}
           style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 48, paddingBottom: 40, borderBottom: `1px solid ${C.border}`, marginBottom: 40, alignItems: 'start' }}
         >
-          {/* Description */}
           <div>
             <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 15, lineHeight: 1.85, color: C.textSub, maxWidth: 720 }}>
               {movie?.description || 'Chưa có mô tả.'}
             </p>
           </div>
-
-          {/* Score */}
           <div style={{ flexShrink: 0 }}>
             <StarRating score={movie?.rating} votes={movie?.voteCount} />
           </div>
         </motion.div>
+
+        {/* ──── BACKDROP CAROUSEL ──── */}
+        {(() => {
+          const backdrops = (movie?.images || []).filter(i => i.imageType === 'backdrop');
+          if (!backdrops.length) return null;
+
+          return (
+            <BackdropCarousel backdrops={backdrops} />
+          );
+        })()}
 
         {/* ──── TABS ──── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}>

@@ -64,7 +64,7 @@ const RankCard = ({ movie, rank, isFavorited, onFavoriteToggle }) => {
   return (
     <div
       style={{
-        flex: '1 1 0',
+        flex: '0 0 100%',
         minWidth: 0,
         paddingLeft: rankW,
         cursor: 'pointer',
@@ -442,7 +442,7 @@ export default function TopRankedRow({
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06, duration: 0.38, ease: [0.215, 0.61, 0.355, 1] }}
-                style={{ flex: '1 1 0', minWidth: 0, overflow: 'visible' }}
+                style={{ flex: '0 0 20%', width: '20%', minWidth: 0, overflow: 'visible' }}
               >
                 <RankCard
                   movie={movie}

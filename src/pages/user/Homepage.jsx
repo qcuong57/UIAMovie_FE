@@ -1,16 +1,16 @@
 // src/pages/home/HomePage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import HeroBanner   from '../components/layout/HeroBanner';
-import Footer       from '../components/layout/Footer';
-import movieService from '../services/movieService';
-import genreService from '../services/genreService';
+import HeroBanner   from '../../components/layout/HeroBanner';
+import Footer       from '../../components/layout/Footer';
+import movieService from '../../services/movieService';
+import genreService from '../../services/genreService';
 
-import { C, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS } from '../context/homeTokens';
-import GenreSection      from '../components/home/GenreSection';
-import TopRankedRow      from '../components/home/TopRankedRow';
-import MovieRow          from '../components/home/MovieRow';
-import CountryMovieRows  from '../components/home/CountryMovieRows';
+import { C, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS } from '../../context/homeTokens';
+import GenreSection      from '../../components/home/GenreSection';
+import TopRankedRow      from '../../components/home/TopRankedRow';
+import MovieRow          from '../../components/home/MovieRow';
+import CountryMovieRows  from '../../components/home/CountryMovieRows';
 
 const normalizeMovie = m => ({
   id:          m.id,

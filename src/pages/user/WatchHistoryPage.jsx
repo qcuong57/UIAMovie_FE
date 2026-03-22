@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Play, Trash2, CheckCircle2, RotateCcw, Calendar, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import movieService from '../services/movieService';
-import BackButton   from '../components/common/BackButton';
-import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../context/homeTokens';
+import movieService from '../../services/movieService';
+import BackButton   from '../../components/common/BackButton';
+import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (date) => {

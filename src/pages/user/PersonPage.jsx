@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Film, Calendar, MapPin, Star, ExternalLink, Camera, BookOpen } from 'lucide-react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import personService from '../services/personService';
-import movieService from '../services/movieService';
-import BackButton from '../components/common/BackButton';
+import personService from '../../services/personService';
+import movieService from '../../services/movieService';
+import BackButton from '../../components/common/BackButton';
 
 // ── Tokens ────────────────────────────────────────────────────────
 const C = {

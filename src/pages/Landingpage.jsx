@@ -171,7 +171,7 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       }
 
       authService.saveSession(data);
-      navigate('/');
+      navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -319,7 +319,7 @@ function OtpView({ userId, email, navigate, onBack }) {
     try {
       const data = await authService.verifyOtp({ userId, code });
       authService.saveSession(data);
-      navigate('/');
+      navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
     } catch (e) {
       setError(e.message);
     } finally {

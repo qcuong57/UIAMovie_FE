@@ -98,9 +98,6 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
         } else if (res?.data && Array.isArray(res.data)) {
           raw = res.data;
         }
-
-        console.log(`[CountryMovieRows] ${country.code} → ${raw.length} phim`, raw[0]);
-
         setMovies(
           raw.map(normalize)
             .sort((a, b) => (b.year || 0) - (a.year || 0))

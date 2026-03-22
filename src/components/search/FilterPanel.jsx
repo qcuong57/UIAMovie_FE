@@ -215,7 +215,8 @@ export default function FilterPanel({
   selCountry, onCountryChange,
   filterCount, onClearAll,
 }) {
-  const genreOptions = genres.map(g => ({ value: g.id, label: g.name }));
+  // genres đã được SearchPage normalize thành [{id: name, name: name}]
+  const genreOptions = genres.map(g => ({ value: g.id ?? g.name, label: g.name }));
 
   return (
     <AnimatePresence>

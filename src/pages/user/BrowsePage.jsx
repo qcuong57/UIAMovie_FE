@@ -6,13 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, SlidersHorizontal, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import movieService from '../services/movieService';
-import genreService from '../services/genreService';
-import MovieCard    from '../components/movie/MovieCard';
-import { SkeletonCard, GRID_STYLE } from '../components/search/SearchUI';
-import Pagination   from '../components/common/Pagination';
-import { usePagination } from '../hooks/usePagination';
-import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../context/homeTokens';
+import movieService from '../../services/movieService';
+import genreService from '../../services/genreService';
+import MovieCard    from '../../components/movie/MovieCard';
+import { SkeletonCard, GRID_STYLE } from '../../components/search/SearchUI';
+import Pagination   from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
+import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 
 const PAGE_SIZE = 24;
 const ACCENT    = '#e5181e';

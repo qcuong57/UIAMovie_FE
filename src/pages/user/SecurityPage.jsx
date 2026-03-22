@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, ShieldCheck, ShieldOff, Check, X, AlertTriangle, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
-import axiosInstance from '../config/axios';
+import authService from '../../services/authService';
+import axiosInstance from '../../config/axios';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
