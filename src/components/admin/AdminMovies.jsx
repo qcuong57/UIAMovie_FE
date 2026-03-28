@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, X, Search, Check, Copy, Hash, Eye, Pencil
+  AlertCircle, X, Search, Check, Copy, Hash, Eye, Pencil, Video
 } from 'lucide-react';
 import movieService from '../../services/movieService';
 import { Button, Input, Modal, Spinner } from '../ui';
@@ -11,8 +11,9 @@ import { usePagination } from '../../hooks/usePagination';
 import Pagination from '../common/Pagination';
 import axiosInstance from '../../config/axios';
 import { C, FONT_DISPLAY, FONT_BODY } from '../../context/homeTokens';
-import MovieDetailPanel from './movie/MovieDetailPanel';
-import MovieEditModal   from './movie/MovieEditModal';
+import MovieDetailPanel   from './movie/MovieDetailPanel';
+import MovieEditModal     from './movie/MovieEditModal';
+import VideoUploadPanel   from './movie/VideoUploadPanel';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -393,6 +394,7 @@ export default function AdminMovies() {
   const [showPanel,  setShowPanel]  = useState(false);
   const [detailId,   setDetailId]   = useState(null);  // xem chi tiết
   const [editMovie,  setEditMovie]  = useState(null);  // sửa phim
+  const [uploadMovie, setUploadMovie] = useState(null); // { id, title } — upload video
 
   const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
   const pageMovies = pagination.paginate(filtered);
@@ -517,6 +519,11 @@ export default function AdminMovies() {
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 5 }}>
                       <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                        onClick={() => setUploadMovie({ id: m.id, title: m.title })} title="Upload video"
+                        style={{ width: 30, height: 30, borderRadius: 6, background: 'rgba(46,213,115,0.08)', border: `1px solid rgba(46,213,115,0.2)`, cursor: 'pointer', color: '#2ed573', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Video size={13}/>
+                      </motion.button>
+                      <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                         onClick={() => setDetailId(m.id)} title="Xem chi tiết"
                         style={{ width: 30, height: 30, borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, cursor: 'pointer', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Eye size={13}/>
@@ -571,6 +578,25 @@ export default function AdminMovies() {
             onClose={() => setShowPanel(false)}
             onImported={fetchMovies}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Video upload panel */}
+      <AnimatePresence>
+        {uploadMovie && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setUploadMovie(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 199, backdropFilter: 'blur(2px)' }}
+            />
+            <VideoUploadPanel
+              movieId={uploadMovie.id}
+              movieTitle={uploadMovie.title}
+              onClose={() => setUploadMovie(null)}
+              onUploaded={() => setUploadMovie(null)}
+            />
+          </>
         )}
       </AnimatePresence>
 

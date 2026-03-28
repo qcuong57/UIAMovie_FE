@@ -120,7 +120,14 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
         border: `1px solid ${hov ? 'rgba(255,255,255,0.07)' : 'transparent'}`,
         cursor: 'pointer', transition: 'all 0.18s',
       }}
-      onClick={() => navigate(`/movie/${item.movieId}/info`)}
+      onClick={() =>
+        navigate(`/movie/${item.movieId}`, {
+          state: {
+            resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
+            isCompleted:   item.isCompleted ?? false,
+          },
+        })
+      }
     >
       {/* Poster */}
       <div style={{ width: 60, height: 90, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#1a1a1a', position: 'relative' }}>
@@ -182,7 +189,7 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
           >
             <motion.button
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={e => { e.stopPropagation(); onRewatch(item.movieId); }}
+              onClick={e => { e.stopPropagation(); onRewatch(item); }}
               title="Xem phim"
               style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Play size={13} fill="#000" color="#000" style={{ marginLeft: 1 }} />
@@ -305,7 +312,14 @@ export default function WatchHistoryPage() {
     }
   };
 
-  const handleRewatch = (movieId) => navigate(`/movie/${movieId}`);
+  // Truyền tiến độ đã xem qua route state để VideoPlayer có thể seek đúng vị trí
+  const handleRewatch = (item) =>
+    navigate(`/movie/${item.movieId}`, {
+      state: {
+        resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
+        isCompleted:   item.isCompleted ?? false,
+      },
+    });
   const groups = useMemo(() => groupByDay(history), [history]);
 
   // ── Skeleton ────────────────────────────────────────────────────────────────
