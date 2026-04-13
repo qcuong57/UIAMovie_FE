@@ -13,7 +13,7 @@ import {
 const ScrollToTop = () => {
   const { pathname } = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [pathname]);
   return null;
 };
@@ -28,6 +28,7 @@ import ProfilePage from "../pages/user/ProfilePage";
 import SecurityPage from "../pages/user/SecurityPage";
 import PersonPage from "../pages/user/PersonPage";
 import FavoritesPage from "../pages/user/FavoritesPage";
+import TrendingPage from "../pages/user/TrendingPage";
 import WatchHistoryPage from "../pages/user/WatchHistoryPage";
 import AdminPage from "../pages/admin/AdminPage";
 
@@ -87,6 +88,7 @@ const AppRouter = () => (
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/trending" element={<TrendingPage />} />
         <Route path="/watch-history" element={<WatchHistoryPage />} />
       </Route>
 

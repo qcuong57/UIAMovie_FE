@@ -2,508 +2,100 @@
 // Trang thông tin chi tiết phim — hiển thị trước khi vào xem phim
 // Route: /movie/:id/info → /movie/:id (player)
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Play, Star, Heart, ChevronLeft, Clock, Calendar,
-  Globe, Award, Users, ChevronRight, X,
-} from 'lucide-react';
+import { Play, Heart, Clock, Calendar, Globe, Star, Award, Users } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import movieService from '../../services/movieService';
 import PersonScrollRow from '../../components/movie/Personscrollrow';
 import ReviewSection from '../../components/movie/Reviewsection';
 import BackButton from '../../components/common/BackButton';
 
-const toSlug = (name) =>
-  (name || 'unknown')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+// ── Shared components ──────────────────────────────────────────
+import { C, toSlug, fmt, fmtRuntime, extractYoutubeKey, GLOBAL_STYLES } from '../../components/movie/ui/movieConstants';
+import Skeleton        from '../../components/movie/ui/Skeleton';
+import StarRating      from '../../components/movie/ui/StarRating';
+import TrailerModal    from '../../components/movie/ui/TrailerModal';
+import SectionTitle    from '../../components/movie/ui/SectionTitle';
+import StatPill        from '../../components/movie/ui/StatPill';
+import BackdropCarousel from '../../components/movie/ui/BackdropCarousel';
 
-// ── Design tokens (đồng bộ với Homepage & MovieDetailPage) ─────
-const C = {
-  bg:          '#000000',
-  surface:     '#0a0a0a',
-  surfaceHigh: '#111111',
-  surfaceMid:  '#181818',
-  card:        '#141414',
-  border:      'rgba(255,255,255,0.07)',
-  borderBright:'rgba(255,255,255,0.14)',
-  accent:      '#e5181e',
-  accentSoft:  'rgba(229,24,30,0.15)',
-  accentGlow:  'rgba(229,24,30,0.35)',
-  text:        '#f0f2f8',
-  textSub:     '#9299a8',
-  textDim:     '#525868',
-  gold:        '#f5c518',
-  green:       '#46d369',
-};
-
-// ── Helpers ────────────────────────────────────────────────────
-const fmt = (n) => n ? n.toFixed(1) : '—';
-const fmtRuntime = (min) => {
-  if (!min) return null;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h > 0 ? `${h}g ${m}p` : `${m}p`;
-};
-
-// Parse YouTube video ID từ full URL (watch?v=KEY hoặc youtu.be/KEY)
-const extractYoutubeKey = (url) => {
-  if (!url) return null;
-  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-  if (watchMatch) return watchMatch[1];
-  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-  if (shortMatch) return shortMatch[1];
-  return null;
-};
-
-// ── Skeleton loader ────────────────────────────────────────────
-const Skeleton = ({ w = '100%', h = 16, r = 6, style = {} }) => (
-  <div style={{
-    width: w, height: h, borderRadius: r,
-    background: 'linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%)',
-    backgroundSize: '200% 100%',
-    animation: 'shimmer 1.4s infinite',
-    ...style,
-  }} />
-);
-
-// ── Star Rating component ──────────────────────────────────────
-const StarRating = ({ score, votes }) => {
-  const pct = ((score || 0) / 10) * 100;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      {/* Circular score */}
-      <div style={{ position: 'relative', width: 54, height: 54, flexShrink: 0 }}>
-        <svg width="54" height="54" viewBox="0 0 54 54" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx="27" cy="27" r="22" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-          <circle cx="27" cy="27" r="22" fill="none" stroke={C.gold} strokeWidth="3.5"
-            strokeDasharray={`${2 * Math.PI * 22}`}
-            strokeDashoffset={`${2 * Math.PI * 22 * (1 - pct / 100)}`}
-            strokeLinecap="round"
-          />
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 15, fontWeight: 800, color: C.gold, letterSpacing: '-0.02em' }}>
-            {score ? score.toFixed(1) : '—'}
-          </span>
-        </div>
-      </div>
-      <div>
-        <div style={{ display: 'flex', gap: 2, marginBottom: 4 }}>
-          {[1,2,3,4,5].map(i => (
-            <Star key={i} size={11}
-              style={{ color: i <= Math.round((score||0)/2) ? C.gold : 'rgba(255,255,255,0.15)',
-                       fill:  i <= Math.round((score||0)/2) ? C.gold : 'none' }}
-            />
-          ))}
-        </div>
-        {votes && (
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textDim }}>
-            {votes.toLocaleString()} đánh giá
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ── Trailer Modal ──────────────────────────────────────────────
-const TrailerModal = ({ trailerKey, onClose }) => (
+// ── Director Card (local — chỉ dùng trong trang này) ──────────
+const DirectorCard = ({ person, index, onClick }) => (
   <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    onClick={onClose}
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: index * 0.05, duration: 0.3 }}
+    whileHover={{ y: -4, transition: { duration: 0.18 } }}
+    onClick={onClick}
     style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(0,0,0,0.92)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backdropFilter: 'blur(12px)',
-    }}
-  >
-    <motion.div
-      initial={{ scale: 0.88, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.9, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-      onClick={e => e.stopPropagation()}
-      style={{
-        width: '90vw', maxWidth: 960,
-        aspectRatio: '16/9',
-        borderRadius: 12,
-        overflow: 'hidden',
-        position: 'relative',
-        boxShadow: `0 40px 100px rgba(0,0,0,0.9), 0 0 0 1px ${C.border}`,
-      }}
-    >
-      <iframe
-        src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&rel=0`}
-        allow="autoplay; fullscreen"
-        allowFullScreen
-        style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-        title="Trailer"
-      />
-      <button onClick={onClose}
-        style={{
-          position: 'absolute', top: 12, right: 12,
-          width: 36, height: 36, borderRadius: '50%',
-          background: 'rgba(0,0,0,0.7)', border: `1px solid ${C.border}`,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff',
-        }}>
-        <X size={16} />
-      </button>
-    </motion.div>
-  </motion.div>
-);
-
-// ── Cast Card ─────────────────────────────────────────────────
-const CastCard = ({ person, index }) => {
-  const [imgErr, setImgErr] = useState(false);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.3 }}
-      whileHover={{ y: -6, transition: { duration: 0.2 } }}
-      style={{
-        width: 120, flexShrink: 0,
-        borderRadius: 10,
-        overflow: 'hidden',
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        cursor: 'pointer',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
-      }}
-    >
-      <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, overflow: 'hidden', position: 'relative' }}>
-        {person.profileUrl && !imgErr ? (
-          <img src={person.profileUrl} alt={person.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
-            onError={() => setImgErr(true)}
-          />
-        ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.surfaceHigh, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: C.textDim, fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 800 }}>
-              {person.name?.charAt(0)?.toUpperCase()}
-            </div>
-          </div>
-        )}
-      </div>
-      <div style={{ padding: '10px 10px 12px' }}>
-        <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, fontWeight: 700, color: C.text, lineHeight: 1.35, marginBottom: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {person.name}
-        </p>
-        {person.character && (
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10.5, color: C.textDim, fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
-            {person.character}
-          </p>
-        )}
-      </div>
-    </motion.div>
-  );
-};
-
-
-
-// ── Review Card ───────────────────────────────────────────────
-const ReviewCard = ({ review, index }) => (
-  <motion.div
-    initial={{ opacity: 0, x: -12 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ delay: index * 0.08 }}
-    style={{
-      padding: '20px 24px',
+      width: 140, flexShrink: 0,
+      borderRadius: 10, overflow: 'hidden',
       background: C.card,
-      borderRadius: 12,
       border: `1px solid ${C.border}`,
-      marginBottom: 14,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      cursor: person.name ? 'pointer' : 'default',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', background: `hsl(${(review.author?.charCodeAt(0) || 200) * 7}, 40%, 28%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-          {review.author?.charAt(0)?.toUpperCase() || '?'}
-        </div>
-        <div>
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 600, color: C.text }}>{review.author || 'Ẩn danh'}</p>
-          {review.created_at && (
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textDim }}>
-              {new Date(review.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', year: 'numeric' })}
-            </p>
-          )}
-        </div>
-      </div>
-      {review.author_details?.rating && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: C.accentSoft, border: `1px solid ${C.accentGlow}` }}>
-          <Star size={11} style={{ fill: C.gold, color: C.gold }} />
-          <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 14, fontWeight: 700, color: C.gold }}>{review.author_details.rating}</span>
+    {/* Ảnh 2:3 */}
+    <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, overflow: 'hidden', position: 'relative' }}>
+      {person.profileUrl ? (
+        <img src={person.profileUrl} alt={person.name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1c1c' }}>
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="4" fill="#3a3a3a" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3a3a3a" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
         </div>
       )}
     </div>
-    <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13.5, color: C.textSub, lineHeight: 1.75, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-      {review.content}
-    </p>
+    {/* Info */}
+    <div style={{ padding: '12px 12px 14px' }}>
+      <p style={{
+        fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 700, color: C.text,
+        lineHeight: 1.35, marginBottom: 4,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
+        {person.name}
+      </p>
+      <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11.5, color: C.textSub, fontStyle: 'italic' }}>
+        Đạo diễn
+      </p>
+    </div>
   </motion.div>
 );
-
-// ── Stat Pill ─────────────────────────────────────────────────
-const StatPill = ({ icon: Icon, label, value }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 40 }}>
-    <Icon size={13} style={{ color: C.accent, flexShrink: 0 }} />
-    <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textDim }}>{label}</span>
-    <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, fontWeight: 600, color: C.text }}>{value}</span>
-  </div>
-);
-
-// ── Section heading ───────────────────────────────────────────
-const SectionTitle = ({ children }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-    <div style={{ width: 3, height: 20, borderRadius: 2, background: C.accent, flexShrink: 0 }} />
-    <h2 style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '0.03em', textTransform: 'uppercase', margin: 0 }}>
-      {children}
-    </h2>
-  </div>
-);
-
-// ── Backdrop Lightbox ─────────────────────────────────────────
-const BackdropLightbox = ({ src, index, total, onClose, onPrev, onNext }) => {
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && index > 0) onPrev();
-      if (e.key === 'ArrowRight' && index < total - 1) onNext();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [index, total]);
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(20px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        {/* Close */}
-        <button onClick={onClose} style={{
-          position: 'absolute', top: 20, right: 20,
-          width: 40, height: 40, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', zIndex: 10,
-        }}>
-          <X size={18} />
-        </button>
-
-        {/* Counter */}
-        <div style={{ position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-          {index + 1} / {total}
-        </div>
-
-        {/* Prev */}
-        {index > 0 && (
-          <button onClick={e => { e.stopPropagation(); onPrev(); }} style={{
-            position: 'absolute', left: 16, width: 44, height: 44, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', zIndex: 10,
-          }}>
-            <ChevronLeft size={22} />
-          </button>
-        )}
-
-        {/* Image */}
-        <motion.img
-          key={src}
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.22 }}
-          src={src}
-          alt=""
-          onClick={e => e.stopPropagation()}
-          style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 32px 80px rgba(0,0,0,0.8)' }}
-        />
-
-        {/* Next */}
-        {index < total - 1 && (
-          <button onClick={e => { e.stopPropagation(); onNext(); }} style={{
-            position: 'absolute', right: 16, width: 44, height: 44, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', zIndex: 10,
-          }}>
-            <ChevronRight size={22} />
-          </button>
-        )}
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
-// ── Backdrop Carousel ─────────────────────────────────────────
-const BackdropCarousel = ({ backdrops }) => {
-  const isMobile = useIsMobile();
-  const scrollRef = useRef(null);
-  const [canLeft,  setCanLeft]  = useState(false);
-  const [canRight, setCanRight] = useState(true);
-  const [lightboxIdx, setLightboxIdx] = useState(null);
-
-  const checkScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 8);
-    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
-  };
-
-  useEffect(() => {
-    checkScroll();
-    const el = scrollRef.current;
-    el?.addEventListener('scroll', checkScroll, { passive: true });
-    window.addEventListener('resize', checkScroll);
-    return () => {
-      el?.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-    };
-  }, [backdrops]);
-
-  const scroll = (dir) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir === 'left' ? -el.clientWidth : el.clientWidth, behavior: 'smooth' });
-  };
-
-  const cardWidth = isMobile ? 'calc(80vw - 24px)' : 'calc(33.333% - 8px)';
-
-  return (
-    <>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.5 }}
-        style={{ marginBottom: 48 }}
-      >
-        <SectionTitle>Hình Ảnh</SectionTitle>
-
-        <div style={{ position: 'relative', overflow: 'hidden' }}>
-          {/* Left fade + button — chỉ desktop */}
-          {!isMobile && <>
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(to right, #000 0%, transparent 100%)', zIndex: 10, pointerEvents: 'none', opacity: canLeft ? 1 : 0, transition: 'opacity 0.2s' }} />
-            {canLeft && (
-              <button onClick={() => scroll('left')} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 20, width: 40, height: 40, borderRadius: '50%', background: 'rgba(10,10,12,0.88)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e8eaf0' }}>
-                <ChevronLeft size={18} strokeWidth={2.5} />
-              </button>
-            )}
-          </>}
-
-          {/* Scroll row */}
-          <div
-            ref={scrollRef}
-            style={{
-              display: 'flex', gap: 12,
-              overflowX: 'auto', overflowY: 'hidden',
-              scrollbarWidth: 'none', msOverflowStyle: 'none',
-              scrollSnapType: 'x mandatory',
-              paddingBottom: 4,
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            {backdrops.map((img, i) => (
-              <motion.div
-                key={i}
-                onClick={() => setLightboxIdx(i)}
-                whileHover={isMobile ? {} : { scale: 1.03 }}
-                transition={{ duration: 0.22 }}
-                style={{
-                  flexShrink: 0,
-                  width: cardWidth,
-                  scrollSnapAlign: 'start',
-                  borderRadius: 10,
-                  overflow: 'hidden',
-                  border: `1px solid ${C.border}`,
-                  aspectRatio: '16/9',
-                  cursor: 'pointer',
-                  position: 'relative',
-                }}
-              >
-                <img
-                  src={img.url}
-                  alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-                {/* Overlay hover */}
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', transition: 'background 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.25)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}
-                />
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Right fade + button — chỉ desktop */}
-          {!isMobile && <>
-            <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(to left, #000 0%, transparent 100%)', zIndex: 10, pointerEvents: 'none', opacity: canRight ? 1 : 0, transition: 'opacity 0.2s' }} />
-            {canRight && (
-              <button onClick={() => scroll('right')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 20, width: 40, height: 40, borderRadius: '50%', background: 'rgba(10,10,12,0.88)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e8eaf0' }}>
-                <ChevronRight size={18} strokeWidth={2.5} />
-              </button>
-            )}
-          </>}
-        </div>
-      </motion.div>
-
-      {/* Lightbox */}
-      {lightboxIdx !== null && (
-        <BackdropLightbox
-          src={backdrops[lightboxIdx].url}
-          index={lightboxIdx}
-          total={backdrops.length}
-          onClose={() => setLightboxIdx(null)}
-          onPrev={() => setLightboxIdx(i => i - 1)}
-          onNext={() => setLightboxIdx(i => i + 1)}
-        />
-      )}
-    </>
-  );
-};
 
 // ══════════════════════════════════════════════════════════════
 // ── MAIN PAGE ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 export default function MovieInfoPage() {
   const isMobile = useIsMobile();
-  const { id }     = useParams();
-  const navigate   = useNavigate();
+  const { id }   = useParams();
+  const navigate = useNavigate();
 
-  const [movie,    setMovie]    = useState(null);
-  const [cast,     setCast]     = useState([]);
-  const [directorsFromMovie, setDirectorsFromMovie] = useState([]);
-  const [trailers, setTrailers] = useState([]);
-  const [reviews,  setReviews]  = useState([]);
-  const [tmdbData, setTmdbData] = useState(null);   // raw TMDB response nếu có
-  const [loading,  setLoading]  = useState(true);
+  const [movie,               setMovie]               = useState(null);
+  const [cast,                setCast]                = useState([]);
+  const [directorsFromMovie,  setDirectorsFromMovie]  = useState([]);
+  const [trailers,            setTrailers]            = useState([]);
+  const [loading,             setLoading]             = useState(true);
+  const [error,               setError]               = useState(null);
+  const [showTrailer,         setShowTrailer]         = useState(false);
+  const [isFav,               setIsFav]               = useState(false);
+  const [activeTab,           setActiveTab]           = useState('cast'); // 'cast' | 'reviews' | 'details'
+  const [imgLoaded,           setImgLoaded]           = useState(false);
+
   // currentUser: đọc từ nơi bạn lưu auth (localStorage, context, v.v.)
-  // shape: { id: Guid, name: string } | null
   const [currentUser] = useState(() => {
     try {
       const raw = localStorage.getItem('currentUser');
       return raw ? JSON.parse(raw) : null;
     } catch { return null; }
   });
-  const [error,    setError]    = useState(null);
-  const [showTrailer, setShowTrailer] = useState(false);
-  const [isFav,    setIsFav]    = useState(false);
-  const [activeTab, setActiveTab] = useState('cast'); // 'cast' | 'reviews' | 'details'
-  const [imgLoaded, setImgLoaded] = useState(false);
 
-  // ── Fetch data ───────────────────────────────────────────────
-  // Scroll lên đầu trang mỗi khi vào trang này (hoặc đổi phim)
+  // ── Scroll lên đầu mỗi khi đổi phim ─────────────────────────
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [id]);
@@ -513,13 +105,14 @@ export default function MovieInfoPage() {
     fetchAll();
   }, [id]);
 
+  // ── Fetch data ───────────────────────────────────────────────
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Movie detail
       const movieRes = await movieService.getMovieById(id);
       const raw = movieRes?.movie || movieRes;
+
       const normalized = {
         id:          raw.id,
         title:       raw.title,
@@ -547,9 +140,8 @@ export default function MovieInfoPage() {
       };
       setMovie(normalized);
       if (normalized.trailers?.length) setTrailers(normalized.trailers);
-      if (normalized.reviews?.length)  setReviews(normalized.reviews);
 
-      // Cast từ raw (giống MovieDetailPage)
+      // Directors
       if (raw?.directorDetail) {
         setDirectorsFromMovie([{
           id:           raw.directorDetail.id ?? raw.directorDetail.personId ?? raw.directorDetail.tmdbPersonId ?? null,
@@ -562,8 +154,9 @@ export default function MovieInfoPage() {
       } else if (raw?.director) {
         setDirectorsFromMovie([{ name: raw.director, profileUrl: null }]);
       }
+
+      // Cast
       if (Array.isArray(raw?.cast) && raw.cast.length > 0) {
-        // DEBUG: log để kiểm tra tên field id từ API
         const sorted = [...raw.cast]
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map(c => ({
@@ -577,7 +170,6 @@ export default function MovieInfoPage() {
           }));
         setCast(sorted);
       }
-
     } catch (err) {
       setError(err.message || 'Không thể tải dữ liệu phim');
     } finally {
@@ -586,18 +178,15 @@ export default function MovieInfoPage() {
   };
 
   // ── Derived ──────────────────────────────────────────────────
-  // Cast từ movieData.cast không có field job/department nên dùng directorsFromMovie
   const directors = directorsFromMovie.length > 0
     ? directorsFromMovie
     : cast.filter(p => p.job === 'Director' || p.department === 'Directing');
   const actors = cast.filter(p => p.job !== 'Director' && p.department !== 'Directing');
 
-  const firstTrailerKey = movie?.trailerKey
-    || (trailers.length > 0 ? trailers[0]?.key : null);
-
-  const year       = movie?.year;
-  const runtime    = fmtRuntime(movie?.runtime);
-  const genreList  = Array.isArray(movie?.genres)
+  const firstTrailerKey = movie?.trailerKey || (trailers.length > 0 ? trailers[0]?.key : null);
+  const year      = movie?.year;
+  const runtime   = fmtRuntime(movie?.runtime);
+  const genreList = Array.isArray(movie?.genres)
     ? movie.genres.map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean)
     : [];
 
@@ -605,21 +194,11 @@ export default function MovieInfoPage() {
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
-        <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,700;0,800;0,900;1,700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
-          @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-          @keyframes spin { to { transform: rotate(360deg) } }
-          ::-webkit-scrollbar { display: none; }
-        `}</style>
-
-        {/* Back button placeholder */}
+        <style>{GLOBAL_STYLES}</style>
         <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Skeleton w={90} h={32} r={20} />
         </div>
-
-        {/* Hero skeleton */}
         <Skeleton w="100%" h={420} r={0} />
-
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px', width: '100%' }}>
           <Skeleton w={340} h={40} r={6} style={{ marginBottom: 16 }} />
           <Skeleton w={200} h={20} r={4} style={{ marginBottom: 32 }} />
@@ -634,7 +213,7 @@ export default function MovieInfoPage() {
   if (error) {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,700;0,800;0,900;1,700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');`}</style>
+        <style>{GLOBAL_STYLES}</style>
         <div style={{ textAlign: 'center' }}>
           <p style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 48, fontWeight: 900, color: C.accent, marginBottom: 12 }}>Oops!</p>
           <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 14, color: C.textSub, marginBottom: 24 }}>{error}</p>
@@ -649,14 +228,7 @@ export default function MovieInfoPage() {
   // ── Page ───────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, overflowX: 'hidden', paddingTop: 56 }}>
-      {/* Global styles */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,700;0,800;0,900;1,700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
+      <style>{GLOBAL_STYLES}</style>
 
       {/* ──────────── HERO BACKDROP ──────────── */}
       <div style={{ position: 'relative', width: '100%', minHeight: isMobile ? 420 : 560, overflow: 'hidden' }}>
@@ -676,7 +248,6 @@ export default function MovieInfoPage() {
                 filter: 'saturate(1.1)',
               }}
             />
-            {/* Gradient overlays */}
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0.2) 100%)' }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, transparent 55%)' }} />
           </>
@@ -690,29 +261,43 @@ export default function MovieInfoPage() {
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={() => setIsFav(v => !v)}
-            style={{ width: 40, height: 40, borderRadius: '50%', background: isFav ? C.accentSoft : 'rgba(255,255,255,0.07)', border: `1px solid ${isFav ? C.accentGlow : C.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: isFav ? C.accentSoft : 'rgba(255,255,255,0.07)',
+              border: `1px solid ${isFav ? C.accentGlow : C.border}`,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
           >
             <Heart size={17} style={{ color: isFav ? C.accent : C.textSub, fill: isFav ? C.accent : 'none', transition: 'all 0.2s' }} />
           </motion.button>
         </div>
 
         {/* Hero content */}
-        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 16 : 48, padding: isMobile ? '16px 16px 36px' : '24px 48px 72px', maxWidth: 1200, margin: '0 auto', alignItems: 'flex-end', minHeight: isMobile ? 360 : 460 }}>
+        <div style={{
+          position: 'relative', zIndex: 10,
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 16 : 48,
+          padding: isMobile ? '16px 16px 36px' : '24px 48px 72px',
+          maxWidth: 1200, margin: '0 auto',
+          alignItems: 'flex-end',
+          minHeight: isMobile ? 360 : 460,
+        }}>
 
-          {/* Poster */}
-          <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            style={{ flexShrink: 0, width: 220, borderRadius: 12, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08)', display: 'none' }}
-            className="poster-col"
-          >
-            {movie?.posterUrl ? (
-              <img src={movie.posterUrl} alt={movie.title} style={{ width: '100%', display: 'block' }} />
-            ) : (
-              <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>🎬</div>
-            )}
-          </motion.div>
+          {/* Poster — desktop right */}
+          {!isMobile && (
+            <motion.div
+              initial={{ opacity: 0, x: 30, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              transition={{ delay: 0.1, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              style={{ flexShrink: 0, width: 200, borderRadius: 12, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08)', order: 2 }}
+            >
+              {movie?.posterUrl ? (
+                <img src={movie.posterUrl} alt={movie.title} style={{ width: '100%', display: 'block' }} />
+              ) : (
+                <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>🎬</div>
+              )}
+            </motion.div>
+          )}
 
           {/* Text info */}
           <div style={{ flex: 1 }}>
@@ -721,7 +306,12 @@ export default function MovieInfoPage() {
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
                 style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
                 {genreList.map(g => (
-                  <span key={g} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, fontFamily: "'Nunito', sans-serif", background: C.accentSoft, color: C.accent, border: `1px solid ${C.accentGlow}`, letterSpacing: '0.03em' }}>
+                  <span key={g} style={{
+                    padding: '3px 10px', borderRadius: 20,
+                    fontSize: 11, fontWeight: 600, fontFamily: "'Nunito', sans-serif",
+                    background: C.accentSoft, color: C.accent, border: `1px solid ${C.accentGlow}`,
+                    letterSpacing: '0.03em',
+                  }}>
                     {g}
                   </span>
                 ))}
@@ -733,7 +323,13 @@ export default function MovieInfoPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: isMobile ? 'clamp(24px, 7vw, 40px)' : 'clamp(32px, 6vw, 68px)', fontWeight: 900, color: C.text, lineHeight: 1.1, letterSpacing: '-0.01em', marginBottom: 14, textShadow: '0 4px 30px rgba(0,0,0,0.7)' }}
+              style={{
+                fontFamily: "'Be Vietnam Pro', sans-serif",
+                fontSize: isMobile ? 'clamp(24px, 7vw, 40px)' : 'clamp(32px, 6vw, 68px)',
+                fontWeight: 900, color: C.text, lineHeight: 1.1,
+                letterSpacing: '-0.01em', marginBottom: 14,
+                textShadow: '0 4px 30px rgba(0,0,0,0.7)',
+              }}
             >
               {movie?.title}
             </motion.h1>
@@ -749,17 +345,16 @@ export default function MovieInfoPage() {
             {/* Meta pills */}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
               style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24, alignItems: 'center' }}>
-              {year      && <StatPill icon={Calendar} label="Năm"       value={year} />}
-              {runtime   && <StatPill icon={Clock}    label="Thời lượng" value={runtime} />}
+              {year       && <StatPill icon={Calendar} label="Năm"        value={year} />}
+              {runtime    && <StatPill icon={Clock}    label="Thời lượng" value={runtime} />}
               {movie?.language && <StatPill icon={Globe} label="Ngôn ngữ" value={movie.language.toUpperCase()} />}
-              {movie?.rating && <StatPill icon={Star} label="TMDB" value={`${fmt(movie.rating)} / 10`} />}
+              {movie?.rating   && <StatPill icon={Star}  label="TMDB"     value={`${fmt(movie.rating)} / 10`} />}
             </motion.div>
 
             {/* Actions */}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
               style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
 
-              {/* Watch now — style giống nút Phát ở MovieDetailPage */}
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -770,7 +365,6 @@ export default function MovieInfoPage() {
                 Phát
               </motion.button>
 
-              {/* Trailer — kiểu chữ gạch dưới Netflix */}
               {firstTrailerKey && (
                 <motion.button
                   whileHover={{ opacity: 0.75 }}
@@ -784,22 +378,6 @@ export default function MovieInfoPage() {
               )}
             </motion.div>
           </div>
-
-          {/* Poster — desktop right */}
-          {!isMobile && (
-          <motion.div
-            initial={{ opacity: 0, x: 30, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ delay: 0.1, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            style={{ flexShrink: 0, width: 200, borderRadius: 12, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08)' }}
-          >
-            {movie?.posterUrl ? (
-              <img src={movie.posterUrl} alt={movie.title} style={{ width: '100%', display: 'block' }} />
-            ) : (
-              <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>🎬</div>
-            )}
-          </motion.div>
-          )}
         </div>
       </div>
 
@@ -811,7 +389,13 @@ export default function MovieInfoPage() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35, duration: 0.5 }}
-          style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr auto', gap: isMobile ? 24 : 48, paddingBottom: 40, borderBottom: `1px solid ${C.border}`, marginBottom: 40, alignItems: 'start' }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr auto',
+            gap: isMobile ? 24 : 48,
+            paddingBottom: 40, borderBottom: `1px solid ${C.border}`, marginBottom: 40,
+            alignItems: 'start',
+          }}
         >
           <div>
             <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 15, lineHeight: 1.85, color: C.textSub, maxWidth: 720 }}>
@@ -827,10 +411,7 @@ export default function MovieInfoPage() {
         {(() => {
           const backdrops = (movie?.images || []).filter(i => i.imageType === 'backdrop');
           if (!backdrops.length) return null;
-
-          return (
-            <BackdropCarousel backdrops={backdrops} />
-          );
+          return <BackdropCarousel backdrops={backdrops} />;
         })()}
 
         {/* ──── TABS ──── */}
@@ -839,18 +420,19 @@ export default function MovieInfoPage() {
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: isMobile ? 0 : 4, marginBottom: 32, borderBottom: `1px solid ${C.border}`, paddingBottom: 0 }}>
             {[
-              { key: 'cast',    label: 'Diễn viên',  icon: Users },
-              { key: 'reviews', label: 'Đánh giá',   icon: Star },
-              { key: 'details', label: 'Chi tiết',   icon: Award },
+              { key: 'cast',    label: 'Diễn viên', icon: Users },
+              { key: 'reviews', label: 'Đánh giá',  icon: Star  },
+              { key: 'details', label: 'Chi tiết',  icon: Award },
             ].map(({ key, label, icon: Icon }) => (
               <button key={key}
                 onClick={() => setActiveTab(key)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7,
-                  padding: isMobile ? '10px 14px' : '10px 20px', border: 'none', cursor: 'pointer',
-                  background: 'none',
+                  padding: isMobile ? '10px 14px' : '10px 20px',
+                  border: 'none', cursor: 'pointer', background: 'none',
                   fontFamily: "'Be Vietnam Pro', sans-serif",
-                  fontSize: isMobile ? 12 : 15, fontWeight: 800, letterSpacing: '0.02em', textTransform: 'uppercase',
+                  fontSize: isMobile ? 12 : 15, fontWeight: 800,
+                  letterSpacing: '0.02em', textTransform: 'uppercase',
                   color: activeTab === key ? C.text : C.textDim,
                   borderBottom: `2px solid ${activeTab === key ? C.accent : 'transparent'}`,
                   marginBottom: -1,
@@ -873,57 +455,22 @@ export default function MovieInfoPage() {
             {activeTab === 'cast' && (
               <motion.div key="cast" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
 
-                {/* Directors */}
                 {directors.length > 0 && (
                   <div style={{ marginBottom: 36 }}>
                     <SectionTitle>Đạo Diễn</SectionTitle>
                     <div style={{ display: 'flex', gap: 16 }}>
                       {directors.map((p, i) => (
-                        <motion.div key={i}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.05, duration: 0.3 }}
-                          whileHover={{ y: -4, transition: { duration: 0.18 } }}
+                        <DirectorCard
+                          key={i}
+                          person={p}
+                          index={i}
                           onClick={() => p.name && navigate(`/person/${toSlug(p.name)}`, { state: { actor: p } })}
-                          style={{
-                            width: 140, flexShrink: 0,
-                            borderRadius: 10, overflow: 'hidden',
-                            background: C.card,
-                            border: `1px solid ${C.border}`,
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                            cursor: p.name ? 'pointer' : 'default',
-                          }}
-                        >
-                          {/* Ảnh 2:3 */}
-                          <div style={{ width: '100%', aspectRatio: '2/3', background: C.surfaceMid, overflow: 'hidden', position: 'relative' }}>
-                            {p.profileUrl ? (
-                              <img src={p.profileUrl} alt={p.name}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }} />
-                            ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1c1c' }}>
-                                <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
-                                  <circle cx="12" cy="8" r="4" fill="#3a3a3a"/>
-                                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3a3a3a" strokeWidth="1.5" strokeLinecap="round"/>
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                          {/* Info */}
-                          <div style={{ padding: '12px 12px 14px' }}>
-                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                              {p.name}
-                            </p>
-                            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11.5, color: C.textSub, fontStyle: 'italic' }}>
-                              Đạo diễn
-                            </p>
-                          </div>
-                        </motion.div>
+                        />
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Actors */}
                 {actors.length > 0 ? (
                   <div>
                     <SectionTitle>Diễn Viên</SectionTitle>
@@ -958,14 +505,14 @@ export default function MovieInfoPage() {
                     ['Năm phát hành',    year || '—'],
                     ['Ngày chiếu',       movie?.releaseDate ? new Date(movie.releaseDate).toLocaleDateString('vi-VN') : '—'],
                     ['Thời lượng',       runtime || '—'],
-                    ['Ngôn ngữ gốc',    movie?.language?.toUpperCase() || '—'],
+                    ['Ngôn ngữ gốc',     movie?.language?.toUpperCase() || '—'],
                     ['Điểm TMDB',        movie?.rating ? `${fmt(movie.rating)} / 10` : '—'],
                     ['Số đánh giá',      movie?.voteCount ? movie.voteCount.toLocaleString() : '—'],
                     ['Thể loại',         genreList.join(', ') || '—'],
-                    ['Đạo diễn',        directors.map(d => d.name).join(', ') || '—'],
-                    ['Diễn viên chính', actors.slice(0,3).map(a => a.name).join(', ') || '—'],
-                    ...(movie?.budget  ? [['Ngân sách', `$${(movie.budget/1e6).toFixed(0)}M`]]  : []),
-                    ...(movie?.revenue ? [['Doanh thu', `$${(movie.revenue/1e6).toFixed(0)}M`]] : []),
+                    ['Đạo diễn',         directors.map(d => d.name).join(', ') || '—'],
+                    ['Diễn viên chính',  actors.slice(0, 3).map(a => a.name).join(', ') || '—'],
+                    ...(movie?.budget  ? [['Ngân sách', `$${(movie.budget  / 1e6).toFixed(0)}M`]] : []),
+                    ...(movie?.revenue ? [['Doanh thu', `$${(movie.revenue / 1e6).toFixed(0)}M`]] : []),
                   ].map(([label, value]) => (
                     <div key={label} style={{ padding: '16px 20px', background: C.card, borderRadius: 10, border: `1px solid ${C.border}` }}>
                       <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 6 }}>{label}</p>
@@ -978,7 +525,6 @@ export default function MovieInfoPage() {
 
           </AnimatePresence>
         </motion.div>
-
       </div>
 
       {/* ──── TRAILER MODAL ──── */}

@@ -7,7 +7,7 @@
 //     page={3}
 //     totalPages={12}
 //     total={280}
-//     pageSize={24}
+//     pageSize={28}
 //     onPageChange={(p) => handlePageChange(p)}
 //   />
 //
@@ -188,25 +188,12 @@ const JumpInput = ({ totalPages, onJump }) => {
   );
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-/**
- * Pagination component
- *
- * @prop {number}   page          — Trang hiện tại (1-indexed)
- * @prop {number}   totalPages    — Tổng số trang
- * @prop {number}   [total]       — Tổng số items (để hiện "1–24 / 280 phim")
- * @prop {number}   [pageSize]    — Số items mỗi trang
- * @prop {Function} onPageChange  — (page: number) => void
- * @prop {Array}    [pageNumbers] — Dãy số trang (từ usePagination, optional)
- * @prop {boolean}  [showJump]    — Hiện nút "Đến trang" (default: true nếu > 10 trang)
- * @prop {boolean}  [showInfo]    — Hiện dòng "Hiển thị X–Y / Z phim" (default: true)
- * @prop {string}   [itemLabel]   — Tên loại item (default: "phim")
- */
+
 export default function Pagination({
   page,
   totalPages,
   total,
-  pageSize = 24,
+  pageSize,
   onPageChange,
   pageNumbers: externalPageNumbers,
   showJump,

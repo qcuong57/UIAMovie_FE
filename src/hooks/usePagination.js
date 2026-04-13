@@ -6,12 +6,12 @@
 //   2. Client-side  — truyền array data, hook tự slice theo trang
 //
 // Usage — server-side:
-//   const pg = usePagination({ total: 200, pageSize: 24 });
+//   const pg = usePagination({ total: 200, pageSize: 28 });
 //   useEffect(() => fetchMovies(pg.page), [pg.page]);
 //   <Pagination {...pg.props} />
 //
 // Usage — client-side (array):
-//   const pg = usePagination({ total: movies.length, pageSize: 24 });
+//   const pg = usePagination({ total: movies.length, pageSize: 28 });
 //   const pageMovies = pg.paginate(movies);
 //   <Pagination {...pg.props} />
 
@@ -20,14 +20,14 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 /**
  * @param {Object}  opts
  * @param {number}  opts.total        — Tổng số item (bắt buộc)
- * @param {number}  [opts.pageSize]   — Số item mỗi trang (default: 24)
+ * @param {number}  [opts.pageSize]   — Số item mỗi trang (default: 28)
  * @param {number}  [opts.initialPage]— Trang khởi đầu   (default: 1)
  * @param {number}  [opts.siblingCount]—Số trang lân cận (default: 1)
  * @param {Function}[opts.onPageChange]— Callback khi đổi trang (optional)
  */
 export function usePagination({
   total = 0,
-  pageSize = 24,
+  pageSize = 28,
   initialPage = 1,
   siblingCount = 1,
   onPageChange,

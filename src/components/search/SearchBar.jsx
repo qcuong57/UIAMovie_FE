@@ -2,7 +2,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Search, X } from 'lucide-react';
-import { C, FONT_BODY } from './searchConstants';
+import { C, FONT_BODY } from '../../context/homeTokens';
 
 export default function SearchBar({ value, onChange }) {
   return (

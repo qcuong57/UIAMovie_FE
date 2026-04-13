@@ -1,8 +1,7 @@
 // src/components/search/SearchTabs.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Film, Users, SlidersHorizontal } from 'lucide-react';
-import { C, FONT_BODY } from './searchConstants';
+import { C, FONT_BODY } from '../../context/homeTokens';
 
 export default function SearchTabs({
   tab, onTabChange,
@@ -13,7 +12,7 @@ export default function SearchTabs({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: 0.12 }}
+      transition={{ delay: 0.1 }}
       style={{
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
@@ -22,32 +21,37 @@ export default function SearchTabs({
     >
       {/* Tab pills */}
       <div style={{
-        display: 'flex', gap: 4,
-        background: C.surfaceMid, borderRadius: 10, padding: 4,
+        display: 'flex', gap: 2,
+        background: C.surfaceMid,
+        borderRadius: 3,
+        padding: 3,
+        border: `1px solid ${C.border}`,
       }}>
         {[
-          { key: 'movies', label: 'Phim',      Icon: Film,  count: totalMovies  },
-          { key: 'actors', label: 'Diễn viên', Icon: Users, count: totalActors  },
-        ].map(({ key, label, Icon, count }) => (
+          { key: 'movies', label: 'Phim',      count: totalMovies  },
+          { key: 'actors', label: 'Diễn viên', count: totalActors  },
+        ].map(({ key, label, count }) => (
           <button
             key={key}
             onClick={() => onTabChange(key)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 18px', borderRadius: 7,
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 20px', borderRadius: 2,
               border: 'none', cursor: 'pointer',
-              fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700,
-              background: tab === key ? C.accent : 'none',
+              fontFamily: FONT_BODY, fontSize: 13, fontWeight: tab === key ? 600 : 400,
+              background: tab === key ? C.accent : 'transparent',
               color: tab === key ? '#fff' : C.textSub,
               transition: 'all 0.18s',
+              letterSpacing: '0.02em',
             }}
           >
-            <Icon size={13} />
             {label}
             {count > 0 && (
               <span style={{
-                fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                background: tab === key ? 'rgba(255,255,255,0.25)' : C.surfaceHigh,
+                fontSize: 10, fontWeight: 700,
+                padding: '1px 7px', borderRadius: 10,
+                background: tab === key ? 'rgba(255,255,255,0.2)' : C.surfaceHigh,
+                color: tab === key ? '#fff' : C.textDim,
               }}>
                 {count}
               </span>
@@ -61,17 +65,17 @@ export default function SearchTabs({
         <button
           onClick={onToggleFilter}
           style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '9px 16px', borderRadius: 8,
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 18px', borderRadius: 3,
             border: `1px solid ${showFilter || filterCount > 0 ? C.accentGlow : C.border}`,
-            background: showFilter || filterCount > 0 ? C.accentSoft : C.surfaceMid,
+            background: showFilter || filterCount > 0 ? C.accentSoft : 'transparent',
             cursor: 'pointer',
             color: filterCount > 0 ? C.accent : C.textSub,
-            fontFamily: FONT_BODY, fontSize: 13, fontWeight: 600,
+            fontFamily: FONT_BODY, fontSize: 13, fontWeight: 500,
             transition: 'all 0.18s',
+            letterSpacing: '0.02em',
           }}
         >
-          <SlidersHorizontal size={14} />
           Bộ lọc
           {filterCount > 0 && (
             <span style={{

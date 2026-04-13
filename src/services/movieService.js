@@ -20,7 +20,7 @@ const movieService = {
       if (genreId) params.append('genreId', genreId);
 
       const response = await axiosInstance.get(`/movies?${params}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching movies:', error);
       throw error;
@@ -34,7 +34,7 @@ const movieService = {
   getMoviesByCountry: async (countryCode) => {
     try {
       const response = await axiosInstance.get(`/movies/country/${countryCode}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching movies by country:', error);
       throw error;
@@ -47,7 +47,7 @@ const movieService = {
   getAvailableCountries: async () => {
     try {
       const response = await axiosInstance.get('/movies/countries');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching available countries:', error);
       throw error;
@@ -60,7 +60,7 @@ const movieService = {
   getTrendingMovies: async () => {
     try {
       const response = await axiosInstance.get('/movies/trending');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching trending movies:', error);
       throw error;
@@ -79,7 +79,7 @@ const movieService = {
       const response = await axiosInstance.get('/movies/search', {
         params: { query },
       });
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error searching movies:', error);
       throw error;
@@ -96,7 +96,7 @@ const movieService = {
       const response = await axiosInstance.get('/movies/search/actor', {
         params: { actorName },
       });
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error searching movies by actor:', error);
       throw error;
@@ -110,7 +110,7 @@ const movieService = {
   getMoviesByGenre: async (genreId) => {
     try {
       const response = await axiosInstance.get(`/movies/genre/${genreId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching movies by genre:', error);
       throw error;
@@ -124,7 +124,7 @@ const movieService = {
   getMovieById: async (movieId) => {
     try {
       const response = await axiosInstance.get(`/movies/${movieId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching movie details:', error);
       throw error;
@@ -137,7 +137,7 @@ const movieService = {
   getFavorites: async () => {
     try {
       const response = await axiosInstance.get('/movies/favorites');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching favorites:', error);
       throw error;
@@ -153,7 +153,7 @@ const movieService = {
       const response = await axiosInstance.post('/movies/favorites', {
         movieId,
       });
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error adding favorite:', error);
       throw error;
@@ -167,7 +167,7 @@ const movieService = {
   removeFavorite: async (movieId) => {
     try {
       const response = await axiosInstance.delete(`/movies/favorites/${movieId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error removing favorite:', error);
       throw error;
@@ -180,7 +180,7 @@ const movieService = {
   getWatchHistory: async () => {
     try {
       const response = await axiosInstance.get('/movies/history');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching watch history:', error);
       throw error;
@@ -200,7 +200,7 @@ const movieService = {
         progressMinutes,
         isCompleted,
       });
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error updating watch progress:', error);
       throw error;
@@ -214,7 +214,7 @@ const movieService = {
   deleteWatchHistory: async (historyId) => {
     try {
       const response = await axiosInstance.delete(`/movies/history/${historyId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error deleting watch history:', error);
       throw error;
@@ -227,7 +227,7 @@ const movieService = {
   clearWatchHistory: async () => {
     try {
       const response = await axiosInstance.delete('/movies/history');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error clearing watch history:', error);
       throw error;

@@ -1,42 +1,18 @@
-// src/components/movie/ReviewSection.jsx
-// Tích hợp full với RatingReviewController:
-//   GET  /api/ratingreview/movies/{movieId}        → hiện danh sách
-//   GET  /api/ratingreview/movies/{movieId}/stats  → thống kê + distribution
-//   GET  /api/ratingreview/check/{movieId}         → check user đã review chưa
-//   POST /api/ratingreview                         → tạo review
-//   PUT  /api/ratingreview/{reviewId}              → sửa review
-//   DELETE /api/ratingreview/{reviewId}            → xóa review
-
+// src/components/movie/shared/ReviewSection.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Edit2, Trash2, AlertTriangle, ChevronDown, LogIn } from 'lucide-react';
 import reviewService from '../../services/reviewService';
-
-// ── Design tokens (đồng bộ với MovieInfoPage) ──────────────────────────────
-const C = {
-  bg:          '#000000',
-  surface:     '#0a0a0a',
-  surfaceHigh: '#111111',
-  surfaceMid:  '#181818',
-  card:        '#141414',
-  border:      'rgba(255,255,255,0.07)',
-  borderBright:'rgba(255,255,255,0.18)',
-  accent:      '#e5181e',
-  accentSoft:  'rgba(229,24,30,0.12)',
-  accentGlow:  'rgba(229,24,30,0.3)',
-  text:        '#f0f2f8',
-  textSub:     '#9299a8',
-  textDim:     '#525868',
-  gold:        '#f5c518',
-  green:       '#46d369',
-};
+import { C } from './ui/movieConstants';
+import SectionTitle from './ui/SectionTitle';
+import Skeleton from './ui/Skeleton';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const fmtDate = (dateStr) =>
   new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-// ── StarPicker — chọn số sao khi viết review ──────────────────────────────
+// ── StarPicker ─────────────────────────────────────────────────────────────
 const StarPicker = ({ value, onChange, size = 28 }) => {
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState(0);
@@ -93,7 +69,7 @@ const AvatarCircle = ({ name, avatarUrl, size = 38 }) => {
   );
 };
 
-// ── ReviewCard ─────────────────────────────────────────────────────────────
+// ── ReviewCard (nâng cấp từ shared với edit/delete/expand) ─────────────────
 const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
@@ -128,13 +104,12 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
             </p>
             <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textDim }}>
               {fmtDate(review.createdAt)}
-              {review.updatedAt && <span style={{ marginLeft: 6, color: C.textDim, fontStyle: 'italic' }}>(đã chỉnh)</span>}
+              {review.updatedAt && <span style={{ marginLeft: 6, fontStyle: 'italic' }}>(đã chỉnh)</span>}
             </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {/* Rating badge */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 20,
@@ -146,7 +121,6 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
             </span>
           </div>
 
-          {/* Spoiler tag */}
           {review.isSpoiler && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 20,
               background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.25)' }}>
@@ -157,13 +131,11 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
             </div>
           )}
 
-          {/* Edit / Delete buttons — chỉ hiện cho chủ review */}
           {isOwn && (
-            <div style={{ display: 'flex', gap: isMobile ? 2 : 4, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: isMobile ? 2 : 4 }}>
               <button onClick={() => onEdit(review)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textDim, padding: 4,
-                  display: 'flex', alignItems: 'center', borderRadius: 6,
-                  transition: 'color 0.15s' }}
+                  display: 'flex', alignItems: 'center', borderRadius: 6, transition: 'color 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.color = C.text}
                 onMouseLeave={e => e.currentTarget.style.color = C.textDim}
               >
@@ -171,8 +143,7 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
               </button>
               <button onClick={() => onDelete(review.id)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textDim, padding: 4,
-                  display: 'flex', alignItems: 'center', borderRadius: 6,
-                  transition: 'color 0.15s' }}
+                  display: 'flex', alignItems: 'center', borderRadius: 6, transition: 'color 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.color = '#ff4444'}
                 onMouseLeave={e => e.currentTarget.style.color = C.textDim}
               >
@@ -183,7 +154,6 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
         </div>
       </div>
 
-      {/* Review text */}
       {review.reviewText && (
         <div>
           <p style={{
@@ -200,8 +170,7 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
             <button onClick={() => setExpanded(v => !v)}
               style={{ background: 'none', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 4, marginTop: 6,
-                fontFamily: "'Nunito', sans-serif", fontSize: 12,
-                color: C.accent, padding: 0 }}
+                fontFamily: "'Nunito', sans-serif", fontSize: 12, color: C.accent, padding: 0 }}
             >
               {expanded ? 'Thu gọn' : 'Xem thêm'}
               <ChevronDown size={12} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -213,14 +182,13 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
   );
 };
 
-// ── ReviewForm — viết / chỉnh review ─────────────────────────────────────
+// ── ReviewForm ─────────────────────────────────────────────────────────────
 const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
   const [rating,     setRating]     = useState(existing?.rating || 0);
   const [text,       setText]       = useState(existing?.reviewText || '');
   const [isSpoiler,  setIsSpoiler]  = useState(existing?.isSpoiler || false);
   const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState(null);
-
   const isEdit = !!existing;
   const MAX = 5000;
 
@@ -248,18 +216,14 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      style={{
-        padding: '24px', background: C.surfaceMid,
-        borderRadius: 14, border: `1px solid ${C.borderBright}`,
-        marginBottom: 24,
-      }}
+      style={{ padding: '24px', background: C.surfaceMid, borderRadius: 14,
+        border: `1px solid ${C.borderBright}`, marginBottom: 24 }}
     >
       <p style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 15, fontWeight: 800,
         color: C.text, marginBottom: 18, letterSpacing: '0.02em' }}>
         {isEdit ? 'Chỉnh sửa đánh giá' : 'Viết đánh giá của bạn'}
       </p>
 
-      {/* Stars */}
       <div style={{ marginBottom: 18 }}>
         <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
           color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
@@ -268,7 +232,6 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         <StarPicker value={rating} onChange={setRating} />
       </div>
 
-      {/* Text */}
       <div style={{ marginBottom: 14 }}>
         <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
           color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
@@ -296,7 +259,6 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         </p>
       </div>
 
-      {/* Spoiler toggle */}
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 18, userSelect: 'none' }}>
         <div
           onClick={() => setIsSpoiler(v => !v)}
@@ -307,8 +269,7 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
           }}
         >
           <div style={{
-            position: 'absolute', top: 2,
-            left: isSpoiler ? 18 : 2,
+            position: 'absolute', top: 2, left: isSpoiler ? 18 : 2,
             width: 16, height: 16, borderRadius: '50%',
             background: '#fff', transition: 'left 0.2s',
           }} />
@@ -318,7 +279,6 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         </span>
       </label>
 
-      {/* Error */}
       {error && (
         <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12.5, color: '#ff5555',
           marginBottom: 14, padding: '8px 12px', background: 'rgba(255,50,50,0.08)',
@@ -327,7 +287,6 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         </p>
       )}
 
-      {/* Buttons */}
       <div style={{ display: 'flex', gap: 10 }}>
         <button
           onClick={handleSubmit}
@@ -342,26 +301,27 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         >
           {submitting ? 'Đang gửi...' : isEdit ? 'Lưu thay đổi' : 'Gửi đánh giá'}
         </button>
-        <button
-          onClick={onCancel}
-          style={{
-            padding: '10px 18px', borderRadius: 6,
-            background: 'none', color: C.textSub,
-            border: `1px solid ${C.border}`, cursor: 'pointer',
-            fontFamily: "'Nunito', sans-serif", fontSize: 13,
-            transition: 'color 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = C.text}
-          onMouseLeave={e => e.currentTarget.style.color = C.textSub}
-        >
-          Hủy
-        </button>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '10px 18px', borderRadius: 6,
+              background: 'none', color: C.textSub,
+              border: `1px solid ${C.border}`, cursor: 'pointer',
+              fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = C.text}
+            onMouseLeave={e => e.currentTarget.style.color = C.textSub}
+          >
+            Hủy
+          </button>
+        )}
       </div>
     </motion.div>
   );
 };
 
-// ── RatingDistribution bar chart ───────────────────────────────────────────
+// ── RatingDistribution ─────────────────────────────────────────────────────
 const RatingDistribution = ({ distribution = {}, total }) => {
   const max = Math.max(...Object.values(distribution), 1);
   return (
@@ -380,14 +340,10 @@ const RatingDistribution = ({ distribution = {}, total }) => {
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
                 transition={{ delay: (10 - n) * 0.04, duration: 0.5, ease: 'easeOut' }}
-                style={{
-                  height: '100%', borderRadius: 4,
-                  background: n >= 8 ? C.green : n >= 5 ? C.gold : C.accent,
-                }}
+                style={{ height: '100%', borderRadius: 4, background: n >= 8 ? C.green : n >= 5 ? C.gold : C.accent }}
               />
             </div>
-            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11,
-              color: C.textDim, width: 24, flexShrink: 0 }}>
+            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textDim, width: 24, flexShrink: 0 }}>
               {count}
             </span>
           </div>
@@ -397,51 +353,49 @@ const RatingDistribution = ({ distribution = {}, total }) => {
   );
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-// ── MAIN COMPONENT ────────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════
-/**
- * Props:
- *   movieId      — Guid của phim
- *   movieRating  — rating TMDB (số thực, dùng fallback khi chưa có review DB)
- *   voteCount    — số lượt vote TMDB
- *   currentUser  — { id, name } | null  (null = chưa đăng nhập)
- */
+// ── ReviewSkeleton ─────────────────────────────────────────────────────────
+const ReviewSkeleton = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {[1,2,3].map(i => (
+      <Skeleton key={i} h={100} r={12} style={{
+        background: 'linear-gradient(90deg, #141414 25%, #1e1e1e 50%, #141414 75%)',
+        backgroundSize: '200% 100%',
+        animation: 'shimmer 1.4s infinite',
+        border: `1px solid ${C.border}`,
+      }} />
+    ))}
+  </div>
+);
+
 const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
   const isMobile = useIsMobile();
   const [reviews,    setReviews]    = useState([]);
   const [stats,      setStats]      = useState(null);
   const [myReview,   setMyReview]   = useState(null);
   const [loading,    setLoading]    = useState(true);
-  const [editTarget, setEditTarget] = useState(null);  // null = new, object = edit
-  const [isEditing,  setIsEditing]  = useState(false); // chỉ dùng khi edit review cũ
-  const [deleting,   setDeleting]   = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [isEditing,  setIsEditing]  = useState(false);
   const [page,       setPage]       = useState(1);
   const PAGE_SIZE = 8;
 
-  // ── Fetch ───────────────────────────────────────────────────────────────
+  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     if (!movieId) return;
     setLoading(true);
     try {
-      // Cả hai đều .catch để không throw ra ngoài
       const [reviewsRes, statsRes] = await Promise.all([
         reviewService.getMovieReviews(movieId, page, PAGE_SIZE).catch(() => null),
         reviewService.getMovieRatingStats(movieId).catch(() => null),
       ]);
 
-      // reviewsRes.data = { movieId, movieTitle, reviews: [...] }
-      // Hỗ trợ cả camelCase lẫn PascalCase t�y cấu hình serializer của backend
       const rawData    = reviewsRes?.data ?? {};
       const reviewList = rawData.reviews ?? rawData.Reviews ?? [];
       setReviews(Array.isArray(reviewList) ? reviewList : []);
       setStats(statsRes?.data ?? null);
 
       if (currentUser) {
-        // checkRes.data = { hasReview: bool, review: ReviewDTO | null }
         const checkRes  = await reviewService.checkUserReview(movieId).catch(() => null);
         const checkData = checkRes?.data ?? {};
-        // Hỗ trợ cả camelCase lẫn PascalCase
         const hasReview = checkData.hasReview === true || checkData.HasReview === true;
         const reviewObj = checkData.review ?? checkData.Review ?? null;
         setMyReview(hasReview ? reviewObj : null);
@@ -457,22 +411,17 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleDelete = async (reviewId) => {
     if (!window.confirm('Xóa đánh giá này?')) return;
-    setDeleting(reviewId);
     try {
       await reviewService.deleteReview(reviewId);
       await fetchAll();
     } catch (e) {
-      const msg = e?.response?.data?.message || e.message || 'Xóa thất bại';
-      alert(msg);
-    } finally {
-      setDeleting(null);
+      alert(e?.response?.data?.message || e.message || 'Xóa thất bại');
     }
   };
 
-  // ── Edit ────────────────────────────────────────────────────────────────
   const handleEdit = (review) => {
     setEditTarget(review);
     setIsEditing(true);
@@ -481,193 +430,174 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
   const handleFormSuccess = async () => {
     setIsEditing(false);
     setEditTarget(null);
-    // Optimistic: set myReview = {} tạm thời để form ẩn ngay,
-    // fetchAll sẽ điền data thật sau
     setMyReview({ rating: 0, _placeholder: true });
     setPage(1);
     await fetchAll();
   };
 
-  // ── Derived — hỗ trợ cả camelCase lẫn PascalCase ──────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const avgRating    = stats?.averageRating    ?? stats?.AverageRating    ?? movieRating ?? 0;
   const totalReviews = stats?.totalReviews     ?? stats?.TotalReviews     ?? 0;
   const ratingDist   = stats?.ratingDistribution ?? stats?.RatingDistribution ?? null;
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: isMobile ? '24px 0' : '0 40px', alignItems: 'start' }}>
+    <div>
+      <SectionTitle>Đánh Giá</SectionTitle>
 
-      {/* ── LEFT: form luôn hiển thị + list ─────────────────────────── */}
-      <div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 300px',
+        gap: isMobile ? '24px 0' : '0 40px',
+        alignItems: 'start',
+      }}>
 
-        {/* ── KHU VỰC ĐÁNH GIÁ CỦA BẠN — luôn hiển thị ── */}
-        <div style={{ marginBottom: 28 }}>
-          {!currentUser ? (
-            /* Chưa đăng nhập */
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px',
-              background: C.surfaceMid, borderRadius: 12, border: `1px solid ${C.border}` }}>
-              <LogIn size={16} style={{ color: C.textDim }} />
-              <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, color: C.textSub }}>
-                Đăng nhập để viết đánh giá
-              </span>
-            </div>
-          ) : loading ? (
-            /* ⚠️ Đang fetch — KHÔNG hiện form, tránh submit trùng */
-            <div style={{ height: 60, borderRadius: 12, background: C.surfaceMid,
-              border: `1px solid ${C.border}`,
-              backgroundImage: 'linear-gradient(90deg,#181818 25%,#222 50%,#181818 75%)',
-              backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
-          ) : isEditing ? (
-            /* Đang chỉnh sửa review cũ */
-            <AnimatePresence>
-              <ReviewForm
-                movieId={movieId}
-                existing={editTarget}
-                onSuccess={handleFormSuccess}
-                onCancel={() => { setIsEditing(false); setEditTarget(null); }}
-              />
+        {/* ── LEFT: form + list ──────────────────────────────────────── */}
+        <div>
+          <div style={{ marginBottom: 28 }}>
+            {!currentUser ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px',
+                background: C.surfaceMid, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                <LogIn size={16} style={{ color: C.textDim }} />
+                <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13, color: C.textSub }}>
+                  Đăng nhập để viết đánh giá
+                </span>
+              </div>
+            ) : loading ? (
+              <Skeleton h={60} r={12} style={{
+                backgroundImage: 'linear-gradient(90deg,#181818 25%,#222 50%,#181818 75%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 1.4s infinite',
+                border: `1px solid ${C.border}`,
+              }} />
+            ) : isEditing ? (
+              <AnimatePresence>
+                <ReviewForm
+                  movieId={movieId}
+                  existing={editTarget}
+                  onSuccess={handleFormSuccess}
+                  onCancel={() => { setIsEditing(false); setEditTarget(null); }}
+                />
+              </AnimatePresence>
+            ) : (
+              <>
+                {myReview && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', background: C.accentSoft,
+                    borderRadius: 8, border: `1px solid ${C.accentGlow}`, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Star size={12} style={{ fill: C.gold, color: C.gold }} />
+                      <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 13, fontWeight: 700, color: C.gold }}>
+                        Đánh giá gần nhất: {myReview.rating}/10
+                      </span>
+                      <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textSub }}>
+                        — viết đánh giá mới hoặc sửa bản cũ
+                      </span>
+                    </div>
+                    <button onClick={() => handleEdit(myReview)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none',
+                        border: `1px solid ${C.accentGlow}`, cursor: 'pointer', color: C.accent,
+                        padding: '5px 10px', borderRadius: 6,
+                        fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 600 }}>
+                      <Edit2 size={11} /> Sửa bản cũ
+                    </button>
+                  </div>
+                )}
+                <ReviewForm movieId={movieId} existing={null} onSuccess={handleFormSuccess} onCancel={null} />
+              </>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ flex: 1, height: 1, background: C.border }} />
+            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
+              color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+              {totalReviews > 0 ? `${totalReviews} đánh giá` : 'Chưa có đánh giá'}
+            </span>
+            <div style={{ flex: 1, height: 1, background: C.border }} />
+          </div>
+
+          {/* Review list */}
+          {loading ? (
+            <ReviewSkeleton />
+          ) : reviews.length > 0 ? (
+            <AnimatePresence mode="popLayout">
+              {reviews.map((r, i) => (
+                <ReviewCard
+                  key={r.id}
+                  review={r}
+                  currentUserId={currentUser?.id}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  index={i}
+                />
+              ))}
             </AnimatePresence>
           ) : (
-            /* Luôn hiện form — cho phép review nhiều lần */
-            <>
-              {myReview && (
-                /* Badge review gần nhất */
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px', background: C.accentSoft,
-                  borderRadius: 8, border: `1px solid ${C.accentGlow}`, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Star size={12} style={{ fill: C.gold, color: C.gold }} />
-                    <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 13, fontWeight: 700, color: C.gold }}>
-                      Đánh giá gần nhất: {myReview.rating}/10
-                    </span>
-                    <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textSub }}>
-                      — viết đánh giá mới bên dưới hoặc sửa bản cũ
-                    </span>
-                  </div>
-                  <button onClick={() => handleEdit(myReview)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none',
-                      border: `1px solid ${C.accentGlow}`, cursor: 'pointer', color: C.accent,
-                      padding: '5px 10px', borderRadius: 6,
-                      fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 600 }}>
-                    <Edit2 size={11} /> Sửa bản cũ
-                  </button>
-                </div>
-              )}
-              <ReviewForm
-                movieId={movieId}
-                existing={null}
-                onSuccess={handleFormSuccess}
-                onCancel={null}
-              />
-            </>
+            <div style={{ padding: '32px 0', textAlign: 'center',
+              color: C.textDim, fontFamily: "'Nunito', sans-serif", fontSize: 14 }}>
+              Chưa có đánh giá nào. Hãy là người đầu tiên! 🎬
+            </div>
+          )}
+
+          {reviews.length === PAGE_SIZE && (
+            <button
+              onClick={() => setPage(p => p + 1)}
+              style={{ width: '100%', marginTop: 12, padding: '10px', borderRadius: 8,
+                background: 'none', border: `1px solid ${C.border}`,
+                color: C.textSub, cursor: 'pointer',
+                fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.borderBright}
+              onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+            >
+              Xem thêm đánh giá
+            </button>
           )}
         </div>
 
-        {/* ── DIVIDER ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div style={{ flex: 1, height: 1, background: C.border }} />
-          <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
-            color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
-            {totalReviews > 0 ? `${totalReviews} đánh giá` : 'Chưa có đánh giá'}
-          </span>
-          <div style={{ flex: 1, height: 1, background: C.border }} />
-        </div>
-
-        {/* ── LIST REVIEW MỌI NGƯỜI ── */}
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ height: 100, borderRadius: 12, background: C.card,
-                border: `1px solid ${C.border}`,
-                backgroundImage: 'linear-gradient(90deg, #141414 25%, #1e1e1e 50%, #141414 75%)',
-                backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite',
-              }} />
-            ))}
-          </div>
-        ) : reviews.length > 0 ? (
-          <AnimatePresence mode="popLayout">
-            {reviews.map((r, i) => (
-              <ReviewCard
-                key={r.id}
-                review={r}
-                currentUserId={currentUser?.id}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                index={i}
-              />
-            ))}
-          </AnimatePresence>
-        ) : (
-          <div style={{ padding: '32px 0', textAlign: 'center',
-            color: C.textDim, fontFamily: "'Nunito', sans-serif", fontSize: 14 }}>
-            Chưa có đánh giá nào. Hãy là người đầu tiên! 🎬
-          </div>
-        )}
-
-        {/* Load more */}
-        {reviews.length === PAGE_SIZE && (
-          <button
-            onClick={() => setPage(p => p + 1)}
-            style={{ width: '100%', marginTop: 12, padding: '10px', borderRadius: 8,
-              background: 'none', border: `1px solid ${C.border}`,
-              color: C.textSub, cursor: 'pointer',
-              fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'all 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = C.borderBright}
-            onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-          >
-            Xem thêm đánh giá
-          </button>
-        )}
-      </div>
-
-      {/* ── RIGHT: stats panel (sticky) ───────────────────────────────── */}
-      <div style={{ position: 'sticky', top: 80 }}>
-
-        {/* Score */}
-        <div style={{ padding: '24px', background: C.card, borderRadius: 14,
-          border: `1px solid ${C.border}`, marginBottom: 16 }}>
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700,
-            letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 16 }}>
-            Điểm trung bình
-          </p>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-            <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 56,
-              fontWeight: 900, color: C.gold, lineHeight: 1 }}>
-              {Number(avgRating).toFixed(1)}
-            </span>
-            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 14, color: C.textDim }}>/ 10</span>
-          </div>
-          <div style={{ display: 'flex', gap: 2, marginBottom: 10 }}>
-            {[1,2,3,4,5].map(i => (
-              <Star key={i} size={14} style={{
-                color: i <= Math.round(avgRating / 2) ? C.gold : 'rgba(255,255,255,0.1)',
-                fill:  i <= Math.round(avgRating / 2) ? C.gold : 'none',
-              }} />
-            ))}
-          </div>
-          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, color: C.textDim }}>
-            {totalReviews > 0
-              ? `${totalReviews.toLocaleString()} đánh giá trên hệ thống`
-              : voteCount ? `${voteCount.toLocaleString()} lượt (TMDB)` : 'Chưa có đánh giá'}
-          </p>
-        </div>
-
-        {/* Distribution */}
-        {ratingDist && Object.keys(ratingDist).length > 0 && (
-          <div style={{ padding: '20px 22px', background: C.card, borderRadius: 14,
-            border: `1px solid ${C.border}` }}>
+        {/* ── RIGHT: stats panel ────────────────────────────────────── */}
+        <div style={{ position: 'sticky', top: 80 }}>
+          <div style={{ padding: '24px', background: C.card, borderRadius: 14,
+            border: `1px solid ${C.border}`, marginBottom: 16 }}>
             <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 14 }}>
-              Phân bổ điểm
+              letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 16 }}>
+              Điểm trung bình
             </p>
-            <RatingDistribution
-              distribution={ratingDist}
-              total={totalReviews}
-            />
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+              <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 56,
+                fontWeight: 900, color: C.gold, lineHeight: 1 }}>
+                {Number(avgRating).toFixed(1)}
+              </span>
+              <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 14, color: C.textDim }}>/ 10</span>
+            </div>
+            <div style={{ display: 'flex', gap: 2, marginBottom: 10 }}>
+              {[1,2,3,4,5].map(i => (
+                <Star key={i} size={14} style={{
+                  color: i <= Math.round(avgRating / 2) ? C.gold : 'rgba(255,255,255,0.1)',
+                  fill:  i <= Math.round(avgRating / 2) ? C.gold : 'none',
+                }} />
+              ))}
+            </div>
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, color: C.textDim }}>
+              {totalReviews > 0
+                ? `${totalReviews.toLocaleString()} đánh giá trên hệ thống`
+                : voteCount ? `${voteCount.toLocaleString()} lượt (TMDB)` : 'Chưa có đánh giá'}
+            </p>
           </div>
-        )}
-      </div>
 
+          {ratingDist && Object.keys(ratingDist).length > 0 && (
+            <div style={{ padding: '20px 22px', background: C.card, borderRadius: 14, border: `1px solid ${C.border}` }}>
+              <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 14 }}>
+                Phân bổ điểm
+              </p>
+              <RatingDistribution distribution={ratingDist} total={totalReviews} />
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 };

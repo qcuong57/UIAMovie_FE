@@ -2,29 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Star, X, Globe } from 'lucide-react';
-import { C, FONT_BODY, SORT_OPTIONS, YEAR_OPTIONS } from './searchConstants';
+import { C, FONT_BODY, SORT_OPTIONS, YEAR_OPTIONS, COUNTRY_OPTIONS } from '../../context/homeTokens';
 
-// ── Danh sách quốc gia phổ biến ────────────────────────────────
-export const COUNTRY_OPTIONS = [
-  { value: 'US', label: '🇺🇸 Mỹ' },
-  { value: 'KR', label: '🇰🇷 Hàn Quốc' },
-  { value: 'JP', label: '🇯🇵 Nhật Bản' },
-  { value: 'CN', label: '🇨🇳 Trung Quốc' },
-  { value: 'VN', label: '🇻🇳 Việt Nam' },
-  { value: 'FR', label: '🇫🇷 Pháp' },
-  { value: 'GB', label: '🇬🇧 Anh' },
-  { value: 'IN', label: '🇮🇳 Ấn Độ' },
-  { value: 'TH', label: '🇹🇭 Thái Lan' },
-  { value: 'IT', label: '🇮🇹 Ý' },
-  { value: 'DE', label: '🇩🇪 Đức' },
-  { value: 'ES', label: '🇪🇸 Tây Ban Nha' },
-  { value: 'HK', label: '🇭🇰 Hồng Kông' },
-  { value: 'TW', label: '🇹🇼 Đài Loan' },
-];
-
-// ── FilterSelect — dropdown không bị clip ──────────────────────
-// FIX: dùng position:fixed + tính toán tọa độ thay vì position:absolute
-// để thoát khỏi bất kỳ overflow:hidden nào của container cha
 const FilterSelect = ({ label, value, onChange, options }) => {
   const [open, setOpen]   = useState(false);
   const [pos,  setPos]    = useState({ top: 0, left: 0, width: 0 });

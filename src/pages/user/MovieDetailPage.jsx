@@ -8,11 +8,13 @@ import {
   Volume2,
   VolumeX,
   Maximize,
-  ChevronLeft,
-  Star,
   SkipForward,
   SkipBack,
   Info,
+  Star,
+  Calendar,
+  Clock,
+  Award,
 } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import movieService from "../../services/movieService";
@@ -20,29 +22,15 @@ import PersonScrollRow from "../../components/movie/Personscrollrow";
 import ReviewSection from "../../components/movie/Reviewsection";
 import BackButton from "../../components/common/BackButton";
 
-const toSlug = (name) =>
-  (name || "unknown")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
-const C = {
-  bg: "#0a0a0a",
-  surface: "#111111",
-  surfaceHigh: "#181818",
-  surfaceMid: "#1f1f1f",
-  card: "#161616",
-  border: "rgba(255,255,255,0.06)",
-  borderCard: "rgba(255,255,255,0.08)",
-  accent: "#e50914",
-  text: "#ffffff",
-  textSub: "#a3a3a3",
-  textDim: "#616161",
-  green: "#46d369",
-};
+// ── Shared components ──────────────────────────────────────────
+import {
+  C,
+  toSlug,
+  GLOBAL_STYLES,
+} from "../../components/movie/ui/movieConstants";
+import SectionTitle from "../../components/movie/ui/SectionTitle";
+import StatPill from "../../components/movie/ui/StatPill";
+import StarRating from "../../components/movie/ui/StarRating";
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
@@ -65,7 +53,7 @@ const PersonCard = ({ person, isDirector = false }) => {
         borderRadius: 10,
         overflow: "hidden",
         background: C.card,
-        border: `1px solid ${C.borderCard}`,
+        border: `1px solid ${C.borderBright}`,
         boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
         cursor: person.name ? "pointer" : "default",
       }}
@@ -93,7 +81,6 @@ const PersonCard = ({ person, isDirector = false }) => {
             onError={() => setErr(true)}
           />
         ) : (
-          /* Placeholder */
           <div
             style={{
               width: "100%",
@@ -101,7 +88,7 @@ const PersonCard = ({ person, isDirector = false }) => {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "#1c1c1c",
+              background: C.surfaceMid,
             }}
           >
             <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
@@ -172,40 +159,35 @@ const PersonCard = ({ person, isDirector = false }) => {
 // ── VideoPlayer ─────────────────────────────────────────────────
 const VideoPlayer = ({ movie }) => {
   const isMobile = useIsMobile();
-  const location  = useLocation();
-  const videoRef  = useRef(null);
-  const wrapRef   = useRef(null);
-  const timerRef  = useRef(null);
-  const saveTimerRef  = useRef(null);
-  const progressRef   = useRef(0);
-  // Chỉ seek 1 lần duy nhất khi load, tránh nhảy lại mỗi lần canplay fire
+  const location = useLocation();
+  const videoRef = useRef(null);
+  const wrapRef = useRef(null);
+  const timerRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const progressRef = useRef(0);
   const hasResumedRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  const [muted,   setMuted]   = useState(false);
+  const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [show, setShow]   = useState(true);
-  const [vol,  setVol]    = useState(80);
-  const [selSrc, setSelSrc] = useState(0); // index in videoSources
+  const [show, setShow] = useState(true);
+  const [vol, setVol] = useState(80);
+  const [selSrc, setSelSrc] = useState(0);
 
-  // Tiến độ xem lấy từ route state (WatchHistoryPage truyền sang).
-  // Nếu user đã xem xong thì bắt đầu lại từ đầu thay vì seek đến cuối.
   const resumeMinutes = location.state?.resumeMinutes ?? 0;
 
-  // Build ordered source list: main first, then others
   const videoSources = React.useMemo(() => {
     if (!movie?.videos?.length) return [];
-    const main  = movie.videos.filter(v => v.videoType === "main");
-    const other = movie.videos.filter(v => v.videoType !== "main");
+    const main = movie.videos.filter((v) => v.videoType === "main");
+    const other = movie.videos.filter((v) => v.videoType !== "main");
     return [...main, ...other];
   }, [movie?.videos]);
 
   const videoUrl = videoSources[selSrc]?.videoUrl ?? null;
   const totalSec = duration || (movie?.duration ? movie.duration * 60 : 0);
 
-  // Khi đổi nguồn video: dừng, reset UI, cho phép seek lại
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -216,7 +198,6 @@ const VideoPlayer = ({ movie }) => {
     v.load();
   }, [videoUrl]);
 
-  // ── Wire HTML5 video events ───────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -237,39 +218,33 @@ const VideoPlayer = ({ movie }) => {
       setShow(true);
       saveProgress(100, true);
     };
-    const onPlay  = () => setPlaying(true);
+    const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-
-    // canplay: video đã load đủ metadata và sẵn sàng phát.
-    // Đây là thời điểm an toàn nhất để seek — currentTime sẽ được chấp nhận.
     const onCanPlay = () => {
       if (hasResumedRef.current) return;
-      if (resumeMinutes > 0) {
-        v.currentTime = resumeMinutes * 60;
-      }
+      if (resumeMinutes > 0) v.currentTime = resumeMinutes * 60;
       hasResumedRef.current = true;
     };
 
-    v.addEventListener("timeupdate",    onTimeUpdate);
+    v.addEventListener("timeupdate", onTimeUpdate);
     v.addEventListener("durationchange", onDurationChange);
-    v.addEventListener("progress",      onProgress);
-    v.addEventListener("ended",         onEnded);
-    v.addEventListener("play",          onPlay);
-    v.addEventListener("pause",         onPause);
-    v.addEventListener("canplay",       onCanPlay);
+    v.addEventListener("progress", onProgress);
+    v.addEventListener("ended", onEnded);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("canplay", onCanPlay);
 
     return () => {
-      v.removeEventListener("timeupdate",    onTimeUpdate);
+      v.removeEventListener("timeupdate", onTimeUpdate);
       v.removeEventListener("durationchange", onDurationChange);
-      v.removeEventListener("progress",      onProgress);
-      v.removeEventListener("ended",         onEnded);
-      v.removeEventListener("play",          onPlay);
-      v.removeEventListener("pause",         onPause);
-      v.removeEventListener("canplay",       onCanPlay);
+      v.removeEventListener("progress", onProgress);
+      v.removeEventListener("ended", onEnded);
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("canplay", onCanPlay);
     };
   }, [videoUrl, resumeMinutes]);
 
-  // ── Volume/mute sync ─────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -277,7 +252,6 @@ const VideoPlayer = ({ movie }) => {
     v.muted = muted;
   }, [vol, muted]);
 
-  // ── Controls hide timer ──────────────────────────────────────
   const resetTimer = useCallback(() => {
     setShow(true);
     clearTimeout(timerRef.current);
@@ -286,7 +260,6 @@ const VideoPlayer = ({ movie }) => {
     }, 3500);
   }, []);
 
-  // ── Save watch progress ──────────────────────────────────────
   const saveProgress = useCallback(
     (pct, forceComplete = false) => {
       if (!movie?.id || pct < 1) return;
@@ -326,7 +299,6 @@ const VideoPlayer = ({ movie }) => {
     [movie?.id],
   );
 
-  // ── Controls helpers ─────────────────────────────────────────
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -351,7 +323,8 @@ const VideoPlayer = ({ movie }) => {
       : el.requestFullscreen?.();
   };
 
-  const fmt = (s) => {
+  // Local format: giây → H:MM:SS (khác với fmt trong movieConstants)
+  const fmtSecs = (s) => {
     const h = Math.floor(s / 3600);
     const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
     const sec = String(Math.floor(s % 60)).padStart(2, "0");
@@ -359,7 +332,6 @@ const VideoPlayer = ({ movie }) => {
   };
   const curSec = Math.floor((progress / 100) * totalSec);
 
-  // ── No video state ───────────────────────────────────────────
   if (!videoUrl)
     return (
       <div
@@ -433,7 +405,6 @@ const VideoPlayer = ({ movie }) => {
       onMouseMove={resetTimer}
       onMouseLeave={() => !videoRef.current?.paused && setShow(false)}
     >
-      {/* Actual video element */}
       <video
         ref={videoRef}
         src={videoUrl}
@@ -449,7 +420,6 @@ const VideoPlayer = ({ movie }) => {
         onClick={togglePlay}
       />
 
-      {/* Poster/backdrop shown before play */}
       {!playing && progress === 0 && movie?.backdropUrl && (
         <img
           src={movie.backdropUrl}
@@ -567,7 +537,7 @@ const VideoPlayer = ({ movie }) => {
                   background: "rgba(255,255,255,0.3)",
                 }}
               />
-              <motion.div
+              <div
                 style={{
                   position: "absolute",
                   top: "50%",
@@ -579,7 +549,7 @@ const VideoPlayer = ({ movie }) => {
                   background: C.accent,
                 }}
               />
-              <motion.div
+              <div
                 style={{
                   position: "absolute",
                   top: "50%",
@@ -651,7 +621,7 @@ const VideoPlayer = ({ movie }) => {
                   <SkipForward size={18} />
                 </button>
 
-                {!isMobile && (
+                {!isMobile ? (
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 8 }}
                   >
@@ -684,8 +654,7 @@ const VideoPlayer = ({ movie }) => {
                       }}
                     />
                   </div>
-                )}
-                {isMobile && (
+                ) : (
                   <button
                     onClick={() => setMuted(!muted)}
                     style={{
@@ -700,6 +669,7 @@ const VideoPlayer = ({ movie }) => {
                     {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                   </button>
                 )}
+
                 <span
                   style={{
                     color: "rgba(255,255,255,0.65)",
@@ -708,12 +678,11 @@ const VideoPlayer = ({ movie }) => {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {fmt(curSec)} / {fmt(totalSec)}
+                  {fmtSecs(curSec)} / {fmtSecs(totalSec)}
                 </span>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {/* Quality/source selector */}
                 {videoSources.length > 1 && (
                   <select
                     value={selSrc}
@@ -773,6 +742,7 @@ export default function MovieDetailPage() {
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("cast");
+
   const [currentUser] = useState(() => {
     try {
       const r = localStorage.getItem("currentUser");
@@ -782,7 +752,6 @@ export default function MovieDetailPage() {
     }
   });
 
-  // Scroll lên đầu trang mỗi khi đổi phim
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
@@ -793,9 +762,6 @@ export default function MovieDetailPage() {
         setLoading(true);
         setDirs([]);
         setActors([]);
-        // Reset trước để không hiện dữ liệu phim cũ
-        setDirs([]);
-        setActors([]);
         const [movieRes, trendingRes] = await Promise.all([
           movieService.getMovieById(id),
           movieService.getTrendingMovies().catch(() => ({ data: [] })),
@@ -803,7 +769,21 @@ export default function MovieDetailPage() {
         const movieData = movieRes?.data ?? movieRes;
         setMovie(movieData);
 
-        if (movieData?.director) {
+        if (movieData?.directorDetail) {
+          setDirs([
+            {
+              id:
+                movieData.directorDetail.id ??
+                movieData.directorDetail.personId ??
+                null,
+              name: movieData.directorDetail.name,
+              profileUrl: movieData.directorDetail.profileUrl, // ← thêm dòng này
+              biography: movieData.directorDetail.biography,
+              birthday: movieData.directorDetail.birthday,
+              placeOfBirth: movieData.directorDetail.placeOfBirth,
+            },
+          ]);
+        } else if (movieData?.director) {
           setDirs([
             {
               id: movieData.directorId || null,
@@ -849,8 +829,6 @@ export default function MovieDetailPage() {
               posterUrl: x.posterUrl,
             })),
         );
-        // Không ghi progress=0 ở đây vì sẽ xóa mất tiến độ cũ của user.
-        // VideoPlayer sẽ tự ghi progress theo từng mốc thực tế khi user xem.
       } catch (e) {
         console.error(e);
       } finally {
@@ -870,6 +848,7 @@ export default function MovieDetailPage() {
           background: C.bg,
         }}
       >
+        <style>{GLOBAL_STYLES}</style>
         <motion.div
           style={{
             width: 36,
@@ -904,15 +883,7 @@ export default function MovieDetailPage() {
         overflowX: "hidden",
       }}
     >
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,600;0,700;0,800;0,900;1,600&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        ::-webkit-scrollbar{width:4px;height:4px}
-        ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:4px}
-        ::-webkit-scrollbar-track{background:transparent}
-        .no-scroll::-webkit-scrollbar{display:none}
-        .no-scroll{-ms-overflow-style:none;scrollbar-width:none}
-      `}</style>
+      <style>{GLOBAL_STYLES}</style>
 
       {/* Nav */}
       <div
@@ -920,7 +891,7 @@ export default function MovieDetailPage() {
           position: "sticky",
           top: 0,
           zIndex: 50,
-          background: "rgba(10,10,10,0.92)",
+          background: "rgba(0,0,0,0.92)",
           backdropFilter: "blur(20px)",
           borderBottom: `1px solid ${C.border}`,
           padding: isMobile ? "0 16px" : "0 32px",
@@ -949,7 +920,7 @@ export default function MovieDetailPage() {
             flexDirection: isMobile ? "column" : "row",
           }}
         >
-          {/* LEFT */}
+          {/* ── LEFT ── */}
           <div
             style={{
               flex: 1,
@@ -958,6 +929,7 @@ export default function MovieDetailPage() {
               overflow: "hidden",
             }}
           >
+            {/* Video player */}
             <motion.div
               variants={fadeUp}
               initial="hidden"
@@ -979,136 +951,47 @@ export default function MovieDetailPage() {
                 style={{
                   fontFamily: "'Be Vietnam Pro',sans-serif",
                   fontSize: isMobile ? 22 : 38,
+                  fontWeight: 900,
                   letterSpacing: "0.02em",
                   lineHeight: 1.2,
-                  marginBottom: 12,
+                  marginBottom: 16,
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
                 }}
               >
                 {movie?.title}
               </h1>
+
+              {/* Meta pills — dùng StatPill như MovieInfoPage */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: isMobile ? 6 : 8,
-                  marginBottom: 16,
                   flexWrap: "wrap",
-                  width: "100%",
+                  gap: 8,
+                  marginBottom: 16,
+                  alignItems: "center",
                 }}
               >
-                {/* Rating badge */}
-                {movie?.rating && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      padding: "3px 8px",
-                      borderRadius: 99,
-                      background: "rgba(245,197,24,0.12)",
-                      border: "1px solid rgba(245,197,24,0.3)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Star
-                      size={11}
-                      style={{
-                        fill: "#f5c518",
-                        color: "#f5c518",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontFamily: "'Nunito',sans-serif",
-                        fontSize: isMobile ? 12 : 13,
-                        fontWeight: 700,
-                        color: "#f5c518",
-                      }}
-                    >
-                      {movie.rating.toFixed(1)}
-                    </span>
-                  </div>
-                )}
-                {/* Năm */}
-                {year && (
-                  <span
-                    style={{
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: isMobile ? 11 : 12,
-                      fontWeight: 600,
-                      color: "rgba(255,255,255,0.55)",
-                      padding: "3px 8px",
-                      borderRadius: 99,
-                      background: "rgba(255,255,255,0.06)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {year}
-                  </span>
-                )}
-                {/* Thời lượng */}
+                {year && <StatPill icon={Calendar} label="Năm" value={year} />}
                 {movie?.duration && (
-                  <span
-                    style={{
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: isMobile ? 11 : 12,
-                      fontWeight: 600,
-                      color: "rgba(255,255,255,0.55)",
-                      padding: "3px 8px",
-                      borderRadius: 99,
-                      background: "rgba(255,255,255,0.06)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {movie.duration} phút
-                  </span>
+                  <StatPill
+                    icon={Clock}
+                    label="Thời lượng"
+                    value={`${movie.duration} phút`}
+                  />
                 )}
-                {/* Genres — trên mobile chỉ show 1, desktop show 2 */}
+                {movie?.rating && (
+                  <StatPill
+                    icon={Star}
+                    label="Đánh giá"
+                    value={`${movie.rating.toFixed(1)} / 10`}
+                  />
+                )}
                 {movie?.genres?.slice(0, isMobile ? 1 : 2).map((g) => (
-                  <span
-                    key={g}
-                    style={{
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: isMobile ? 11 : 12,
-                      fontWeight: 600,
-                      color: "rgba(255,255,255,0.6)",
-                      padding: "3px 8px",
-                      borderRadius: 99,
-                      background: "rgba(255,255,255,0.08)",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      maxWidth: isMobile ? 110 : "none",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {g}
-                  </span>
+                  <StatPill key={g} icon={Award} label="" value={g} />
                 ))}
-                {/* % phù hợp — ẩn trên mobile nếu không đủ chỗ */}
-                {movie?.rating && !isMobile && (
-                  <span
-                    style={{
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: C.green,
-                      padding: "3px 8px",
-                      borderRadius: 99,
-                      background: "rgba(70,211,105,0.1)",
-                      border: "1px solid rgba(70,211,105,0.25)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {Math.round(movie.rating * 10)}% phù hợp
-                  </span>
-                )}
               </div>
+
               {movie?.description && (
                 <p
                   style={{
@@ -1122,6 +1005,7 @@ export default function MovieDetailPage() {
                   {movie.description}
                 </p>
               )}
+
               <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
                 <motion.button
                   whileHover={{ scale: 1.03 }}
@@ -1147,7 +1031,7 @@ export default function MovieDetailPage() {
               </div>
             </motion.div>
 
-            {/* Tabs */}
+            {/* ── TABS ── */}
             <motion.div
               variants={fadeUp}
               initial="hidden"
@@ -1250,67 +1134,22 @@ export default function MovieDetailPage() {
                           gap: 40,
                         }}
                       >
-                        {/* Đạo diễn */}
+                        {/* Đạo diễn — dùng SectionTitle */}
                         {dirs.length > 0 && (
                           <div>
-                            <p
-                              style={{
-                                fontFamily: "'Nunito',sans-serif",
-                                fontSize: 11,
-                                fontWeight: 700,
-                                letterSpacing: "0.12em",
-                                color: C.textDim,
-                                textTransform: "uppercase",
-                                marginBottom: 20,
-                              }}
-                            >
-                              Đạo diễn
-                            </p>
+                            <SectionTitle>Đạo Diễn</SectionTitle>
                             <div style={{ display: "flex", gap: 16 }}>
                               {dirs.map((p, i) => (
-                                <PersonCard
-                                  key={i}
-                                  person={p}
-                                  isDirector={true}
-                                />
+                                <PersonCard key={i} person={p} isDirector />
                               ))}
                             </div>
                           </div>
                         )}
 
-                        {/* Diễn viên */}
+                        {/* Diễn viên — dùng SectionTitle */}
                         {actors.length > 0 && (
                           <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "baseline",
-                                gap: 8,
-                                marginBottom: 20,
-                              }}
-                            >
-                              <p
-                                style={{
-                                  fontFamily: "'Nunito',sans-serif",
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  letterSpacing: "0.12em",
-                                  color: C.textDim,
-                                  textTransform: "uppercase",
-                                }}
-                              >
-                                Diễn viên nổi bật
-                              </p>
-                              <span
-                                style={{
-                                  fontFamily: "'Nunito',sans-serif",
-                                  fontSize: 12,
-                                  color: C.textDim,
-                                }}
-                              >
-                                {actors.length} người
-                              </span>
-                            </div>
+                            <SectionTitle>Diễn Viên Nổi Bật</SectionTitle>
                             <PersonScrollRow people={actors} />
                           </div>
                         )}
@@ -1337,7 +1176,7 @@ export default function MovieDetailPage() {
                   </motion.div>
                 )}
 
-                {/* MORE */}
+                {/* MORE — dùng SectionTitle + StarRating */}
                 {tab === "more" && (
                   <motion.div
                     key="more"
@@ -1346,6 +1185,18 @@ export default function MovieDetailPage() {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                   >
+                    <SectionTitle>Thông Tin Chi Tiết</SectionTitle>
+
+                    {/* Rating widget */}
+                    {movie?.rating && (
+                      <div style={{ marginBottom: 28 }}>
+                        <StarRating
+                          score={movie.rating}
+                          votes={movie?.voteCount}
+                        />
+                      </div>
+                    )}
+
                     <div
                       style={{
                         display: "grid",
@@ -1414,7 +1265,7 @@ export default function MovieDetailPage() {
             </motion.div>
           </div>
 
-          {/* RIGHT sidebar */}
+          {/* ── RIGHT sidebar ── */}
           <motion.div
             variants={fadeUp}
             initial="hidden"
@@ -1478,7 +1329,7 @@ export default function MovieDetailPage() {
                           width: 56,
                           height: 56,
                           borderRadius: "50%",
-                          border: `1.5px solid rgba(255,255,255,0.12)`,
+                          border: "1.5px solid rgba(255,255,255,0.12)",
                           overflow: "hidden",
                           background: C.surfaceMid,
                           flexShrink: 0,
@@ -1581,7 +1432,7 @@ export default function MovieDetailPage() {
                           width: 56,
                           height: 56,
                           borderRadius: "50%",
-                          border: `1.5px solid rgba(255,255,255,0.1)`,
+                          border: "1.5px solid rgba(255,255,255,0.1)",
                           overflow: "hidden",
                           background: C.surfaceMid,
                           flexShrink: 0,

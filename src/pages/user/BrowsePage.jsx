@@ -15,7 +15,6 @@ import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
-const PAGE_SIZE = 24;
 const ACCENT    = '#e5181e';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -271,7 +270,7 @@ export default function BrowsePage() {
   const fetchIdRef = useRef(0);
 
   // ── Pagination hook ─────────────────────────────────────────────────────────
-  const pagination = usePagination({ total, pageSize: PAGE_SIZE });
+  const pagination = usePagination({ total });
 
   // ── Active genre (URL > sidebar filter) ─────────────────────────────────────
   const activeGenreId  = genreId   || selGenre;
@@ -365,8 +364,8 @@ export default function BrowsePage() {
 
   // ── Slice trang hiện tại ────────────────────────────────────────────────────
   useEffect(() => {
-    const start = (pagination.page - 1) * PAGE_SIZE;
-    setMovies(allMovies.slice(start, start + PAGE_SIZE));
+    const start = (pagination.page - 1) * pagination.props.pageSize;
+    setMovies(allMovies.slice(start, start + pagination.props.pageSize));
   }, [allMovies, pagination.page]);
 
   // ── Scroll lên khi chuyển trang ─────────────────────────────────────────────
@@ -455,7 +454,7 @@ export default function BrowsePage() {
             {/* Skeleton */}
             {loading && (
               <div style={GRID_STYLE}>
-                {Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)}
+                {Array.from({ length: pagination.props.pageSize }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             )}
 
@@ -467,15 +466,19 @@ export default function BrowsePage() {
             {/* Cards + Pagination */}
             {!loading && movies.length > 0 && (
               <>
-                <div style={isMobile
-                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }
-                  : GRID_STYLE
-                }>
-                  <AnimatePresence mode="popLayout">
+                <div
+                  style={{
+                    ...(isMobile
+                      ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }
+                      : GRID_STYLE),
+                  }}
+                >
                     {movies.map((m, i) => (
                       <motion.div key={m.id || i}
-                        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-                        transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}>
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.25 }}
+                      >
                         {isMobile ? (
                           <BrowseMobileCard
                             movie={m}
@@ -504,16 +507,10 @@ export default function BrowsePage() {
                         )}
                       </motion.div>
                     ))}
-                  </AnimatePresence>
                 </div>
 
                 <Pagination
-                  page={pagination.page}
-                  totalPages={pagination.totalPages}
-                  total={total}
-                  pageSize={PAGE_SIZE}
-                  onPageChange={pagination.goTo}
-                  pageNumbers={pagination.pageNumbers}
+                  {...pagination.props}
                 />
               </>
             )}

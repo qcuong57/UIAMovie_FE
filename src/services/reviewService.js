@@ -10,6 +10,23 @@ const wrap = (payload) => ({ data: payload });
 
 const reviewService = {
   /**
+   * Lấy TẤT CẢ reviews (không lọc theo phim)
+   * @param {number} pageNumber - Trang (default: 1)
+   * @param {number} pageSize - Số items per trang (default: 50)
+   */
+  getAllReviews: async (pageNumber = 1, pageSize = 50) => {
+    try {
+      const payload = await axiosInstance.get('/ratingreview', {
+        params: { pageNumber, pageSize },
+      });
+      return wrap(payload);
+    } catch (error) {
+      console.error('Error fetching all reviews:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy reviews của phim
    * @param {string} movieId - Movie ID
    * @param {number} pageNumber - Trang (default: 1)
@@ -68,7 +85,6 @@ const reviewService = {
       return wrap(payload);
     } catch (error) {
       console.error('Error creating review:', error);
-      // Re-throw với message rõ ràng từ server (axios interceptor đã extract rồi)
       throw error;
     }
   },

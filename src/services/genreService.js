@@ -10,7 +10,7 @@ const genreService = {
   getAllGenres: async () => {
     try {
       const response = await axiosInstance.get('/genres');
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching genres:', error);
       throw error;
@@ -24,7 +24,7 @@ const genreService = {
   getGenreById: async (genreId) => {
     try {
       const response = await axiosInstance.get(`/genres/${genreId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error fetching genre:', error);
       throw error;
@@ -38,7 +38,7 @@ const genreService = {
   createGenre: async (data) => {
     try {
       const response = await axiosInstance.post('/genres', data);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error creating genre:', error);
       throw error;
@@ -53,7 +53,7 @@ const genreService = {
   updateGenre: async (genreId, data) => {
     try {
       const response = await axiosInstance.put(`/genres/${genreId}`, data);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error updating genre:', error);
       throw error;
@@ -67,7 +67,7 @@ const genreService = {
   deleteGenre: async (genreId) => {
     try {
       const response = await axiosInstance.delete(`/genres/${genreId}`);
-      return response;
+      return response.data;
     } catch (error) {
       console.error('Error deleting genre:', error);
       throw error;

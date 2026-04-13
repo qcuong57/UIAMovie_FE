@@ -11,12 +11,13 @@ const authService = {
    * Body: { email, username, password, confirmPassword }
    */
   register: async ({ email, username, password, confirmPassword }) => {
-    return axiosInstance.post('/auth/register', {
+    const res = await axiosInstance.post('/auth/register', {
       email,
       username,
       password,
       confirmPassword,
     });
+    return res.data;
   },
 
   /**
@@ -31,7 +32,8 @@ const authService = {
    *   { requiresOtp: true, userId, message }
    */
   login: async ({ email, password }) => {
-    return axiosInstance.post('/auth/login', { email, password });
+    const res = await axiosInstance.post('/auth/login', { email, password });
+    return res.data;
   },
 
   /**
@@ -40,7 +42,8 @@ const authService = {
    * Body: { userId }
    */
   sendOtp: async (userId) => {
-    return axiosInstance.post('/auth/otp/send', { userId });
+    const res = await axiosInstance.post('/auth/otp/send', { userId });
+    return res.data;
   },
 
   /**
@@ -50,7 +53,8 @@ const authService = {
    * Response: { accessToken, refreshToken, expiresIn, user }
    */
   verifyOtp: async ({ userId, code }) => {
-    return axiosInstance.post('/auth/otp/verify', { userId, code });
+    const res = await axiosInstance.post('/auth/otp/verify', { userId, code });
+    return res.data;
   },
 
   /**
@@ -59,7 +63,8 @@ const authService = {
    * Body: { email }
    */
   forgotPassword: async (email) => {
-    return axiosInstance.post('/auth/forgot-password', { email });
+    const res = await axiosInstance.post('/auth/forgot-password', { email });
+    return res.data;
   },
 
   /**
@@ -68,12 +73,13 @@ const authService = {
    * Body: { email, code, newPassword, confirmPassword }
    */
   resetPassword: async ({ email, code, newPassword, confirmPassword }) => {
-    return axiosInstance.post('/auth/reset-password', {
+    const res = await axiosInstance.post('/auth/reset-password', {
       email,
       code,
       newPassword,
       confirmPassword,
     });
+    return res.data;
   },
 
   /**
@@ -82,7 +88,8 @@ const authService = {
    * Body: { refreshToken }
    */
   refreshToken: async (refreshToken) => {
-    return axiosInstance.post('/auth/refresh-token', { refreshToken });
+    const res = await axiosInstance.post('/auth/refresh-token', { refreshToken });
+    return res.data;
   },
 
   /**
@@ -90,7 +97,8 @@ const authService = {
    * POST /api/auth/logout  (cần Bearer token)
    */
   logout: async () => {
-    return axiosInstance.post('/auth/logout');
+    const res = await axiosInstance.post('/auth/logout');
+    return res.data;
   },
 
   // ── Local storage helpers ─────────────────────────────────────────────────
@@ -105,7 +113,7 @@ const authService = {
       email:        data.user.email,
       avatar:       data.user.avatarUrl,
       role:         data.user.role,
-      is2FaEnabled: data.user.is2FaEnabled ?? false, // ← sync trạng thái 2FA
+      is2FaEnabled: data.user.is2FaEnabled ?? false,
     }));
   },
 

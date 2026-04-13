@@ -27,7 +27,7 @@ const Footer = () => {
             fontSize: 22, fontWeight: 900, letterSpacing: '0.06em',
             color: '#fff', marginBottom: 6,
           }}>
-            <span style={{ color: '#e5181e' }}>UIA</span> MOVIE
+            <span style={{ color: '#e5181e', fontSize: 30 }}>UIA</span> MOVIE
           </p>
           <p style={{
             fontFamily: "'Nunito', sans-serif",
