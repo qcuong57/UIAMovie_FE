@@ -449,7 +449,7 @@ export default function BrowsePage() {
 
         {/* Main layout */}
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, minWidth: 0, width: '100%', overflowX: 'hidden' }}>
+          <div style={{ flex: 1, minWidth: 0, width: '100%', overflow: 'visible' }}>
 
             {/* Skeleton */}
             {loading && (
@@ -471,6 +471,7 @@ export default function BrowsePage() {
                     ...(isMobile
                       ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }
                       : GRID_STYLE),
+                    overflow: 'visible',
                   }}
                 >
                     {movies.map((m, i) => (
@@ -478,6 +479,7 @@ export default function BrowsePage() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.25 }}
+                        style={{ overflow: 'visible' }}
                       >
                         {isMobile ? (
                           <BrowseMobileCard
