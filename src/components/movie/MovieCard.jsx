@@ -4,7 +4,12 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import movieService from '../../services/movieService';
+import movieService  from '../../services/movieService';
+import tvShowService from '../../services/tvShowService';
+
+// ── Route helpers ────────────────────────────────────────────────
+const infoPath  = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
+const playerPath = (item) => item.isTvShow ? `/tvshow/${item.id}`      : `/movie/${item.id}`;
 
 // ── MobileCard — card đơn giản cho mobile có nút yêu thích ──────
 const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)' }) => {
@@ -19,13 +24,14 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
     e.stopPropagation();
     if (favLoading) return;
     setFavLoading(true);
+    const svc = movie.isTvShow ? tvShowService : movieService;
     try {
       if (localFav) {
-        await movieService.removeFavorite(movie.id);
+        await svc.removeFavorite(movie.id);
         setLocalFav(false);
         onFavoriteToggle?.(movie, false);
       } else {
-        await movieService.addFavorite(movie.id);
+        await svc.addFavorite(movie.id);
         setLocalFav(true);
         onFavoriteToggle?.(movie, true);
       }
@@ -40,7 +46,7 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
     <div style={{ width: cardWidth }}>
       {/* Poster */}
       <div
-        onClick={() => navigate(`/movie/${movie.id}/info`)}
+        onClick={() => navigate(infoPath(movie))}
         style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '2/3', background: '#181818', cursor: 'pointer' }}
       >
         {movie.posterUrl && !imgError
@@ -77,7 +83,7 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
         </button>
       </div>
       {/* Title + year */}
-      <div style={{ paddingTop: 6 }} onClick={() => navigate(`/movie/${movie.id}/info`)} >
+      <div style={{ paddingTop: 6 }} onClick={() => navigate(infoPath(movie))} >
         <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 1, cursor: 'pointer' }}>{movie.title}</p>
         {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>}
       </div>
@@ -102,16 +108,16 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
     e.stopPropagation();
     if (favLoading) return;
     setFavLoading(true);
+    const svc = movie.isTvShow ? tvShowService : movieService;
     try {
       if (localFav) {
-        await movieService.removeFavorite(movie.id);
+        await svc.removeFavorite(movie.id);
         setLocalFav(false);
         onFavoriteToggle?.(movie, false);
       } else {
-        await movieService.addFavorite(movie.id);
+        await svc.addFavorite(movie.id);
         setLocalFav(true);
         onFavoriteToggle?.(movie, true);
-        navigate('/favorites');
       }
     } catch (err) {
       console.error('Favorite toggle error:', err);
@@ -152,7 +158,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
             : { scale: 1,    y: 0,  boxShadow: '0 4px 16px rgba(0,0,0,0.45)' }
         }
         transition={{ type: 'spring', stiffness: 270, damping: 25 }}
-        onClick={() => navigate(`/movie/${movie.id}/info`)}
+        onClick={() => navigate(infoPath(movie))}
       >
         {/* ── Poster image ── */}
         {movie.posterUrl && !imgError ? (
@@ -210,7 +216,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {/* Play */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/movie/${movie.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(playerPath(movie)); }}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
                     style={{ background: '#fff' }}
                   >
@@ -248,7 +254,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
 
                   {/* More info */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/movie/${movie.id}/info`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(infoPath(movie)); }}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0 ml-auto"
                     style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
                   >

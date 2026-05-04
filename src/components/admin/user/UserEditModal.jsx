@@ -1,9 +1,22 @@
-// src/components/admin/UserEditModal.jsx
+// src/components/admin/user/UserEditModal.jsx  ← REDESIGNED
 import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { Button, Input, Modal } from '../../ui';
-import { C, FONT_BODY, FONT_DISPLAY } from '../../../context/homeTokens';
+
+const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
+const T = {
+  bg:          '#F4F3EF',
+  surface:     '#FFFFFF',
+  surfaceAlt:  '#FAFAF8',
+  accent:      '#1C5F3A',
+  accentLight: '#EAF5EF',
+  accentText:  '#155230',
+  text:        '#18181B',
+  textSub:     '#71717A',
+  textMuted:   '#A1A1AA',
+  border:      'rgba(0,0,0,0.08)',
+};
 
 const SUBSCRIPTION_OPTIONS = ['Free', 'Basic', 'Premium', 'VIP'];
 
@@ -14,18 +27,13 @@ export default function UserEditModal({ user, onClose, onSaved }) {
 
   useEffect(() => {
     if (user) {
-      setForm({
-        username:         user.username         ?? '',
-        avatarUrl:        user.avatarUrl        ?? '',
-        subscriptionType: user.subscriptionType ?? '',
-      });
+      setForm({ username: user.username ?? '', avatarUrl: user.avatarUrl ?? '', subscriptionType: user.subscriptionType ?? '' });
       setError('');
     }
   }, [user]);
 
   const handleSave = async () => {
     if (!form.username.trim()) { setError('Tên đăng nhập không được để trống'); return; }
-
     setSaving(true); setError('');
     try {
       await axiosInstance.put(`/user/${user.id}`, {
@@ -33,12 +41,7 @@ export default function UserEditModal({ user, onClose, onSaved }) {
         avatarUrl:        form.avatarUrl.trim() || null,
         subscriptionType: form.subscriptionType || null,
       });
-      onSaved?.({
-        ...user,
-        username:         form.username.trim(),
-        avatarUrl:        form.avatarUrl.trim() || user.avatarUrl,
-        subscriptionType: form.subscriptionType || null,
-      });
+      onSaved?.({ ...user, username: form.username.trim(), avatarUrl: form.avatarUrl.trim() || user.avatarUrl, subscriptionType: form.subscriptionType || null });
       onClose();
     } catch (e) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra');
@@ -64,32 +67,23 @@ export default function UserEditModal({ user, onClose, onSaved }) {
         </>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: FONT }}>
 
-        {/* User preview card */}
-        <div style={{
-          display: 'flex', gap: 14, alignItems: 'center',
-          padding: '12px 14px', borderRadius: 8,
-          background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: 'hidden',
-            background: 'linear-gradient(135deg,#e5181e,#7a0409)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+        {/* User preview */}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.border}` }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: 'hidden', background: `linear-gradient(135deg, ${T.accent}, ${T.accentText})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {user?.avatarUrl
               ? <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 900, color: 'white' }}>{initials}</span>
+              : <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: 'white' }}>{initials}</span>
             }
           </div>
           <div>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 2 }}>Đang chỉnh sửa</p>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: 'white', fontWeight: 600 }}>{user?.username}</p>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{user?.email}</p>
+            <p style={{ fontSize: 11, color: T.textMuted, marginBottom: 2 }}>Đang chỉnh sửa</p>
+            <p style={{ fontSize: 13.5, color: T.text, fontWeight: 600 }}>{user?.username}</p>
+            <p style={{ fontSize: 12, color: T.textMuted }}>{user?.email}</p>
           </div>
         </div>
 
-        {/* Username */}
         <Input
           label="Tên đăng nhập"
           placeholder="Username..."
@@ -100,7 +94,7 @@ export default function UserEditModal({ user, onClose, onSaved }) {
 
         {/* Avatar URL */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <label style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Avatar URL (tùy chọn)
           </label>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -108,57 +102,35 @@ export default function UserEditModal({ user, onClose, onSaved }) {
               value={form.avatarUrl}
               onChange={e => setForm(f => ({ ...f, avatarUrl: e.target.value }))}
               placeholder="https://..."
-              style={{
-                flex: 1, padding: '10px 14px',
-                background: '#111', border: `1px solid ${C.border}`,
-                borderRadius: 8, color: 'white', outline: 'none',
-                fontFamily: FONT_BODY, fontSize: 13,
-              }}
+              style={{ flex: 1, padding: '10px 14px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, outline: 'none', fontFamily: FONT, fontSize: 13.5 }}
             />
             {/* Preview */}
-            <div style={{
-              width: 36, height: 36, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
-              background: 'linear-gradient(135deg,#e5181e,#7a0409)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
+            <div style={{ width: 38, height: 38, borderRadius: 9, flexShrink: 0, overflow: 'hidden', background: `linear-gradient(135deg, ${T.accent}, ${T.accentText})`, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${T.border}` }}>
               {form.avatarUrl
-                ? <img src={form.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={e => { e.target.style.display = 'none'; }}
-                  />
-                : <span style={{ fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 900, color: 'white' }}>{initials}</span>
+                ? <img src={form.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                : <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: 'white' }}>{initials}</span>
               }
             </div>
           </div>
         </div>
 
-        {/* Subscription type */}
+        {/* Subscription */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <label style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Subscription
           </label>
-          <select
-            value={form.subscriptionType}
-            onChange={e => setForm(f => ({ ...f, subscriptionType: e.target.value }))}
-            style={{
-              width: '100%', padding: '10px 14px', height: 42,
-              background: '#111', border: `1px solid ${C.border}`,
-              borderRadius: 8, color: form.subscriptionType ? 'white' : 'rgba(255,255,255,0.35)',
-              fontFamily: FONT_BODY, fontSize: 13, outline: 'none', cursor: 'pointer',
-            }}
-          >
-            <option value="" style={{ background: '#111' }}>— Không có —</option>
-            {SUBSCRIPTION_OPTIONS.map(s => (
-              <option key={s} value={s} style={{ background: '#111' }}>{s}</option>
-            ))}
+          <select value={form.subscriptionType} onChange={e => setForm(f => ({ ...f, subscriptionType: e.target.value }))}
+            style={{ width: '100%', padding: '10px 14px', height: 44, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, color: form.subscriptionType ? T.text : T.textMuted, fontFamily: FONT, fontSize: 13.5, outline: 'none', cursor: 'pointer' }}>
+            <option value="">— Không có —</option>
+            {SUBSCRIPTION_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
-        {/* Error chung */}
         {error && !error.includes('Tên') && (
-          <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.accent }}>{error}</p>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: '#DC2626' }}>{error}</p>
         )}
 
-        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
+        <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.6, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 8, border: `1px solid ${T.border}` }}>
           Chỉ có thể sửa tên đăng nhập, avatar và subscription. Để đổi role dùng nút Shield trong danh sách.
         </p>
       </div>

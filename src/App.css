@@ -182,3 +182,72 @@
     border-right-color: var(--border);
   }
 }
+::-webkit-scrollbar {
+  width: 4px;           /* mỏng như Netflix */
+  height: 4px;          /* cho horizontal scroll (carousel) */
+}
+ 
+::-webkit-scrollbar-track {
+  background: transparent;   /* track trong suốt, không thấy */
+}
+ 
+::-webkit-scrollbar-thumb {
+  background: rgba(229, 9, 20, 0.55);   /* đỏ Netflix, hơi trong */
+  border-radius: 99px;
+  transition: background 0.2s ease;
+}
+ 
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(229, 9, 20, 0.9);    /* đậm hơn khi hover */
+}
+ 
+::-webkit-scrollbar-thumb:active {
+  background: rgb(229, 9, 20);           /* solid khi kéo */
+}
+ 
+/* Ẩn scrollbar trên mobile (swipe native đẹp hơn) */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+ 
+/* ── Firefox ──────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(229, 9, 20, 0.55) transparent;
+}
+ 
+/* ── Carousel / horizontal scroll containers ─────────────────────────────── */
+/* 
+   Áp class "netflix-scroll" cho bất kỳ div nào có horizontal scroll
+   Ví dụ: <div className="netflix-scroll" style={{ overflowX: "auto" }}>
+*/
+.netflix-scroll::-webkit-scrollbar {
+  height: 3px;
+  width: 3px;
+}
+ 
+.netflix-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+ 
+.netflix-scroll::-webkit-scrollbar-thumb {
+  background: rgba(229, 9, 20, 0.4);
+  border-radius: 99px;
+}
+ 
+.netflix-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(229, 9, 20, 0.8);
+}
+ 
+/* Ẩn hoàn toàn scrollbar cho carousel (swipe bằng JS/drag) */
+.carousel-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+ 
+.carousel-scroll::-webkit-scrollbar {
+  display: none;
+}

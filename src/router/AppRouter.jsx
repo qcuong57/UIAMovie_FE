@@ -31,6 +31,8 @@ import FavoritesPage from "../pages/user/FavoritesPage";
 import TrendingPage from "../pages/user/TrendingPage";
 import WatchHistoryPage from "../pages/user/WatchHistoryPage";
 import AdminPage from "../pages/admin/AdminPage";
+import TvShowInfoPage from "../pages/user/TvShowInfoPage";
+import TvShowDetailPage from "../pages/user/TvShowDetailPage";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const isLoggedIn = () => {
@@ -86,6 +88,8 @@ const AppRouter = () => (
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
+        <Route path="/tvshow/:id/info" element={<TvShowInfoPage />} />
+        <Route path="/tvshow/:id" element={<TvShowDetailPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/trending" element={<TrendingPage />} />

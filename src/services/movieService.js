@@ -5,24 +5,57 @@ import axiosInstance from '../config/axios';
 
 const movieService = {
   /**
-   * Lấy danh sách phim (có filter, search, phân trang)
-   * @param {number} page - Trang thứ mấy (default: 1)
-   * @param {number} pageSize - Số phim per trang (default: 20)
-   * @param {string} query - Tìm kiếm (optional)
-   * @param {string} genreId - Lọc theo genre (optional)
+   * Lấy danh sách phim — khớp hoàn toàn với FilterMoviesDTO trên backend.
+   * Tất cả filter đều được gửi lên server; không có client-side filter nào.
+   *
+   * @param {Object} filter
+   * @param {number}   [filter.page=1]
+   * @param {number}   [filter.pageSize=20]
+   * @param {string}   [filter.search]          - Tìm theo tên phim
+   * @param {string[]} [filter.genreIds]         - Mảng genre UUID
+   * @param {number}   [filter.minRating]        - IMDb tối thiểu
+   * @param {number}   [filter.maxRating]        - IMDb tối đa
+   * @param {string}   [filter.originCountry]    - ISO 3166-1 alpha-2 (VD: "KR", "US")
+   * @param {string}   [filter.fromReleaseDate]  - "YYYY-MM-DD"
+   * @param {string}   [filter.toReleaseDate]    - "YYYY-MM-DD"
+   * @param {string}   [filter.sortBy]           - "rating" | "title" | "releaseDate"
+   * @param {boolean}  [filter.sortDesc=true]
    */
-  getMovies: async (page = 1, pageSize = 20, query = '', genreId = '') => {
+  getMovies: async ({
+    page           = 1,
+    pageSize       = 20,
+    search         = '',
+    genreIds       = [],
+    minRating,
+    maxRating,
+    originCountry  = '',
+    fromReleaseDate = '',
+    toReleaseDate   = '',
+    sortBy         = 'rating',
+    sortDesc       = true,
+  } = {}) => {
     try {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('pageSize', pageSize);
-      if (query) params.append('query', query);
-      if (genreId) params.append('genreId', genreId);
+      params.append('sortBy', sortBy);
+      params.append('sortDesc', sortDesc);
+      if (search)          params.append('search', search);
+      if (minRating != null) params.append('minRating', minRating);
+      if (maxRating != null) params.append('maxRating', maxRating);
+      if (originCountry)   params.append('originCountry', originCountry);
+      if (fromReleaseDate) params.append('fromReleaseDate', fromReleaseDate);
+      if (toReleaseDate)   params.append('toReleaseDate', toReleaseDate);
+      // genreIds là mảng → append nhiều lần để backend nhận List<Guid>
+      (genreIds ?? []).forEach((id) => params.append('genreIds', id));
 
+      console.log('[movieService] GET /movies?' + params.toString());
       const response = await axiosInstance.get(`/movies?${params}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching movies:', error);
+      console.error('[movieService] Error fetching movies:', error);
+      console.error('[movieService] Response data:', error?.response?.data);
+      console.error('[movieService] Request URL:', error?.config?.url);
       throw error;
     }
   },

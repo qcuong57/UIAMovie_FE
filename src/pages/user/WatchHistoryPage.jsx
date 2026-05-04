@@ -7,8 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Play, Trash2, CheckCircle2, RotateCcw, Calendar, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import movieService from '../../services/movieService';
-import BackButton   from '../../components/common/BackButton';
+import movieService  from '../../services/movieService';
+import tvShowService from '../../services/tvShowService';
+import BackButton    from '../../components/common/BackButton';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -36,6 +37,30 @@ const fmtDuration = (min) => {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return h > 0 ? `${h}g ${m}p` : `${m}p`;
+};
+
+// Normalize 2 DTO shape về 1 shape chung để render cùng nhau
+// Movie:  { id, movieId, movieTitle, posterUrl, watchedAt, progressMinutes, isCompleted }
+// TvShow: { id, tvShowId, tvShowTitle, posterUrl, episodeId?, watchedAt, progressSeconds, isCompleted }
+const normalizeItem = (item, type) => {
+  if (type === 'movie') {
+    return {
+      ...item,
+      _type:          'movie',
+      _contentId:     item.movieId,
+      _title:         item.movieTitle,
+      _progressMins:  item.progressMinutes ?? 0,
+      _estimatedMins: 90,
+    };
+  }
+  return {
+    ...item,
+    _type:          'tvshow',
+    _contentId:     item.tvShowId,
+    _title:         item.tvShowTitle,
+    _progressMins:  Math.floor((item.progressSeconds ?? 0) / 60),
+    _estimatedMins: 45,
+  };
 };
 
 const groupByDay = (items) => {
@@ -93,16 +118,34 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
   const [imgErr, setImgErr] = useState(false);
   const navigate            = useNavigate();
 
-  const estimatedTotal  = 90;
-  const progressPct     = item.isCompleted
+  const progressPct = item.isCompleted
     ? 100
-    : Math.min(Math.round((item.progressMinutes / estimatedTotal) * 100), 99);
+    : Math.min(Math.round((item._progressMins / item._estimatedMins) * 100), 99);
 
   const remaining = item.isCompleted
     ? null
-    : item.progressMinutes
-      ? `Còn ${fmtDuration(Math.max(estimatedTotal - item.progressMinutes, 0))} nữa`
+    : item._progressMins
+      ? `Còn ${fmtDuration(Math.max(item._estimatedMins - item._progressMins, 0))} nữa`
       : null;
+
+  const handleClick = () => {
+    if (item._type === 'movie') {
+      navigate(`/movie/${item._contentId}`, {
+        state: {
+          resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
+          isCompleted:   item.isCompleted ?? false,
+        },
+      });
+    } else {
+      navigate(`/tvshow/${item._contentId}`, {
+        state: {
+          resumeEpisodeId: item.episodeId ?? null,
+          resumeSeconds:   item.isCompleted ? 0 : (item.progressSeconds ?? 0),
+          isCompleted:     item.isCompleted ?? false,
+        },
+      });
+    }
+  };
 
   return (
     <motion.div
@@ -120,27 +163,32 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
         border: `1px solid ${hov ? 'rgba(255,255,255,0.07)' : 'transparent'}`,
         cursor: 'pointer', transition: 'all 0.18s',
       }}
-      onClick={() =>
-        navigate(`/movie/${item.movieId}`, {
-          state: {
-            resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
-            isCompleted:   item.isCompleted ?? false,
-          },
-        })
-      }
+      onClick={handleClick}
     >
       {/* Poster */}
       <div style={{ width: 60, height: 90, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#1a1a1a', position: 'relative' }}>
         {item.posterUrl && !imgErr
-          ? <img src={item.posterUrl} alt={item.movieTitle} onError={() => setImgErr(true)}
+          ? <img src={item.posterUrl} alt={item._title} onError={() => setImgErr(true)}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎬</div>
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+              {item._type === 'tvshow' ? '📺' : '🎬'}
+            </div>
         }
         {item.isCompleted && (
           <div style={{ position: 'absolute', bottom: 4, right: 4 }}>
             <CheckCircle2 size={14} color="#46d369" fill="#46d369" strokeWidth={0} />
           </div>
         )}
+        {/* Badge loại nội dung */}
+        <div style={{
+          position: 'absolute', top: 4, left: 4,
+          background: item._type === 'tvshow' ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.6)',
+          borderRadius: 4, padding: '1px 5px',
+        }}>
+          <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 700, color: 'white', letterSpacing: '0.04em' }}>
+            {item._type === 'tvshow' ? 'TV' : 'PHIM'}
+          </span>
+        </div>
       </div>
 
       {/* Info */}
@@ -150,7 +198,7 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
           color: C.text, marginBottom: 5,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {item.movieTitle || 'Không có tên'}
+          {item._title || 'Không có tên'}
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -159,9 +207,9 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
             {fmtTime(item.watchedAt)}
           </span>
 
-          {item.progressMinutes > 0 && (
+          {item._progressMins > 0 && (
             <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>
-              · {fmtDuration(item.progressMinutes)} đã xem
+              · {fmtDuration(item._progressMins)} đã xem
             </span>
           )}
 
@@ -190,14 +238,14 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
             <motion.button
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={e => { e.stopPropagation(); onRewatch(item); }}
-              title="Xem phim"
+              title="Xem tiếp"
               style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Play size={13} fill="#000" color="#000" style={{ marginLeft: 1 }} />
             </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={e => { e.stopPropagation(); onDelete(item.id); }}
+              onClick={e => { e.stopPropagation(); onDelete(item); }}
               title="Xóa khỏi lịch sử"
               style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius: '50%', cursor: 'pointer', background: 'rgba(229,24,30,0.1)', border: '1.5px solid rgba(229,24,30,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Trash2 size={13} color={C.accent} strokeWidth={2} />
@@ -227,33 +275,36 @@ const DayHeader = ({ label, count }) => (
 
 // ── Stats bar ─────────────────────────────────────────────────────────────────
 const StatsBar = ({ history }) => {
-  const isMobile = useIsMobile();
+  const isMobile  = useIsMobile();
   const completed  = history.filter(h => h.isCompleted).length;
-  const totalMins  = history.reduce((a, h) => a + (h.progressMinutes || 0), 0);
+  const totalMins  = history.reduce((a, h) => a + (h._progressMins || 0), 0);
   const totalHours = Math.floor(totalMins / 60);
+  const movieCount  = history.filter(h => h._type === 'movie').length;
+  const tvCount     = history.filter(h => h._type === 'tvshow').length;
 
   const stats = [
-    { label: 'Đã xem',     value: history.length,              unit: 'phim'  },
-    { label: 'Hoàn thành', value: completed,                   unit: 'phim'  },
-    { label: 'Thời gian',  value: totalHours || totalMins,     unit: totalHours ? 'giờ' : 'phút' },
+    { label: 'Phim lẻ',    value: movieCount,                   unit: 'phim'  },
+    { label: 'Phim bộ',    value: tvCount,                      unit: 'bộ'    },
+    { label: 'Hoàn thành', value: completed,                    unit: 'mục'   },
+    { label: 'Thời gian',  value: totalHours || totalMins,      unit: totalHours ? 'giờ' : 'phút' },
   ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: 1, marginBottom: 36, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
       {stats.map((s, i) => (
         <div key={i} style={{
-          flex: 1, padding: isMobile ? '12px 8px' : '16px 20px',
+          flex: 1, padding: isMobile ? '12px 4px' : '16px 20px',
           background: 'rgba(255,255,255,0.025)',
           borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
           textAlign: 'center',
         }}>
-          <p style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 20 : 26, fontWeight: 800, color: C.text, lineHeight: 1, marginBottom: 4 }}>
+          <p style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 18 : 26, fontWeight: 800, color: C.text, lineHeight: 1, marginBottom: 4 }}>
             {s.value.toLocaleString()}
-            <span style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.35)', marginLeft: 4 }}>
+            <span style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 400, color: 'rgba(255,255,255,0.35)', marginLeft: 4 }}>
               {s.unit}
             </span>
           </p>
-          <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.04em' }}>
+          <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.04em' }}>
             {s.label}
           </p>
         </div>
@@ -274,13 +325,29 @@ export default function WatchHistoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await movieService.getWatchHistory();
-      const raw = Array.isArray(res) ? res : res?.data || res?.history || [];
-      raw.sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt));
-      setHistory(raw);
-    } catch (e) {
-      console.error(e);
-      setHistory([]);
+      const [movieRes, tvRes] = await Promise.allSettled([
+        movieService.getWatchHistory(),
+        tvShowService.getWatchHistory(),
+      ]);
+
+      const movies  = movieRes.status === 'fulfilled'
+        ? (Array.isArray(movieRes.value) ? movieRes.value : movieRes.value?.data || [])
+        : [];
+      const tvShows = tvRes.status === 'fulfilled'
+        ? (Array.isArray(tvRes.value) ? tvRes.value : tvRes.value?.data || [])
+        : [];
+
+      if (tvRes.status === 'rejected')
+        console.warn('[WatchHistory] tvshow history unavailable:', tvRes.reason);
+      if (movieRes.status === 'rejected')
+        console.warn('[WatchHistory] movie history unavailable:', movieRes.reason);
+
+      const merged = [
+        ...movies.map(i  => normalizeItem(i,  'movie')),
+        ...tvShows.map(i => normalizeItem(i, 'tvshow')),
+      ].sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt));
+
+      setHistory(merged);
     } finally {
       setLoading(false);
     }
@@ -288,10 +355,14 @@ export default function WatchHistoryPage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleDelete = useCallback(async (historyId) => {
-    setHistory(prev => prev.filter(h => h.id !== historyId));
+  const handleDelete = useCallback(async (item) => {
+    setHistory(prev => prev.filter(h => h.id !== item.id));
     try {
-      await movieService.deleteWatchHistory(historyId);
+      if (item._type === 'movie') {
+        await movieService.deleteWatchHistory(item.id);
+      } else {
+        await tvShowService.deleteWatchHistory(item.id);
+      }
     } catch (e) {
       console.warn('[WatchHistory] delete failed, reloading:', e);
       load();
@@ -303,7 +374,11 @@ export default function WatchHistoryPage() {
     setShowConfirm(false);
     setHistory([]);
     try {
-      await movieService.clearWatchHistory();
+      // Xóa cả 2, không để lỗi 1 bên ảnh hưởng bên kia
+      await Promise.allSettled([
+        movieService.clearWatchHistory(),
+        tvShowService.clearWatchHistory(),
+      ]);
     } catch (e) {
       console.warn('[WatchHistory] clearAll failed, reloading:', e);
       load();
@@ -312,14 +387,25 @@ export default function WatchHistoryPage() {
     }
   };
 
-  // Truyền tiến độ đã xem qua route state để VideoPlayer có thể seek đúng vị trí
-  const handleRewatch = (item) =>
-    navigate(`/movie/${item.movieId}`, {
-      state: {
-        resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
-        isCompleted:   item.isCompleted ?? false,
-      },
-    });
+  const handleRewatch = (item) => {
+    if (item._type === 'movie') {
+      navigate(`/movie/${item._contentId}`, {
+        state: {
+          resumeMinutes: item.isCompleted ? 0 : (item.progressMinutes ?? 0),
+          isCompleted:   item.isCompleted ?? false,
+        },
+      });
+    } else {
+      navigate(`/tvshow/${item._contentId}`, {
+        state: {
+          resumeEpisodeId: item.episodeId ?? null,
+          resumeSeconds:   item.isCompleted ? 0 : (item.progressSeconds ?? 0),
+          isCompleted:     item.isCompleted ?? false,
+        },
+      });
+    }
+  };
+
   const groups = useMemo(() => groupByDay(history), [history]);
 
   // ── Skeleton ────────────────────────────────────────────────────────────────

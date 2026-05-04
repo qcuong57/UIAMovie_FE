@@ -51,7 +51,7 @@ export const fadeInOutVariants = {
 export const slideUpVariants = {
   hidden: { 
     opacity: 0, 
-    y: 40 
+    y: 24          // giảm từ 40 → 24 để nhẹ hơn khi scroll
   },
   visible: { 
     opacity: 1, 
@@ -59,7 +59,7 @@ export const slideUpVariants = {
   },
   exit: {
     opacity: 0,
-    y: -40,
+    y: -24,
   }
 };
 
@@ -96,7 +96,7 @@ export const slideDownVariants = {
 export const slideRightVariants = {
   hidden: { 
     opacity: 0, 
-    x: -80 
+    x: -32,       // giảm từ -80 → -32 để tránh reflow ngang
   },
   visible: { 
     opacity: 1, 
@@ -111,7 +111,7 @@ export const slideRightVariants = {
 export const slideLeftVariants = {
   hidden: { 
     opacity: 0, 
-    x: 80 
+    x: 32,        // giảm từ 80 → 32 để tránh reflow ngang
   },
   visible: { 
     opacity: 1, 
@@ -500,15 +500,15 @@ export const modalContentVariants = {
 export const bounceVariants = {
   hidden: { 
     opacity: 0, 
-    y: 50 
+    y: 30         // giảm từ 50 → 30
   },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
       type: "spring",
-      stiffness: 100,
-      damping: 10,
+      stiffness: 120,
+      damping: 18,  // tăng từ 10 → 18 để bớt nảy, mượt hơn
     }
   }
 };

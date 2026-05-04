@@ -8,6 +8,7 @@ import {
 } from "../../context/homeTokens";
 import reviewService from "../../services/reviewService";
 import movieService from "../../services/movieService";
+import tvShowService from "../../services/tvShowService";
 
 /* ─── CSS ─────────────────────────────────────────────────────────────────── */
 const CSS = `
@@ -81,37 +82,34 @@ const Stars = ({ rating, size = 13 }) => {
 };
 
 /* ─── Normalize ───────────────────────────────────────────────────────────── */
-const normalize = (raw, movie) => ({
-  id: raw.id ?? raw.reviewId ?? `${movie?.id}-${Math.random()}`,
-  movieId: movie?.id ?? raw.movieId ?? raw.movie?.id ?? null,
-  user: raw.userName || raw.user?.name || "Khán giả",
-  rating: typeof raw.rating === "number" ? raw.rating : 7,
-  text: raw.reviewText || raw.comment || "",
-  time: formatTime(raw.createdAt || raw.createdDate),
-  movie: {
-    // FIX: ưu tiên movie từ movieMap, sau đó fallback qua mọi field có thể có từ API
-    title:
-      movie?.title ??
-      raw.movie?.title ??
-      raw.movieTitle ??
-      raw.movieName ??
-      raw.movie?.name ??
-      "Unknown",
-    year:
-      movie?.year ??
-      raw.movie?.year ??
-      raw.movie?.releaseYear ??
-      raw.releaseYear ??
-      null,
-    posterUrl:
-      movie?.posterUrl ??
-      raw.movie?.posterUrl ??
-      raw.movie?.poster ??
-      raw.movie?.thumbnail ??
-      raw.posterUrl ??
-      null,
-  },
-});
+const normalize = (raw, contentMeta, contentType) => {
+  const linkPath =
+    contentType === 'movie'  && contentMeta?.id ? `/movie/${contentMeta.id}/info`  :
+    contentType === 'tvshow' && contentMeta?.id ? `/tvshow/${contentMeta.id}/info` : null;
+
+  return {
+    id:          raw.id ?? raw.reviewId ?? `${contentMeta?.id}-${Math.random()}`,
+    contentType,
+    movieId:     raw.movieId  ?? raw.MovieId  ?? null,
+    tvShowId:    raw.tvShowId ?? raw.TvShowId ?? null,
+    linkPath,
+    user:        raw.userName || raw.user?.name || 'Khán giả',
+    rating:      typeof raw.rating === 'number' ? raw.rating : 7,
+    text:        raw.reviewText || raw.comment || '',
+    time:        formatTime(raw.createdAt || raw.createdDate),
+    content: {
+      title:
+        contentMeta?.title   ??
+        raw.movieTitle        ??
+        raw.tvShowTitle       ??
+        raw.movie?.title      ??
+        raw.show?.title       ??
+        'Unknown',
+      year:      contentMeta?.year      ?? null,
+      posterUrl: contentMeta?.posterUrl ?? null,
+    },
+  };
+};
 
 function parseReviews(payload) {
   if (!payload) return [];
@@ -141,60 +139,91 @@ function sortReviews(arr) {
 }
 
 /**
- * Fetch TẤT CẢ reviews bằng 1 request, sau đó:
- * 1. Join với movies prop (nếu có)
- * 2. FIX: Tự fetch những phim còn thiếu từ movieService
+ * Fetch reviews, lọc bỏ episode reviews, giữ 1 review có rating cao nhất
+ * cho mỗi movie / tvshow khác nhau.
  */
 async function fetchAllReviews(movies = []) {
   try {
-    // Build lookup map: movieId → movie object
-    const movieMap = Object.fromEntries(
-      movies.filter(Boolean).map((m) => [String(m.id), m]),
-    );
-
-    const res = await reviewService.getAllReviews(1, 20);
-
+    // ── 1. Fetch all reviews ──────────────────────────────────────────────────
+    const res = await reviewService.getAllReviews(1, 100);
     const actual = res?.data?.data ?? res?.data ?? res;
     const raw = parseReviews(actual?.items ?? actual);
+    if (!Array.isArray(raw) || raw.length === 0) return [];
 
-    if (!Array.isArray(raw) || raw.length === 0) {
-      return [];
-    }
+    // ── 2. Lọc bỏ episode reviews (chỉ giữ movie + show-level) ───────────────
+    const filtered = raw.filter(r => !(r.episodeId ?? r.EpisodeId));
 
-    // FIX: Tìm những movieId chưa có trong movieMap
-    const missingIds = [
-      ...new Set(
-        raw
-          .map((r) => r.movieId ?? r.movie?.id)
-          .filter((id) => id != null && !movieMap[String(id)]),
+    // ── 3. Giữ review có rating cao nhất cho mỗi content ─────────────────────
+    const bestMap = {}; // contentKey → raw review object
+    filtered.forEach(r => {
+      const movieId  = r.movieId  ?? r.MovieId  ?? null;
+      const tvShowId = r.tvShowId ?? r.TvShowId ?? null;
+      const key = movieId ? `movie:${movieId}` : tvShowId ? `tvshow:${tvShowId}` : null;
+      if (!key) return;
+      const rating = typeof r.rating === 'number' ? r.rating : 0;
+      if (!bestMap[key] || rating > (bestMap[key].rating ?? 0)) {
+        bestMap[key] = r;
+      }
+    });
+    const best = Object.values(bestMap);
+    if (best.length === 0) return [];
+
+    // ── 4. Build lookup maps ──────────────────────────────────────────────────
+    const movieMap  = Object.fromEntries(movies.filter(Boolean).map(m => [String(m.id), m]));
+    const tvShowMap = {};
+
+    const missingMovieIds  = [...new Set(best
+      .filter(r => !!(r.movieId ?? r.MovieId))
+      .map(r => String(r.movieId ?? r.MovieId))
+      .filter(id => !movieMap[id])
+    )];
+    const missingTvShowIds = [...new Set(best
+      .filter(r => !!(r.tvShowId ?? r.TvShowId))
+      .map(r => String(r.tvShowId ?? r.TvShowId))
+    )];
+
+    await Promise.allSettled([
+      ...missingMovieIds.map(id =>
+        movieService.getMovieById(id).then(resp => {
+          const m = resp?.data?.data ?? resp?.data ?? resp;
+          if (m?.id) movieMap[String(m.id)] = m;
+        }).catch(() => {})
       ),
-    ];
+      ...missingTvShowIds.map(id =>
+        tvShowService.getTvShowById(id).then(resp => {
+          const s = resp?.data ?? resp;
+          if (s?.id) tvShowMap[String(s.id)] = s;
+        }).catch(() => {})
+      ),
+    ]);
 
-    if (missingIds.length > 0) {
-      const results = await Promise.allSettled(
-        missingIds.map((id) => movieService.getMovieById(id)),
-      );
+    // ── 5. Normalize ──────────────────────────────────────────────────────────
+    const out = best.map(r => {
+      const movieId  = r.movieId  ?? r.MovieId  ?? null;
+      const tvShowId = r.tvShowId ?? r.TvShowId ?? null;
 
-      results.forEach((result, i) => {
-        if (result.status === "fulfilled" && result.value) {
-          // movieService trả về response.data (qua axiosInstance interceptor)
-          const m = result.value?.data ?? result.value;
-          if (m?.id) {
-            movieMap[String(missingIds[i])] = m;
-          }
-        } else {
-        }
-      });
-    }
-
-    const out = raw.map((r) => {
-      const movieId = r.movieId ?? r.movie?.id;
-      const movie = movieMap[String(movieId)] ?? null;
-      return normalize(r, movie);
+      if (movieId) {
+        const m = movieMap[String(movieId)];
+        return normalize(r, m ? {
+          id:       m.id,
+          title:    m.title,
+          year:     m.releaseDate ? new Date(m.releaseDate).getFullYear() : m.year,
+          posterUrl: m.posterUrl,
+        } : null, 'movie');
+      } else {
+        const s = tvShowMap[String(tvShowId)];
+        return normalize(r, s ? {
+          id:       s.id,
+          title:    s.title ?? s.name,
+          year:     s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : s.year,
+          posterUrl: s.posterUrl,
+        } : null, 'tvshow');
+      }
     });
 
     return sortReviews(out);
   } catch (error) {
+    console.error('[UserReviewsSection] fetchAllReviews error:', error);
     return [];
   }
 }
@@ -214,8 +243,15 @@ function ReviewCard({ item, position, onMovieClick }) {
   const cfg = CARD_CONFIG[String(position)];
   if (!cfg) return null;
 
+  const content = item.content ?? { title: 'Unknown', posterUrl: null, year: null };
+
   const handleClick = () => {
-    if (isCenter && onMovieClick && item.movieId) onMovieClick(item.movieId);
+    if (!isCenter) return;
+    if (item.linkPath) {
+      window.location.href = item.linkPath;
+    } else if (onMovieClick && (item.movieId || item.tvShowId)) {
+      onMovieClick(item.movieId ?? item.tvShowId);
+    }
   };
 
   return (
@@ -231,8 +267,7 @@ function ReviewCard({ item, position, onMovieClick }) {
         opacity: cfg.opacity,
         pointerEvents: isCenter ? "auto" : "none",
         zIndex: cfg.zIndex,
-        cursor:
-          isCenter && onMovieClick && item.movieId ? "pointer" : "default",
+        cursor: isCenter && (item.linkPath || onMovieClick) ? "pointer" : "default",
       }}
     >
       <div
@@ -247,13 +282,13 @@ function ReviewCard({ item, position, onMovieClick }) {
             : "0 8px 24px rgba(0,0,0,0.3)",
         }}
       >
-        {/* ── Hàng trên: Poster + Review text ── */}
+        {/* ── Poster + Review text ── */}
         <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
-          {item.movie.posterUrl && (
+          {content.posterUrl && (
             <div style={{ flexShrink: 0 }}>
               <img
-                src={item.movie.posterUrl}
-                alt={item.movie.title}
+                src={content.posterUrl}
+                alt={content.title}
                 style={{
                   width: 60,
                   height: 88,
@@ -266,7 +301,6 @@ function ReviewCard({ item, position, onMovieClick }) {
               />
             </div>
           )}
-
           <div
             style={{
               flex: 1,
@@ -282,9 +316,7 @@ function ReviewCard({ item, position, onMovieClick }) {
                 margin: "8px 0 0",
                 fontSize: 13,
                 lineHeight: 1.68,
-                color: isCenter
-                  ? "rgba(240,240,240,0.88)"
-                  : "rgba(240,240,240,0.5)",
+                color: isCenter ? "rgba(240,240,240,0.88)" : "rgba(240,240,240,0.5)",
                 fontFamily: FONT_BODY,
                 fontWeight: 400,
                 display: "-webkit-box",
@@ -293,61 +325,31 @@ function ReviewCard({ item, position, onMovieClick }) {
                 overflow: "hidden",
               }}
             >
-              {item.text
-                ? `"${item.text}"`
-                : "Một bộ phim tuyệt vời, rất đáng để xem!"}
+              {item.text ? `"${item.text}"` : "Một bộ phim tuyệt vời, rất đáng để xem!"}
             </p>
           </div>
         </div>
 
         <div style={{ height: 1, background: C.border, marginBottom: 12 }} />
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              minWidth: 0,
-            }}
-          >
+        {/* ── Avatar + username | Title + time ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <div
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: "50%",
-                flexShrink: 0,
-                background: C.surfaceHigh,
-                border: `1px solid ${C.borderMid}`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 10,
-                fontWeight: 600,
-                color: "rgba(240,240,240,0.7)",
-                fontFamily: FONT_BODY,
-                letterSpacing: "0.03em",
+                width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+                background: C.surfaceHigh, border: `1px solid ${C.borderMid}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 10, fontWeight: 600,
+                color: "rgba(240,240,240,0.7)", fontFamily: FONT_BODY, letterSpacing: "0.03em",
               }}
             >
               {getInitials(item.user)}
             </div>
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: C.text,
-                fontFamily: FONT_BODY,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                maxWidth: 100,
+                fontSize: 12, fontWeight: 600, color: C.text, fontFamily: FONT_BODY,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 100,
               }}
             >
               {item.user}
@@ -357,27 +359,14 @@ function ReviewCard({ item, position, onMovieClick }) {
           <div style={{ textAlign: "right", minWidth: 0 }}>
             <div
               style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: C.textSub,
-                fontFamily: FONT_BODY,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                maxWidth: 140,
+                fontSize: 11, fontWeight: 600, color: C.textSub, fontFamily: FONT_BODY,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140,
               }}
             >
-              {item.movie.title}
+              {content.title}
             </div>
             {item.time && (
-              <div
-                style={{
-                  fontSize: 10,
-                  color: C.textDim,
-                  fontFamily: FONT_BODY,
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 10, color: C.textDim, fontFamily: FONT_BODY, marginTop: 2 }}>
                 {item.time}
               </div>
             )}

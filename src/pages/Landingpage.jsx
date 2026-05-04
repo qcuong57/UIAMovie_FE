@@ -1,7 +1,7 @@
 // src/pages/LandingPage.jsx
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Film, Shield, Zap, Star, Check, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Play, Film, Shield, Zap, Star, Check, ArrowLeft, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -12,6 +12,7 @@ const C = {
   input:   '#0a0a0a',
   border:  'rgba(255,255,255,0.07)',
   borderF: 'rgba(229,9,20,0.45)',
+  borderE: 'rgba(229,9,20,0.6)',
   accent:  '#e50914',
   accentL: 'rgba(229,9,20,0.1)',
   accentG: 'rgba(229,9,20,0.3)',
@@ -21,20 +22,72 @@ const C = {
   green:   '#46d369',
 };
 
+// ─── Validation helpers (khớp RegisterValidator.cs + LoginValidator.cs) ────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
+const HAS_UPPER = /[A-Z]/;
+const HAS_LOWER = /[a-z]/;
+const HAS_DIGIT = /[0-9]/;
+const HAS_SPECIAL = /[!@#$%^&*]/;
+
+function validateEmail(v) {
+  if (!v.trim()) return 'Email không được để trống';
+  if (!EMAIL_RE.test(v.trim())) return 'Email không hợp lệ';
+  if (v.length > 255) return 'Email tối đa 255 ký tự';
+  return '';
+}
+
+function validateUsername(v) {
+  if (!v.trim()) return 'Username không được để trống';
+  if (v.trim().length < 3 || v.trim().length > 50) return 'Username phải từ 3–50 ký tự';
+  if (!USERNAME_RE.test(v.trim())) return 'Username chỉ được chứa chữ, số, dấu gạch dưới';
+  return '';
+}
+
+function validatePassword(v) {
+  if (!v) return 'Mật khẩu không được để trống';
+  if (v.length < 8) return 'Mật khẩu tối thiểu 8 ký tự';
+  if (!HAS_UPPER.test(v)) return 'Mật khẩu phải chứa ít nhất 1 chữ hoa';
+  if (!HAS_LOWER.test(v)) return 'Mật khẩu phải chứa ít nhất 1 chữ thường';
+  if (!HAS_DIGIT.test(v)) return 'Mật khẩu phải chứa ít nhất 1 số';
+  if (!HAS_SPECIAL.test(v)) return 'Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*)';
+  return '';
+}
+
+function validateConfirm(pass, confirm) {
+  if (!confirm) return 'Vui lòng xác nhận mật khẩu';
+  if (pass !== confirm) return 'Xác nhận mật khẩu không khớp';
+  return '';
+}
+
 // ─── Shared UI ──────────────────────────────────────────────────────────────
 
-function InputField({ label, type = 'text', value, onChange, placeholder, autoFocus }) {
-  const [focused,  setFocused]  = useState(false);
+function InputField({ label, type = 'text', value, onChange, onBlur, onEnter, placeholder, autoFocus, error, touched }) {
+  const [focused, setFocused] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const isPass = type === 'password';
+  const hasError = touched && error;
+
+  const borderColor = hasError
+    ? C.borderE
+    : focused
+    ? C.borderF
+    : C.border;
+
+  const labelColor = hasError
+    ? 'rgba(229,9,20,0.9)'
+    : focused
+    ? 'rgba(229,9,20,0.8)'
+    : '#555';
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: hasError ? 8 : 14 }}>
       {label && (
         <label style={{
           display: 'block', marginBottom: 6,
           fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
-          color: focused ? 'rgba(229,9,20,0.8)' : '#555',
+          color: labelColor,
           textTransform: 'uppercase', letterSpacing: '0.08em',
           transition: 'color 0.15s',
         }}>
@@ -49,11 +102,12 @@ function InputField({ label, type = 'text', value, onChange, placeholder, autoFo
           placeholder={placeholder}
           autoFocus={autoFocus}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => { setFocused(false); onBlur && onBlur(); }}
+          onKeyDown={e => e.key === 'Enter' && onEnter && onEnter()}
           style={{
             width: '100%', padding: isPass ? '11px 40px 11px 14px' : '11px 14px',
             background: C.input,
-            border: `1px solid ${focused ? C.borderF : C.border}`,
+            border: `1px solid ${borderColor}`,
             borderRadius: 6, color: C.text, outline: 'none',
             fontFamily: "'Nunito', sans-serif", fontSize: 13.5,
             transition: 'border-color 0.15s',
@@ -73,6 +127,24 @@ function InputField({ label, type = 'text', value, onChange, placeholder, autoFo
           </button>
         )}
       </div>
+      <AnimatePresence>
+        {hasError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 5 }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: "'Nunito', sans-serif", fontSize: 11.5,
+              color: '#ff6b6b', lineHeight: 1.4,
+            }}
+          >
+            <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -115,8 +187,10 @@ function ErrorMsg({ children }) {
         padding: '9px 12px', borderRadius: 6, marginBottom: 14,
         background: 'rgba(229,9,20,0.08)', border: '1px solid rgba(229,9,20,0.2)',
         fontFamily: "'Nunito', sans-serif", fontSize: 12.5, color: '#ff6b6b',
+        display: 'flex', alignItems: 'flex-start', gap: 8,
       }}
     >
+      <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
       {children}
     </motion.div>
   );
@@ -151,7 +225,6 @@ function Divider({ text }) {
 }
 
 // ─── VIEWS ──────────────────────────────────────────────────────────────────
-// view: 'login' | 'register' | 'otp' | 'forgot' | 'reset' | 'done'
 
 // ── Login ────────────────────────────────────────────────────────────────────
 function LoginView({ onSwitch, onOtp, navigate }) {
@@ -159,9 +232,21 @@ function LoginView({ onSwitch, onOtp, navigate }) {
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
+  const [touched,  setTouched]  = useState({});
+
+  const errors = {
+    email:    validateEmail(email),
+    password: password ? '' : 'Mật khẩu không được để trống',
+  };
+
+  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
+  const touchAll = () => setTouched({ email: true, password: true });
+
+  const hasFieldErrors = Object.values(errors).some(Boolean);
 
   const submit = async () => {
-    if (!email.trim() || !password) { setError('Vui lòng điền đầy đủ thông tin'); return; }
+    touchAll();
+    if (hasFieldErrors) return;
     setLoading(true); setError('');
     try {
       const data = await authService.login({ email: email.trim(), password });
@@ -174,7 +259,8 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       authService.saveSession(data);
       navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Email hoặc mật khẩu không đúng');
     } finally {
       setLoading(false);
     }
@@ -187,12 +273,16 @@ function LoginView({ onSwitch, onOtp, navigate }) {
         Đăng nhập để tiếp tục xem phim
       </p>
 
-      <InputField label="Email" type="email" value={email} onChange={setEmail}
-        placeholder="email@example.com" autoFocus />
-      <InputField label="Mật khẩu" type="password" value={password} onChange={setPassword}
-        placeholder="••••••••" />
+      <InputField label="Email" type="email" value={email} onChange={v => { setEmail(v); touch('email'); }}
+        onBlur={() => touch('email')} onEnter={submit}
+        placeholder="email@example.com" autoFocus
+        error={errors.email} touched={touched.email} />
+      <InputField label="Mật khẩu" type="password" value={password} onChange={v => { setPassword(v); touch('password'); }}
+        onBlur={() => touch('password')} onEnter={submit}
+        placeholder="••••••••"
+        error={errors.password} touched={touched.password} />
 
-      <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 14 }}>
+      <div style={{ textAlign: 'right', marginTop: 4, marginBottom: 14 }}>
         <button onClick={() => onSwitch('forgot')} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           fontFamily: "'Nunito',sans-serif", fontSize: 12, color: C.sub,
@@ -234,21 +324,31 @@ function RegisterView({ onSwitch }) {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState(false);
+  const [touched,  setTouched]  = useState({});
+
+  const errors = {
+    username: validateUsername(username),
+    email:    validateEmail(email),
+    password: validatePassword(password),
+    confirm:  validateConfirm(password, confirm),
+  };
+
+  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
+  const touchAll = () => setTouched({ username: true, email: true, password: true, confirm: true });
+
+  const hasFieldErrors = Object.values(errors).some(Boolean);
 
   const submit = async () => {
-    if (!username.trim() || !email.trim() || !password || !confirm) {
-      setError('Vui lòng điền đầy đủ thông tin'); return;
-    }
-    if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return; }
-    if (password !== confirm) { setError('Mật khẩu xác nhận không khớp'); return; }
-
+    touchAll();
+    if (hasFieldErrors) return;
     setLoading(true); setError('');
     try {
       await authService.register({ email: email.trim(), username: username.trim(), password, confirmPassword: confirm });
       setSuccess(true);
       setTimeout(() => onSwitch('login'), 1800);
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Đăng ký thất bại, vui lòng thử lại');
     } finally {
       setLoading(false);
     }
@@ -274,14 +374,22 @@ function RegisterView({ onSwitch }) {
         Miễn phí — bắt đầu xem phim ngay
       </p>
 
-      <InputField label="Tên hiển thị" value={username} onChange={setUsername}
-        placeholder="Tên của bạn" autoFocus />
-      <InputField label="Email" type="email" value={email} onChange={setEmail}
-        placeholder="email@example.com" />
-      <InputField label="Mật khẩu" type="password" value={password} onChange={setPassword}
-        placeholder="Ít nhất 6 ký tự" />
-      <InputField label="Xác nhận mật khẩu" type="password" value={confirm} onChange={setConfirm}
-        placeholder="Nhập lại mật khẩu" />
+      <InputField label="Tên hiển thị" value={username} onChange={v => { setUsername(v); touch('username'); }}
+        onBlur={() => touch('username')}
+        placeholder="Chỉ chữ, số, dấu _ (3–50 ký tự)" autoFocus
+        error={errors.username} touched={touched.username} />
+      <InputField label="Email" type="email" value={email} onChange={v => { setEmail(v); touch('email'); }}
+        onBlur={() => touch('email')}
+        placeholder="email@example.com"
+        error={errors.email} touched={touched.email} />
+      <InputField label="Mật khẩu" type="password" value={password} onChange={v => { setPassword(v); touch('password'); if (touched.confirm) touch('confirm'); }}
+        onBlur={() => touch('password')}
+        placeholder="8+ ký tự, hoa, thường, số, ký tự đặc biệt"
+        error={errors.password} touched={touched.password} />
+      <InputField label="Xác nhận mật khẩu" type="password" value={confirm} onChange={v => { setConfirm(v); touch('confirm'); }}
+        onBlur={() => touch('confirm')}
+        placeholder="Nhập lại mật khẩu"
+        error={errors.confirm} touched={touched.confirm} />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
@@ -308,11 +416,11 @@ function RegisterView({ onSwitch }) {
 
 // ── OTP (2FA) ─────────────────────────────────────────────────────────────────
 function OtpView({ userId, email, navigate, onBack }) {
-  const [code,     setCode]     = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [resending,setResending]= useState(false);
-  const [error,    setError]    = useState('');
-  const [sent,     setSent]     = useState(false);
+  const [code,      setCode]     = useState('');
+  const [loading,   setLoading]  = useState(false);
+  const [resending, setResending]= useState(false);
+  const [error,     setError]    = useState('');
+  const [sent,      setSent]     = useState(false);
 
   const submit = async () => {
     if (code.length !== 6) { setError('Mã OTP gồm 6 chữ số'); return; }
@@ -322,7 +430,8 @@ function OtpView({ userId, email, navigate, onBack }) {
       authService.saveSession(data);
       navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Mã OTP không đúng hoặc đã hết hạn');
     } finally {
       setLoading(false);
     }
@@ -334,7 +443,8 @@ function OtpView({ userId, email, navigate, onBack }) {
       await authService.sendOtp(userId);
       setSent(true);
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Không thể gửi lại OTP');
     } finally {
       setResending(false);
     }
@@ -413,15 +523,21 @@ function ForgotView({ onSwitch }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [sent,    setSent]    = useState(false);
+  const [touched, setTouched] = useState({});
+
+  const emailError = validateEmail(email);
+  const touch = () => setTouched({ email: true });
 
   const submit = async () => {
-    if (!email.trim()) { setError('Vui lòng nhập email'); return; }
+    touch();
+    if (emailError) return;
     setLoading(true); setError('');
     try {
       await authService.forgotPassword(email.trim());
       setSent(true);
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Có lỗi xảy ra, vui lòng thử lại');
     } finally {
       setLoading(false);
     }
@@ -457,8 +573,11 @@ function ForgotView({ onSwitch }) {
         Nhập email đăng ký, chúng tôi sẽ gửi mã OTP để đặt lại mật khẩu.
       </p>
 
-      <InputField label="Email" type="email" value={email} onChange={setEmail}
-        placeholder="email@example.com" autoFocus />
+      <InputField label="Email" type="email" value={email}
+        onChange={v => { setEmail(v); setTouched({ email: true }); }}
+        onBlur={touch}
+        placeholder="email@example.com" autoFocus
+        error={emailError} touched={touched.email} />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
@@ -478,20 +597,31 @@ function ResetView({ email: initEmail, onSwitch }) {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
   const [done,     setDone]     = useState(false);
+  const [touched,  setTouched]  = useState({});
+
+  const errors = {
+    email:    !initEmail ? validateEmail(email) : '',
+    code:     !code.trim() ? 'Vui lòng nhập mã OTP' : code.replace(/\D/g,'').length !== 6 ? 'Mã OTP gồm 6 chữ số' : '',
+    password: validatePassword(password),
+    confirm:  validateConfirm(password, confirm),
+  };
+
+  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
+  const touchAll = () => setTouched({ email: true, code: true, password: true, confirm: true });
+
+  const hasFieldErrors = Object.values(errors).some(Boolean);
 
   const submit = async () => {
-    if (!email.trim() || !code || !password || !confirm) {
-      setError('Vui lòng điền đầy đủ'); return;
-    }
-    if (password !== confirm) { setError('Mật khẩu không khớp'); return; }
-    if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return; }
+    touchAll();
+    if (hasFieldErrors) return;
     setLoading(true); setError('');
     try {
       await authService.resetPassword({ email: email.trim(), code, newPassword: password, confirmPassword: confirm });
       setDone(true);
       setTimeout(() => onSwitch('login'), 2000);
     } catch (e) {
-      setError(e.message);
+      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
+      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Mã OTP không đúng hoặc đã hết hạn');
     } finally {
       setLoading(false);
     }
@@ -521,10 +651,28 @@ function ResetView({ email: initEmail, onSwitch }) {
         Nhập mã OTP và mật khẩu mới của bạn.
       </p>
 
-      {!initEmail && <InputField label="Email" type="email" value={email} onChange={setEmail} placeholder="email@example.com"/>}
-      <InputField label="Mã OTP" value={code} onChange={setCode} placeholder="6 chữ số" autoFocus={!!initEmail}/>
-      <InputField label="Mật khẩu mới" type="password" value={password} onChange={setPassword} placeholder="Ít nhất 6 ký tự"/>
-      <InputField label="Xác nhận mật khẩu" type="password" value={confirm} onChange={setConfirm} placeholder="Nhập lại mật khẩu"/>
+      {!initEmail && (
+        <InputField label="Email" type="email" value={email}
+          onChange={v => { setEmail(v); touch('email'); }}
+          onBlur={() => touch('email')}
+          placeholder="email@example.com"
+          error={errors.email} touched={touched.email} />
+      )}
+      <InputField label="Mã OTP" value={code}
+        onChange={v => { setCode(v.replace(/\D/,'')); touch('code'); }}
+        onBlur={() => touch('code')}
+        placeholder="6 chữ số" autoFocus={!!initEmail}
+        error={errors.code} touched={touched.code} />
+      <InputField label="Mật khẩu mới" type="password" value={password}
+        onChange={v => { setPassword(v); touch('password'); if (touched.confirm) touch('confirm'); }}
+        onBlur={() => touch('password')}
+        placeholder="8+ ký tự, hoa, thường, số, ký tự đặc biệt"
+        error={errors.password} touched={touched.password} />
+      <InputField label="Xác nhận mật khẩu" type="password" value={confirm}
+        onChange={v => { setConfirm(v); touch('confirm'); }}
+        onBlur={() => touch('confirm')}
+        placeholder="Nhập lại mật khẩu"
+        error={errors.confirm} touched={touched.confirm} />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
       <SubmitBtn loading={loading} onClick={submit}>Đặt lại mật khẩu</SubmitBtn>
@@ -543,9 +691,8 @@ const FEATURES = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  // view: 'login' | 'register' | 'otp' | 'forgot' | 'reset'
-  const [view,    setView]    = useState('login');
-  const [otpData, setOtpData] = useState(null);   // { userId, email }
+  const [view,       setView]       = useState('login');
+  const [otpData,    setOtpData]    = useState(null);
   const [resetEmail, setResetEmail] = useState('');
 
   const handleSwitch = (next, data) => {

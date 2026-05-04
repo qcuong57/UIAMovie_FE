@@ -1,5 +1,14 @@
 // src/services/authService.js
 // Auth API Service — khớp hoàn toàn với AuthController.cs
+//
+// LƯU Ý: BE trả ApiResponseDTO<T> { data: T, message: string }
+// Mỗi method unwrap res.data?.data để lấy payload thực.
+// Cách tốt hơn: thêm interceptor vào axios.js:
+//   axiosInstance.interceptors.response.use(
+//     res => ({ ...res, data: res.data?.data ?? res.data }),
+//     err => Promise.reject(err)
+//   );
+// Khi đó xóa hết ?. data ở các method bên dưới, chỉ dùng res.data là đủ.
 
 import axiosInstance from '../config/axios';
 
@@ -17,7 +26,8 @@ const authService = {
       password,
       confirmPassword,
     });
-    return res.data;
+    // BE trả ApiResponseDTO<T> { data, message } — unwrap .data
+    return res.data?.data ?? res.data;
   },
 
   /**
@@ -33,7 +43,8 @@ const authService = {
    */
   login: async ({ email, password }) => {
     const res = await axiosInstance.post('/auth/login', { email, password });
-    return res.data;
+    // BE trả { data: { accessToken,... } | { requiresOtp, userId } , message }
+    return res.data?.data ?? res.data;
   },
 
   /**
@@ -43,7 +54,7 @@ const authService = {
    */
   sendOtp: async (userId) => {
     const res = await axiosInstance.post('/auth/otp/send', { userId });
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
   /**
@@ -54,7 +65,7 @@ const authService = {
    */
   verifyOtp: async ({ userId, code }) => {
     const res = await axiosInstance.post('/auth/otp/verify', { userId, code });
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
   /**
@@ -64,14 +75,9 @@ const authService = {
    */
   forgotPassword: async (email) => {
     const res = await axiosInstance.post('/auth/forgot-password', { email });
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
-  /**
-   * Đặt lại mật khẩu bằng OTP
-   * POST /api/auth/reset-password
-   * Body: { email, code, newPassword, confirmPassword }
-   */
   resetPassword: async ({ email, code, newPassword, confirmPassword }) => {
     const res = await axiosInstance.post('/auth/reset-password', {
       email,
@@ -79,26 +85,17 @@ const authService = {
       newPassword,
       confirmPassword,
     });
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
-  /**
-   * Refresh access token
-   * POST /api/auth/refresh-token
-   * Body: { refreshToken }
-   */
   refreshToken: async (refreshToken) => {
     const res = await axiosInstance.post('/auth/refresh-token', { refreshToken });
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
-  /**
-   * Đăng xuất
-   * POST /api/auth/logout  (cần Bearer token)
-   */
   logout: async () => {
     const res = await axiosInstance.post('/auth/logout');
-    return res.data;
+    return res.data?.data ?? res.data;
   },
 
   // ── Local storage helpers ─────────────────────────────────────────────────

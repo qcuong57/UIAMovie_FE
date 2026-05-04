@@ -4,18 +4,159 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Pencil, AlertCircle, Check } from 'lucide-react';
 import genreService from '../../services/genreService';
 import { Button, Input, Modal, Spinner } from '../../components/ui';
-import { C, FONT_DISPLAY, FONT_BODY } from '../../context/homeTokens';
 
-const GENRE_COLOR_LIST = [
-  '#dc2626','#0891b2','#7c3aed','#d97706','#be185d',
-  '#5b21b6','#166534','#0e7490','#b45309','#3f6212',
+// Import Font Tokens từ homeTokens
+import { FONT_BODY, FONT_TITLE } from '../../context/homeTokens';
+
+const T = {
+  bg:          '#F4F3EF',
+  surface:     '#FFFFFF',
+  surfaceAlt:  '#FAFAF8',
+  surfaceHov:  '#F6F6F3',
+  accent:      '#1C5F3A',
+  accentLight: '#EAF5EF',
+  accentText:  '#155230',
+  text:        '#18181B',
+  textSub:     '#71717A',
+  textMuted:   '#A1A1AA',
+  border:      'rgba(0,0,0,0.08)',
+  shadow:      '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
+};
+
+const PALETTE = [
+  '#1C5F3A','#1D4ED8','#9333EA','#D97706','#DC2626',
+  '#0891B2','#BE185D','#166534','#C2410C','#0E7490',
 ];
 
+// ── Genre Card ─────────────────────────────────────────────────────────────────
+const GenreCard = ({ genre, color, index, onEdit, onDelete }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.96 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.94 }}
+    transition={{ delay: index * 0.03 }}
+    style={{
+      background:   T.surface,
+      borderRadius: 14,
+      border:       `1px solid ${T.border}`,
+      boxShadow:    T.shadow,
+      padding:      '18px 18px 16px',
+      position:     'relative',
+      overflow:     'hidden',
+      display:      'flex',
+      flexDirection:'column',
+      gap:          12,
+    }}
+    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.09)'}
+    onMouseLeave={e => e.currentTarget.style.boxShadow = T.shadow}
+  >
+    {/* Color accent bar */}
+    <div style={{
+      position:     'absolute',
+      top:          0, left: 0, right: 0,
+      height:       3,
+      background:   color,
+      borderRadius: '14px 14px 0 0',
+    }} />
+
+    {/* Color dot + name */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>
+      <div style={{
+        width:        28, height: 28,
+        borderRadius: 8,
+        background:   `${color}18`,
+        border:       `1px solid ${color}30`,
+        flexShrink:   0,
+        display:      'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <div style={{
+          width: 10, height: 10,
+          borderRadius: '50%',
+          background: color,
+        }} />
+      </div>
+      <p style={{
+        fontFamily: FONT_BODY, fontSize: 14,
+        fontWeight: 600, color: T.text,
+        flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {genre.name}
+      </p>
+    </div>
+
+    {/* Description */}
+    {genre.description && (
+      <p style={{
+        fontFamily:          FONT_BODY, fontSize: 12,
+        color:               T.textMuted, lineHeight: 1.5,
+        overflow:            'hidden',
+        display:             '-webkit-box',
+        WebkitLineClamp:     2,
+        WebkitBoxOrient:     'vertical',
+      }}>
+        {genre.description}
+      </p>
+    )}
+
+    {/* Footer */}
+    <div style={{
+      display:        'flex',
+      alignItems:     'center',
+      justifyContent: 'space-between',
+      marginTop:      'auto',
+    }}>
+      {genre.movieCount !== undefined ? (
+        <span style={{
+          fontFamily: FONT_BODY, fontSize: 11.5,
+          color:      T.textMuted,
+        }}>
+          {genre.movieCount} phim
+        </span>
+      ) : <span />}
+
+      <div style={{ display: 'flex', gap: 5 }}>
+        <button
+          onClick={() => onEdit(genre)}
+          style={{
+            width:        28, height: 28,
+            borderRadius: 7,
+            background:   T.surfaceHov,
+            border:       `1px solid ${T.border}`,
+            cursor:       'pointer', color: T.textSub,
+            display:      'flex', alignItems: 'center', justifyContent: 'center',
+            transition:   'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = T.accentLight; e.currentTarget.style.color = T.accent; }}
+          onMouseLeave={e => { e.currentTarget.style.background = T.surfaceHov; e.currentTarget.style.color = T.textSub; }}
+        >
+          <Pencil size={12} />
+        </button>
+        <button
+          onClick={() => onDelete(genre.id)}
+          style={{
+            width:        28, height: 28,
+            borderRadius: 7,
+            background:   '#FEF2F2',
+            border:       '1px solid rgba(220,38,38,0.18)',
+            cursor:       'pointer', color: '#DC2626',
+            display:      'flex', alignItems: 'center', justifyContent: 'center',
+            transition:   'all 0.15s',
+          }}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
+  </motion.div>
+);
+
+// ── AdminGenres ────────────────────────────────────────────────────────────────
 export default function AdminGenres() {
   const [genres,   setGenres]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [showAdd,  setShowAdd]  = useState(false);
-  const [editItem, setEditItem] = useState(null);  // { id, name, description }
+  const [editItem, setEditItem] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [saving,   setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -25,7 +166,7 @@ export default function AdminGenres() {
   const fetchGenres = async () => {
     setLoading(true);
     try {
-      const res = await genreService.getAllGenres();
+      const res  = await genreService.getAllGenres();
       const list = Array.isArray(res) ? res : res?.data ?? res?.genres ?? [];
       setGenres(list);
     } catch (e) { console.error(e); }
@@ -48,16 +189,14 @@ export default function AdminGenres() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError('Tên thể loại không được để trống'); return; }
-    setSaving(true);
-    setError('');
+    setSaving(true); setError('');
     try {
       if (editItem) {
         await genreService.updateGenre(editItem.id, form);
         setGenres(prev => prev.map(g => g.id === editItem.id ? { ...g, ...form } : g));
         setEditItem(null);
       } else {
-        const res = await genreService.createGenre(form);
-        const newGenre = res?.data ?? res;
+        await genreService.createGenre(form);
         await fetchGenres();
         setShowAdd(false);
       }
@@ -78,101 +217,79 @@ export default function AdminGenres() {
   };
 
   return (
-    <div style={{ padding: '36px 40px 64px', maxWidth: 900 }}>
+    <div style={{ padding: '28px 32px 56px', maxWidth: 1100, fontFamily: FONT_BODY }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
+      <div style={{
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        marginBottom:   24,
+      }}>
         <div>
-          <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>
-            Quản lý
-          </p>
-          <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>
-            Thể loại ({genres.length})
-          </h1>
+          <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 3 }}>Quản lý</p>
+          <h2 style={{
+            fontFamily: FONT_TITLE,
+            fontSize: 22, fontWeight: 700, color: T.text,
+            letterSpacing: '-0.02em',
+          }}>
+            Thể loại
+            <span style={{
+              fontFamily:   FONT_BODY,
+              marginLeft:   8, fontSize: 14, fontWeight: 500,
+              color:        T.textMuted, letterSpacing: 0,
+            }}>
+              ({genres.length})
+            </span>
+          </h2>
         </div>
-        <Button variant="primary" size="sm" icon={<Plus size={14} />} onClick={openAdd}>
-          Thêm thể loại
-        </Button>
+        <button
+          onClick={openAdd}
+          style={{
+            display:      'flex', alignItems: 'center', gap: 7,
+            padding:      '9px 18px',
+            borderRadius: 10,
+            background:   T.accent,
+            border:       'none', cursor: 'pointer',
+            fontFamily:   FONT_BODY, fontSize: 13.5, fontWeight: 600,
+            color:        '#fff',
+            transition:   'all 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = T.accentText}
+          onMouseLeave={e => e.currentTarget.style.background = T.accent}
+        >
+          <Plus size={15} strokeWidth={2.2} /> Thêm thể loại
+        </button>
       </div>
 
       {/* Grid */}
       {loading ? (
-        <div style={{ padding: '64px 0', textAlign: 'center' }}>
-          <Spinner size="md" color="red" />
+        <div style={{ padding: '80px 0', textAlign: 'center' }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            border: `2.5px solid ${T.accentLight}`,
+            borderTopColor: T.accent,
+            animation: 'spin 0.75s linear infinite',
+            margin: '0 auto',
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        <div style={{
+          display:             'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          gap:                 12,
+        }}>
           <AnimatePresence>
-            {genres.map((g, i) => {
-              const color = GENRE_COLOR_LIST[i % GENRE_COLOR_LIST.length];
-              return (
-                <motion.div
-                  key={g.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: i * 0.03 }}
-                  style={{
-                    background: '#0d0d0d',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 10,
-                    padding: '18px 18px 14px',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Color bar */}
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: color }} />
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 800, color: 'white', marginBottom: 4 }}>
-                        {g.name}
-                      </p>
-                      {g.description && (
-                        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                          {g.description}
-                        </p>
-                      )}
-                      {g.movieCount !== undefined && (
-                        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 8 }}>
-                          {g.movieCount} phim
-                        </p>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => openEdit(g)}
-                        style={{
-                          width: 28, height: 28, borderRadius: 6,
-                          background: 'rgba(255,255,255,0.05)',
-                          border: `1px solid ${C.border}`,
-                          cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <Pencil size={12} />
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => setDeleteId(g.id)}
-                        style={{
-                          width: 28, height: 28, borderRadius: 6,
-                          background: 'rgba(229,24,30,0.08)',
-                          border: `1px solid rgba(229,24,30,0.2)`,
-                          cursor: 'pointer', color: C.accent,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {genres.map((g, i) => (
+              <GenreCard
+                key={g.id}
+                genre={g}
+                color={PALETTE[i % PALETTE.length]}
+                index={i}
+                onEdit={openEdit}
+                onDelete={setDeleteId}
+              />
+            ))}
           </AnimatePresence>
         </div>
       )}
@@ -186,7 +303,7 @@ export default function AdminGenres() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => { setShowAdd(false); setEditItem(null); }}>Hủy</Button>
-            <Button variant="primary" size="sm" loading={saving} icon={<Check size={14} />} onClick={handleSave}>
+            <Button variant="primary" size="sm" loading={saving} icon={<Check size={14}/>} onClick={handleSave}>
               {editItem ? 'Lưu' : 'Tạo mới'}
             </Button>
           </>
@@ -223,8 +340,8 @@ export default function AdminGenres() {
         }
       >
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <AlertCircle size={18} color={C.accent} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>
+          <AlertCircle size={18} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }}/>
+          <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: T.textSub, lineHeight: 1.6 }}>
             Xóa thể loại này? Các phim liên kết sẽ mất thể loại này.
           </p>
         </div>

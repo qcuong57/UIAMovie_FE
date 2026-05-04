@@ -1,35 +1,42 @@
-// src/components/admin/UserDetailPanel.jsx
+// src/components/admin/user/UserDetailPanel.jsx  ← REDESIGNED
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil, CheckCircle, XCircle } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
-import { Spinner } from '../../ui';
-import { C, FONT_DISPLAY, FONT_BODY } from '../../../context/homeTokens';
+
+const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
+const T = {
+  bg:          '#F4F3EF',
+  surface:     '#FFFFFF',
+  surfaceAlt:  '#FAFAF8',
+  accent:      '#1C5F3A',
+  accentLight: '#EAF5EF',
+  accentText:  '#155230',
+  text:        '#18181B',
+  textSub:     '#71717A',
+  textMuted:   '#A1A1AA',
+  border:      'rgba(0,0,0,0.08)',
+  shadow:      '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
+  shadowLg:    '0 20px 60px rgba(0,0,0,0.14)',
+};
 
 const ROLE_STYLE = {
-  admin: { label: 'Admin', bg: 'rgba(229,24,30,0.12)', border: 'rgba(229,24,30,0.3)', color: '#e5181e' },
-  user:  { label: 'User',  bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.5)' },
+  admin: { label: 'Admin', bg: T.accentLight, border: `${T.accent}30`, color: T.accentText },
+  user:  { label: 'User',  bg: T.bg,          border: T.border,        color: T.textSub   },
 };
 
 const MetaRow = ({ icon: Icon, label, value, accent }) => value != null ? (
-  <div style={{
-    display: 'flex', alignItems: 'center', gap: 12,
-    padding: '12px 0', borderBottom: `1px solid ${C.border}`,
-  }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
     <div style={{
-      width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-      background: accent ? `${accent}12` : 'rgba(255,255,255,0.05)',
-      border: `1px solid ${accent ? `${accent}25` : C.border}`,
+      width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+      background: accent ? `${accent}12` : T.surfaceAlt,
+      border: `1px solid ${accent ? `${accent}25` : T.border}`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <Icon size={13} color={accent ?? 'rgba(255,255,255,0.3)'} />
+      <Icon size={13} color={accent ?? T.textMuted} />
     </div>
-    <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)', minWidth: 100, flexShrink: 0 }}>
-      {label}
-    </span>
-    <span style={{ fontFamily: FONT_BODY, fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.4, fontWeight: 500 }}>
-      {value}
-    </span>
+    <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, minWidth: 110, flexShrink: 0 }}>{label}</span>
+    <span style={{ fontFamily: FONT, fontSize: 13, color: T.text, lineHeight: 1.4, fontWeight: 500 }}>{value}</span>
   </div>
 ) : null;
 
@@ -56,11 +63,7 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.55)',
-          zIndex: 199, backdropFilter: 'blur(3px)',
-        }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 199, backdropFilter: 'blur(3px)' }}
       />
 
       {/* Panel */}
@@ -68,135 +71,95 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
         initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
         style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 460, zIndex: 200,
-          background: '#0a0a0a',
-          borderLeft: `1px solid ${C.border}`,
-          display: 'flex', flexDirection: 'column',
-          boxShadow: '-20px 0 60px rgba(0,0,0,0.8)',
+          position:   'fixed', top: 0, right: 0, bottom: 0,
+          width:      460, zIndex: 200,
+          background: T.surface,
+          borderLeft: `1px solid ${T.border}`,
+          display:    'flex', flexDirection: 'column',
+          boxShadow:  T.shadowLg,
+          fontFamily: FONT,
         }}
       >
         {/* Header */}
-        <div style={{
-          flexShrink: 0,
-          padding: '20px 20px 0',
-          borderBottom: `1px solid ${C.border}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ flexShrink: 0, borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
-              <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>
-                Chi tiết
-              </p>
-              <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 900, color: 'white', margin: 0 }}>
-                Người dùng
-              </h2>
+              <p style={{ fontSize: 11, color: T.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4, fontWeight: 600 }}>Chi tiết</p>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.01em' }}>Người dùng</h2>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               {onEdit && !loading && user && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => onEdit(user)}
-                  style={{
-                    padding: '6px 14px', borderRadius: 6,
-                    background: 'rgba(126,174,232,0.10)',
-                    border: '1px solid rgba(126,174,232,0.25)',
-                    cursor: 'pointer', fontFamily: FONT_BODY,
-                    fontSize: 12, fontWeight: 700, color: '#7eaee8',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                  }}
-                >
+                <button onClick={() => onEdit(user)}
+                  style={{ padding: '7px 14px', borderRadius: 8, background: T.accentLight, border: `1px solid ${T.accent}30`, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600, color: T.accentText, display: 'flex', alignItems: 'center', gap: 5 }}>
                   <Pencil size={12} /> Sửa
-                </motion.button>
+                </button>
               )}
-              <motion.button
-                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                onClick={onClose}
-                style={{
-                  width: 30, height: 30, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${C.border}`,
-                  cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <X size={14} />
-              </motion.button>
+              <button onClick={onClose}
+                style={{ width: 32, height: 32, borderRadius: '50%', background: T.bg, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.textSub, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={15} />
+              </button>
             </div>
           </div>
 
-          {/* Avatar + name hero */}
+          {/* Avatar hero */}
           {!loading && user && (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', paddingBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '0 20px 20px' }}>
               <div style={{
-                width: 64, height: 64, borderRadius: 14, flexShrink: 0, overflow: 'hidden',
-                background: 'linear-gradient(135deg,#e5181e,#7a0409)',
+                width: 60, height: 60, borderRadius: 14, flexShrink: 0, overflow: 'hidden',
+                background: `linear-gradient(135deg, ${T.accent}, ${T.accentText})`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: `2px solid ${rStyle.border}`,
               }}>
                 {user.avatarUrl
                   ? <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 900, color: 'white' }}>{initials}</span>
+                  : <span style={{ fontFamily: FONT, fontSize: 24, fontWeight: 700, color: 'white' }}>{initials}</span>
                 }
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 900, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 700, color: T.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
                     {user.username}
                   </h3>
-                  <span style={{
-                    fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700,
-                    padding: '2px 8px', borderRadius: 99,
-                    background: rStyle.bg, border: `1px solid ${rStyle.border}`, color: rStyle.color,
-                    flexShrink: 0,
-                  }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: rStyle.bg, border: `1px solid ${rStyle.border}`, color: rStyle.color, flexShrink: 0 }}>
                     {rStyle.label}
                   </span>
                 </div>
-                <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-                  {user.email}
-                </p>
+                <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub }}>{user.email}</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.bg }}>
           {loading && (
-            <div style={{ padding: '48px 0', textAlign: 'center' }}>
-              <Spinner size="md" color="red" />
+            <div style={{ padding: '64px 0', textAlign: 'center' }}>
+              <div style={{ width: 26, height: 26, borderRadius: '50%', border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: 'spin 0.75s linear infinite', margin: '0 auto' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
           {!loading && user && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-
-              {/* Info section */}
-              <p style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>
-                Thông tin
-              </p>
-
-              <MetaRow icon={Mail}     label="Email"        value={user.email} />
-              <MetaRow icon={User}     label="Tên đăng nhập" value={user.username} />
-              <MetaRow icon={Shield}   label="Quyền"        value={rStyle.label} accent={role === 'admin' ? '#e5181e' : undefined} />
-              <MetaRow icon={Star}     label="Subscription" value={user.subscriptionType ?? '—'} />
-              <MetaRow icon={Calendar} label="Ngày tạo"     value={user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'} />
-              <MetaRow
-                icon={Clock}
-                label="Xác thực 2FA"
-                value={user.is2FaEnabled ? '✓ Đã bật' : '✗ Chưa bật'}
-                accent={user.is2FaEnabled ? '#46d369' : undefined}
-              />
+              <div style={{ background: T.surface, borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: T.shadow, padding: 16 }}>
+                <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Thông tin</p>
+                <MetaRow icon={Mail}      label="Email"          value={user.email} />
+                <MetaRow icon={User}      label="Tên đăng nhập"  value={user.username} />
+                <MetaRow icon={Shield}    label="Quyền"          value={rStyle.label} accent={role === 'admin' ? T.accent : undefined} />
+                <MetaRow icon={Star}      label="Subscription"   value={user.subscriptionType ?? '—'} />
+                <MetaRow icon={Calendar}  label="Ngày tạo"       value={user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'} />
+                <MetaRow
+                  icon={user.is2FaEnabled ? CheckCircle : XCircle}
+                  label="Xác thực 2FA"
+                  value={user.is2FaEnabled ? 'Đã bật' : 'Chưa bật'}
+                  accent={user.is2FaEnabled ? '#16A34A' : undefined}
+                />
+              </div>
 
               {/* ID */}
-              <div style={{
-                marginTop: 24, padding: '10px 14px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
-              }}>
-                <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: 'rgba(255,255,255,0.2)', marginBottom: 4 }}>USER ID</p>
-                <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.35)', wordBreak: 'break-all', lineHeight: 1.5 }}>
-                  {user.id}
-                </p>
+              <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, boxShadow: T.shadow }}>
+                <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>USER ID</p>
+                <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textSub, wordBreak: 'break-all', lineHeight: 1.6 }}>{user.id}</p>
               </div>
             </motion.div>
           )}

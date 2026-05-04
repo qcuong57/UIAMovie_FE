@@ -1,11 +1,12 @@
 // src/pages/FavoritesPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Play, Trash2, Star, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
+import { Heart, Play, Trash2, Star, SlidersHorizontal, LayoutGrid, List, Film, Tv } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import movieService from '../../services/movieService';
-import MovieCard    from '../../components/movie/MovieCard';
+import movieService   from '../../services/movieService';
+import tvShowService  from '../../services/tvShowService';
+import MovieCard      from '../../components/movie/MovieCard';
 import BackButton   from '../../components/common/BackButton';
 import Pagination   from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
@@ -34,7 +35,24 @@ const normalizeFav = f => ({
   duration: f.duration || null,
 });
 
-const favToMovie = f => ({ ...f, id: f.movieId });
+const normalizeTvFav = f => ({
+  id:        f.id,
+  movieId:   f.tvShowId ?? f.movieId ?? f.id,
+  title:     f.tvShowTitle ?? f.title ?? f.name ?? '',
+  posterUrl: f.posterUrl || null,
+  rating:    f.rating ? Number(f.rating) : null,
+  addedAt:   f.addedAt ? new Date(f.addedAt) : null,
+  year:      f.firstAirDate
+               ? new Date(f.firstAirDate).getFullYear()
+               : f.releaseDate
+                 ? new Date(f.releaseDate).getFullYear()
+                 : f.year || null,
+  genres:    f.genres || [],
+  duration:  null,
+  isTvShow:  true,
+});
+
+const favToMovie = f => ({ ...f, id: f.movieId, isTvShow: f.isTvShow ?? false });
 
 const SORT_OPTIONS = [
   { value: 'addedAt', label: 'Mới thêm nhất'    },
@@ -51,8 +69,39 @@ const sortFavs = (arr, by) => [...arr].sort((a, b) => {
   return 0;
 });
 
+// ── Tab switcher Phim / TV Show ───────────────────────────────────────────────
+const ContentTabs = ({ activeTab, onTabChange, movieCount, tvCount }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 28,
+    background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 4,
+    width: 'fit-content', border: '1px solid rgba(255,255,255,0.07)' }}>
+    {[
+      { key: 'movie',  label: 'Phim',    Icon: Film,  count: movieCount },
+      { key: 'tvshow', label: 'TV Show', Icon: Tv,    count: tvCount    },
+    ].map(({ key, label, Icon, count }) => {
+      const active = activeTab === key;
+      return (
+        <motion.button key={key} onClick={() => onTabChange(key)} whileTap={{ scale: 0.97 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 18px',
+            borderRadius: 7, border: 'none', cursor: 'pointer',
+            background: active ? C.accent : 'transparent',
+            color: active ? 'white' : 'rgba(255,255,255,0.4)',
+            fontFamily: FONT_BODY, fontSize: 13, fontWeight: active ? 700 : 500,
+            transition: 'all 0.18s' }}>
+          <Icon size={14} strokeWidth={active ? 2.5 : 2} />
+          {label}
+          <span style={{ padding: '1px 7px', borderRadius: 99, fontSize: 10, fontWeight: 700,
+            background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+            color: active ? 'white' : 'rgba(255,255,255,0.35)' }}>
+            {count}
+          </span>
+        </motion.button>
+      );
+    })}
+  </div>
+);
+
 // ── Empty state ───────────────────────────────────────────────────────────────
-const EmptyState = ({ onBrowse }) => (
+const EmptyState = ({ onBrowse, activeTab }) => (
   <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '110px 0', gap: 22, textAlign: 'center' }}>
     <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2.6, ease: 'easeInOut' }}
@@ -62,12 +111,14 @@ const EmptyState = ({ onBrowse }) => (
     <div style={{ maxWidth: 320 }}>
       <p style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 10 }}>Danh sách trống</p>
       <p style={{ fontFamily: FONT_BODY, fontSize: 14, color: 'rgba(255,255,255,0.32)', lineHeight: 1.7 }}>
-        Thêm phim yêu thích bằng cách bấm biểu tượng trái tim khi xem phim
+        {activeTab === 'tvshow'
+          ? 'Thêm TV show yêu thích bằng cách bấm biểu tượng trái tim khi xem'
+          : 'Thêm phim yêu thích bằng cách bấm biểu tượng trái tim khi xem phim'}
       </p>
     </div>
     <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.96 }} onClick={onBrowse}
       style={{ marginTop: 4, padding: '11px 30px', borderRadius: 10, background: C.accent, border: 'none', color: 'white', cursor: 'pointer', fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700 }}>
-      Khám phá phim ngay
+      {activeTab === 'tvshow' ? 'Khám phá TV show ngay' : 'Khám phá phim ngay'}
     </motion.button>
   </motion.div>
 );
@@ -84,7 +135,7 @@ const FavRow = ({ fav, onRemove, index, isMobile }) => {
       exit={{ opacity: 0, x: 14, transition: { duration: 0.18 } }}
       transition={{ delay: Math.min(index * 0.03, 0.4), duration: 0.28 }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      onClick={() => navigate(`/movie/${fav.movieId}/info`)}
+      onClick={() => navigate(fav.isTvShow ? `/tvshow/${fav.movieId}/info` : `/movie/${fav.movieId}/info`)}
       style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 16, padding: isMobile ? '8px 10px' : '10px 14px', borderRadius: 12, cursor: 'pointer', background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${hovered ? 'rgba(255,255,255,0.07)' : 'transparent'}`, transition: 'all 0.2s' }}
     >
       {!isMobile && <span style={{ fontFamily: FONT_BEBAS, fontSize: 24, color: 'rgba(255,255,255,0.14)', width: 30, textAlign: 'right', flexShrink: 0, lineHeight: 1 }}>{index + 1}</span>}
@@ -109,7 +160,7 @@ const FavRow = ({ fav, onRemove, index, isMobile }) => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ display: 'flex', gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             {!isMobile && <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={e => { e.stopPropagation(); navigate(`/movie/${fav.movieId}`); }}
+              onClick={e => { e.stopPropagation(); navigate(fav.isTvShow ? `/tvshow/${fav.movieId}` : `/movie/${fav.movieId}`); }}
               style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Play size={13} fill="#000" color="#000" style={{ marginLeft: 1 }} />
             </motion.button>}
@@ -129,30 +180,62 @@ const FavRow = ({ fav, onRemove, index, isMobile }) => {
 export default function FavoritesPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const [favorites, setFavorites] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [sortBy,    setSortBy]    = useState('addedAt');
-  const [viewMode,  setViewMode]  = useState(isMobile ? 'grid' : 'grid');
-  const [showSort,  setShowSort]  = useState(false);
+  const [activeTab,    setActiveTab]    = useState('movie');
+  const [movies,       setMovies]       = useState([]);
+  const [tvShows,      setTvShows]      = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [sortBy,       setSortBy]       = useState('addedAt');
+  const [viewMode,     setViewMode]     = useState('grid');
+  const [showSort,     setShowSort]     = useState(false);
+
+  // Alias cho tab hiện tại
+  const favorites = activeTab === 'movie' ? movies : tvShows;
 
   // ── Load data ───────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    try {
+      const [movieRes, tvRes] = await Promise.allSettled([
+        movieService.getFavorites(),
+        tvShowService.getFavorites?.() ?? Promise.resolve([]),
+      ]);
+
+      if (movieRes.status === 'fulfilled') {
+        const raw = Array.isArray(movieRes.value)
+          ? movieRes.value
+          : movieRes.value?.data || movieRes.value?.favorites || [];
+        setMovies(raw.map(normalizeFav));
+      }
+
+      if (tvRes.status === 'fulfilled') {
+        const raw = Array.isArray(tvRes.value)
+          ? tvRes.value
+          : tvRes.value?.data || tvRes.value?.favorites || [];
+        setTvShows(raw.map(normalizeTvFav));
+      }
+    } catch (e) { console.error(e); }
+  }, []);
+
   const loadFavorites = useCallback(async () => {
     setLoading(true);
-    try {
-      const res = await movieService.getFavorites();
-      const raw = Array.isArray(res) ? res : res?.data || res?.favorites || [];
-      setFavorites(raw.map(normalizeFav));
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
+    await fetchData();
+    setLoading(false);
+  }, [fetchData]);
 
   useEffect(() => { loadFavorites(); }, []);
 
-  const handleRemove = useCallback(async movieId => {
-    setFavorites(prev => prev.filter(f => f.movieId !== movieId));
-    try { await movieService.removeFavorite(movieId); }
-    catch { loadFavorites(); }
-  }, [loadFavorites]);
+  const handleRemove = useCallback(async id => {
+    // Optimistic update — xóa khỏi UI ngay, không setLoading
+    if (activeTab === 'movie') {
+      setMovies(prev => prev.filter(f => f.movieId !== id));
+      try { await movieService.removeFavorite(id); }
+      catch { fetchData(); }  // silent reload nếu lỗi, không show skeleton
+    } else {
+      setTvShows(prev => prev.filter(f => f.movieId !== id));
+      try {
+        await (tvShowService.removeFavorite?.(id) ?? Promise.resolve());
+      } catch { fetchData(); }
+    }
+  }, [activeTab, fetchData]);
 
   // ── Sort toàn bộ, rồi phân trang ───────────────────────────────────────────
   const sorted = sortFavs(favorites, sortBy);
@@ -206,7 +289,9 @@ export default function FavoritesPage() {
                 <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 22 : 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>Yêu Thích</h1>
               </div>
               <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.3)', paddingLeft: 32 }}>
-                {favorites.length > 0 ? `${favorites.length} phim` : 'Chưa có phim nào'}
+                {movies.length > 0 || tvShows.length > 0
+                  ? `${movies.length} phim · ${tvShows.length} TV show`
+                  : 'Chưa có gì'}
               </p>
             </div>
           </div>
@@ -251,9 +336,19 @@ export default function FavoritesPage() {
           )}
         </motion.div>
 
+        {/* Tabs Phim / TV Show */}
+        <ContentTabs
+          activeTab={activeTab}
+          onTabChange={(tab) => { setActiveTab(tab); setSortBy('addedAt'); }}
+          movieCount={movies.length}
+          tvCount={tvShows.length}
+        />
+
         {/* Content */}
         <AnimatePresence mode="wait">
-          {sorted.length === 0 && <EmptyState key="empty" onBrowse={() => navigate('/browse')} />}
+          {sorted.length === 0 && (
+            <EmptyState key={`empty-${activeTab}`} onBrowse={() => navigate(activeTab === 'tvshow' ? '/browse?tab=tvshow' : '/browse')} activeTab={activeTab} />
+          )}
 
           {/* Grid view */}
           {sorted.length > 0 && viewMode === 'grid' && (
@@ -268,6 +363,7 @@ export default function FavoritesPage() {
                         movie={favToMovie(fav)}
                         isFavorited={true}
                         onFavoriteToggle={(_, isFav) => { if (!isFav) handleRemove(fav.movieId); }}
+                        onClick={(item) => navigate(item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`)}
                       />
                     </motion.div>
                   ))}
@@ -281,7 +377,7 @@ export default function FavoritesPage() {
                 pageSize={PAGE_SIZE}
                 onPageChange={pagination.goTo}
                 pageNumbers={pagination.pageNumbers}
-                itemLabel="phim yêu thích"
+                itemLabel={activeTab === 'tvshow' ? 'TV show yêu thích' : 'phim yêu thích'}
               />
             </motion.div>
           )}
@@ -307,7 +403,7 @@ export default function FavoritesPage() {
                 pageSize={PAGE_SIZE}
                 onPageChange={pagination.goTo}
                 pageNumbers={pagination.pageNumbers}
-                itemLabel="phim yêu thích"
+                itemLabel={activeTab === 'tvshow' ? 'TV show yêu thích' : 'phim yêu thích'}
               />
             </motion.div>
           )}

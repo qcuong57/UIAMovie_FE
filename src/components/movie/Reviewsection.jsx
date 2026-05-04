@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Edit2, Trash2, AlertTriangle, ChevronDown, LogIn } from 'lucide-react';
+import { Star, Edit2, Trash2, AlertTriangle, ChevronDown, LogIn, Tv, Film } from 'lucide-react';
 import reviewService from '../../services/reviewService';
 import { C } from './ui/movieConstants';
 import SectionTitle from './ui/SectionTitle';
@@ -69,8 +69,48 @@ const AvatarCircle = ({ name, avatarUrl, size = 38 }) => {
   );
 };
 
-// ── ReviewCard (nâng cấp từ shared với edit/delete/expand) ─────────────────
-const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
+// ── Toast ──────────────────────────────────────────────────────────────────
+const Toast = ({ message, type = 'success', onClose }) => {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  const bg   = type === 'success' ? 'rgba(34,197,94,0.12)'  : 'rgba(239,68,68,0.12)';
+  const border = type === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+  const color  = type === 'success' ? '#4ade80'             : '#f87171';
+  const icon   = type === 'success' ? '✓'                   : '✕';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -16, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0,   scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.95 }}
+      transition={{ duration: 0.22 }}
+      style={{
+        position: 'fixed', top: 72, right: 20, zIndex: 9999,
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 18px', borderRadius: 10,
+        background: bg, border: `1px solid ${border}`,
+        backdropFilter: 'blur(12px)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        maxWidth: 340,
+      }}
+    >
+      <span style={{ fontSize: 16, color, fontWeight: 700 }}>{icon}</span>
+      <span style={{
+        fontFamily: "'Nunito', sans-serif", fontSize: 13.5,
+        fontWeight: 600, color: '#fff',
+      }}>{message}</span>
+      <button onClick={onClose} style={{
+        marginLeft: 'auto', background: 'none', border: 'none',
+        cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: 14,
+        padding: '0 0 0 8px', lineHeight: 1,
+      }}>✕</button>
+    </motion.div>
+  );
+};
+
+// ── ReviewCard ─────────────────────────────────────────────────────────────
+const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index, episodeLabel }) => {
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
   const isLong = (review.reviewText?.length || 0) > 280;
@@ -106,6 +146,12 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
               {fmtDate(review.createdAt)}
               {review.updatedAt && <span style={{ marginLeft: 6, fontStyle: 'italic' }}>(đã chỉnh)</span>}
             </p>
+            {/* Hiển thị nhãn tập nếu review theo tập */}
+            {episodeLabel && (
+              <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.accent, marginTop: 2 }}>
+                {episodeLabel}
+              </p>
+            )}
           </div>
         </div>
 
@@ -182,27 +228,141 @@ const ReviewCard = ({ review, currentUserId, onEdit, onDelete, index }) => {
   );
 };
 
+// ── EpisodeSelector ────────────────────────────────────────────────────────
+// episodes = [{ id, seasonNumber, episodeNumber, title }]
+const EpisodeSelector = ({ episodes, selectedId, onSelect }) => {
+  const [open, setOpen] = useState(false);
+  const selected = episodes.find(e => e.id === selectedId);
+
+  // Group by season
+  const seasons = episodes.reduce((acc, ep) => {
+    const s = ep.seasonNumber ?? 1;
+    if (!acc[s]) acc[s] = [];
+    acc[s].push(ep);
+    return acc;
+  }, {});
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 18 }}>
+      <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
+        color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+        Chọn tập
+      </p>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', background: C.surface, border: `1px solid ${open ? C.borderBright : C.border}`,
+          borderRadius: 8, cursor: 'pointer', color: selected ? C.text : C.textDim,
+          fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'border-color 0.15s',
+        }}
+      >
+        <span>
+          {selected
+            ? `S${selected.seasonNumber}E${selected.episodeNumber}${selected.title ? ` — ${selected.title}` : ''}`
+            : 'Chọn tập bạn muốn đánh giá...'}
+        </span>
+        <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0, color: C.textDim }} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+              background: C.card, border: `1px solid ${C.borderBright}`, borderRadius: 10,
+              maxHeight: 260, overflowY: 'auto',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            }}
+          >
+            {Object.entries(seasons).map(([seasonNum, eps]) => (
+              <div key={seasonNum}>
+                <p style={{
+                  fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700,
+                  color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.1em',
+                  padding: '8px 14px 4px', margin: 0,
+                }}>
+                  Phần {seasonNum}
+                </p>
+                {eps.map(ep => (
+                  <button
+                    key={ep.id}
+                    type="button"
+                    onClick={() => { onSelect(ep.id); setOpen(false); }}
+                    style={{
+                      width: '100%', textAlign: 'left', padding: '8px 14px',
+                      background: ep.id === selectedId ? C.accentSoft : 'none',
+                      border: 'none', cursor: 'pointer', color: ep.id === selectedId ? C.accent : C.textSub,
+                      fontFamily: "'Nunito', sans-serif", fontSize: 13,
+                      transition: 'background 0.1s, color 0.1s',
+                    }}
+                    onMouseEnter={e => { if (ep.id !== selectedId) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = C.text; } }}
+                    onMouseLeave={e => { if (ep.id !== selectedId) { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.textSub; } }}
+                  >
+                    <span style={{ fontWeight: 700, marginRight: 6 }}>E{ep.episodeNumber}</span>
+                    {ep.title || `Tập ${ep.episodeNumber}`}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 // ── ReviewForm ─────────────────────────────────────────────────────────────
-const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
+// contentType: 'movie' | 'tvshow'
+// reviewMode (TV show only): 'show' | 'episode'
+// activeEpisodeId: nếu có, lock thẳng vào tập đó (không cần chọn)
+const ReviewForm = ({ movieId, tvShowId, contentType, reviewMode, episodes, existing, onSuccess, onCancel, activeEpisodeId }) => {
   const [rating,     setRating]     = useState(existing?.rating || 0);
   const [text,       setText]       = useState(existing?.reviewText || '');
   const [isSpoiler,  setIsSpoiler]  = useState(existing?.isSpoiler || false);
+  // Dùng ref để luôn có episodeId mới nhất khi submit (tránh stale state)
+  const activeEpIdRef = React.useRef(activeEpisodeId);
+  const [episodeId,  setEpisodeId]  = useState(existing?.episodeId || activeEpisodeId || null);
   const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState(null);
   const isEdit = !!existing;
   const MAX = 5000;
 
+  // Sync episodeId khi activeEpisodeId prop thay đổi (user đổi tập)
+  React.useEffect(() => {
+    if (activeEpisodeId && activeEpisodeId !== activeEpIdRef.current) {
+      activeEpIdRef.current = activeEpisodeId;
+      setEpisodeId(activeEpisodeId);
+    }
+  }, [activeEpisodeId]);
+
+  // Lock episode khi: đang edit (review cũ có episodeId) HOẶC activeEpisodeId được truyền vào
+  const lockedEpisode = (isEdit && !!existing?.episodeId) || !!activeEpisodeId;
+
   const handleSubmit = async () => {
+    // Dùng activeEpisodeId trực tiếp nếu có (luôn fresh từ prop), fallback về state episodeId
+    const submitEpisodeId = activeEpisodeId || episodeId;
     if (rating < 1) { setError('Vui lòng chọn số sao'); return; }
+    if (reviewMode === 'episode' && !submitEpisodeId) { setError('Vui lòng chọn tập'); return; }
+    console.debug('[ReviewForm] submit payload:', { tvShowId, episodeId: submitEpisodeId, rating, reviewMode });
     setSubmitting(true);
     setError(null);
     try {
       if (isEdit) {
         await reviewService.updateReview(existing.id, { rating, reviewText: text || null, isSpoiler });
-      } else {
+      } else if (contentType === 'movie') {
         await reviewService.createReview({ movieId, rating, reviewText: text || null, isSpoiler });
+      } else if (reviewMode === 'episode') {
+        await reviewService.createReview({ tvShowId, episodeId: submitEpisodeId, rating, reviewText: text || null, isSpoiler });
+      } else {
+        await reviewService.createReview({ tvShowId, rating, reviewText: text || null, isSpoiler });
       }
-      onSuccess();
+      onSuccess(isEdit);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.response?.data || e.message || 'Có lỗi xảy ra';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -224,6 +384,27 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
         {isEdit ? 'Chỉnh sửa đánh giá' : 'Viết đánh giá của bạn'}
       </p>
 
+      {/* Episode selector — chỉ hiện khi TV show + episode mode + không phải edit */}
+      {reviewMode === 'episode' && !lockedEpisode && episodes?.length > 0 && (
+        <EpisodeSelector
+          episodes={episodes}
+          selectedId={episodeId}
+          onSelect={setEpisodeId}
+        />
+      )}
+      {lockedEpisode && (existing?.episodeLabel || activeEpisodeId) && (
+        <div style={{ marginBottom: 14, padding: '7px 12px', borderRadius: 7,
+          background: C.accentSoft, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Tv size={12} style={{ color: C.accent }} />
+          <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, color: C.accent, fontWeight: 600 }}>
+            {existing?.episodeLabel || (() => {
+              const ep = (episodes || []).find(e => e.id === activeEpisodeId);
+              return ep ? `S${ep.seasonNumber}E${ep.episodeNumber}${ep.title ? ` — ${ep.title}` : ''}` : 'Tập đang xem';
+            })()}
+          </span>
+        </div>
+      )}
+
       <div style={{ marginBottom: 18 }}>
         <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
           color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
@@ -241,7 +422,13 @@ const ReviewForm = ({ movieId, existing, onSuccess, onCancel }) => {
           value={text}
           onChange={e => setText(e.target.value)}
           maxLength={MAX}
-          placeholder="Chia sẻ cảm nhận của bạn về bộ phim này..."
+          placeholder={
+            reviewMode === 'episode' && episodeId
+              ? 'Chia sẻ cảm nhận của bạn về tập phim này...'
+              : reviewMode === 'episode'
+              ? 'Chọn tập trước rồi viết nhận xét...'
+              : 'Chia sẻ cảm nhận của bạn...'
+          }
           style={{
             width: '100%', minHeight: 100, padding: '12px 14px',
             background: C.surface, border: `1px solid ${C.border}`,
@@ -367,8 +554,81 @@ const ReviewSkeleton = () => (
   </div>
 );
 
-const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
+// ── ModeTabs — "Cả Show" / "Theo Tập" ─────────────────────────────────────
+const ModeTabs = ({ mode, onChange }) => (
+  <div style={{
+    display: 'inline-flex', background: 'rgba(255,255,255,0.05)',
+    borderRadius: 10, padding: 3, marginBottom: 24, gap: 2,
+  }}>
+    {[
+      { value: 'show',    label: 'Cả Show',   Icon: Film },
+      { value: 'episode', label: 'Theo Tập',  Icon: Tv   },
+    ].map(({ value, label, Icon }) => (
+      <button
+        key={value}
+        type="button"
+        onClick={() => onChange(value)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer',
+          fontFamily: "'Nunito', sans-serif", fontSize: 13, fontWeight: 700,
+          transition: 'all 0.18s',
+          background: mode === value ? C.accent : 'none',
+          color:      mode === value ? '#fff'   : C.textDim,
+        }}
+        onMouseEnter={e => { if (mode !== value) e.currentTarget.style.color = C.text; }}
+        onMouseLeave={e => { if (mode !== value) e.currentTarget.style.color = C.textDim; }}
+      >
+        <Icon size={13} />
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ReviewSection — Main component
+//
+// Props:
+//   contentType: 'movie' | 'tvshow'   (default: 'movie')
+//   movieId:    string  (dùng khi contentType='movie')
+//   tvShowId:   string  (dùng khi contentType='tvshow')
+//   episodes:   Array<{ id, seasonNumber, episodeNumber, title }>
+//   movieRating, voteCount, currentUser — giữ nguyên như cũ
+// ══════════════════════════════════════════════════════════════════════════════
+const ReviewSection = ({
+  contentType = 'movie',
+  movieId,
+  tvShowId,
+  episodes = [],
+  reviewMode: reviewModeProp = null, // 'show' | 'episode' | null (null = user-controlled tabs)
+  activeEpisodeId = null,            // ID tập đang xem — auto-select & lock khi truyền vào
+  movieRating,
+  voteCount,
+  currentUser,
+}) => {
   const isMobile = useIsMobile();
+
+  // reviewMode: nếu prop truyền vào thì lock, không thì user tự chọn bằng ModeTabs
+  const isModeLocked = reviewModeProp !== null;
+  const [reviewModeInternal, setReviewModeInternal] = useState(reviewModeProp ?? 'show');
+  // Khi prop thay đổi (hoặc remount với prop mới), sync lại internal state
+  React.useEffect(() => {
+    if (reviewModeProp !== null) setReviewModeInternal(reviewModeProp);
+  }, [reviewModeProp]);
+  const reviewMode = isModeLocked ? reviewModeProp : reviewModeInternal;
+  const setReviewMode = isModeLocked ? () => {} : setReviewModeInternal;
+
+  // Nếu activeEpisodeId được truyền, auto-select tập đó và lock episode mode
+  const [selectedEp,  setSelectedEp]  = useState(activeEpisodeId ?? null);
+  // Ref luôn giữ giá trị mới nhất của selectedEp — tránh stale trong fetchAll closure
+  const selectedEpRef = React.useRef(activeEpisodeId ?? null);
+  // Update ref ngay trong render body khi activeEpisodeId prop thay đổi
+  if (activeEpisodeId && activeEpisodeId !== selectedEpRef.current) {
+    selectedEpRef.current = activeEpisodeId;
+  }
+  const setSelectedEpSync = (val) => { selectedEpRef.current = val; setSelectedEp(val); };
+
   const [reviews,    setReviews]    = useState([]);
   const [stats,      setStats]      = useState(null);
   const [myReview,   setMyReview]   = useState(null);
@@ -376,26 +636,101 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
   const [editTarget, setEditTarget] = useState(null);
   const [isEditing,  setIsEditing]  = useState(false);
   const [page,       setPage]       = useState(1);
+  // Toast state
+  const [toast, setToast] = useState(null); // { message, type }
   const PAGE_SIZE = 8;
 
+  // Sync selectedEp khi activeEpisodeId prop thay đổi (user đổi tập đang xem)
+  useEffect(() => {
+    if (activeEpisodeId) {
+      setSelectedEpSync(activeEpisodeId);
+    }
+  }, [activeEpisodeId]);
+
+  // Khi đổi tab hoặc đổi tập: reset page về 1 mà KHÔNG trigger fetchAll ngay lập tức
+  // (fetchAll sẽ tự chạy lại khi page thay đổi qua dep bên dưới)
+  const prevModeRef = React.useRef(reviewMode);
+  const prevEpRef   = React.useRef(selectedEp);
+  useEffect(() => {
+    const modeChanged = prevModeRef.current !== reviewMode;
+    const epChanged   = prevEpRef.current   !== selectedEp;
+    prevModeRef.current = reviewMode;
+    prevEpRef.current   = selectedEp;
+    if (modeChanged || epChanged) {
+      setPage(1);
+      setReviews([]);
+      setStats(null);
+    }
+  }, [reviewMode, selectedEp]);
+
   // ── Fetch ────────────────────────────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
-    if (!movieId) return;
+  // Dùng ref để luôn đọc state mới nhất, tránh stale closure trong useCallback
+  const stateRef = React.useRef({});
+  // selectedEp dùng ref để luôn là giá trị mới nhất khi fetchAll chạy
+  stateRef.current = { contentType, movieId, tvShowId, reviewMode, selectedEp: selectedEpRef.current, page, currentUser };
+
+  const fetchAll = React.useCallback(async (pageOverride) => {
+    const { contentType, movieId, tvShowId, reviewMode, selectedEp, page, currentUser } = stateRef.current;
+    const isMovie   = contentType === 'movie';
+    const isShow    = contentType === 'tvshow' && reviewMode === 'show';
+    const isEpisode = contentType === 'tvshow' && reviewMode === 'episode';
+    const fetchPage = pageOverride ?? page;
+
+    if (isMovie  && !movieId)   return;
+    if (isShow   && !tvShowId)  return;
+    if (isEpisode && !selectedEp) {
+      setReviews([]);
+      setStats(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const [reviewsRes, statsRes] = await Promise.all([
-        reviewService.getMovieReviews(movieId, page, PAGE_SIZE).catch(() => null),
-        reviewService.getMovieRatingStats(movieId).catch(() => null),
-      ]);
+      let reviewsRes, statsRes;
 
-      const rawData    = reviewsRes?.data ?? {};
+      if (isMovie) {
+        [reviewsRes, statsRes] = await Promise.all([
+          reviewService.getMovieReviews(movieId, fetchPage, PAGE_SIZE).catch(() => null),
+          reviewService.getMovieRatingStats(movieId).catch(() => null),
+        ]);
+      } else if (isShow) {
+        [reviewsRes, statsRes] = await Promise.all([
+          reviewService.getTvShowReviews(tvShowId, fetchPage, PAGE_SIZE).catch(() => null),
+          reviewService.getTvShowRatingStats(tvShowId).catch(() => null),
+        ]);
+      } else {
+        [reviewsRes, statsRes] = await Promise.all([
+          reviewService.getEpisodeReviews(selectedEp, fetchPage, PAGE_SIZE).catch(() => null),
+          reviewService.getEpisodeRatingStats(selectedEp).catch(() => null),
+        ]);
+      }
+
+      // Backend: ApiResponseDTO<MovieReviewsResponseDTO>
+      // axios unwrap: response.data = { data: { reviews: [...] }, message }
+      const envelope   = reviewsRes?.data ?? {};
+      const rawData    = envelope?.data ?? envelope ?? {};
       const reviewList = rawData.reviews ?? rawData.Reviews ?? [];
       setReviews(Array.isArray(reviewList) ? reviewList : []);
-      setStats(statsRes?.data ?? null);
+
+      // Stats: ApiResponseDTO<MovieRatingStatsDTO>
+      // axios: response.data = { data: { averageRating, totalReviews, ... } }
+      const statsEnvelope = statsRes?.data ?? {};
+      setStats(statsEnvelope?.data ?? statsEnvelope ?? null);
 
       if (currentUser) {
-        const checkRes  = await reviewService.checkUserReview(movieId).catch(() => null);
-        const checkData = checkRes?.data ?? {};
+        let checkRes = null;
+        if (isMovie) {
+          checkRes = await reviewService.checkUserMovieReview(movieId).catch(() => null);
+        } else if (isShow) {
+          checkRes = await reviewService.checkUserTvShowReview(tvShowId).catch(() => null);
+        } else {
+          checkRes = await reviewService.checkUserEpisodeReview(selectedEp).catch(() => null);
+        }
+        // check: ApiResponseDTO<CheckReviewResponseDTO>
+        // axios: response.data = { data: { hasReview, review }, message }
+        const checkEnvelope = checkRes?.data ?? {};
+        const checkData = checkEnvelope?.data ?? checkEnvelope ?? {};
         const hasReview = checkData.hasReview === true || checkData.HasReview === true;
         const reviewObj = checkData.review ?? checkData.Review ?? null;
         setMyReview(hasReview ? reviewObj : null);
@@ -407,9 +742,12 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
     } finally {
       setLoading(false);
     }
-  }, [movieId, page, currentUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // deps rỗng — luôn đọc state mới nhất từ stateRef.current
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  // Re-fetch khi các dependency thực sự thay đổi
+  useEffect(() => { fetchAll(); }, [contentType, movieId, tvShowId, reviewMode, selectedEp, page]); // eslint-disable-line
+
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleDelete = async (reviewId) => {
@@ -427,12 +765,15 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
     setIsEditing(true);
   };
 
-  const handleFormSuccess = async () => {
+  const handleFormSuccess = async (isEdit = false) => {
     setIsEditing(false);
     setEditTarget(null);
-    setMyReview({ rating: 0, _placeholder: true });
+    setToast({ message: isEdit ? 'Đánh giá đã được cập nhật! ✍️' : 'Đánh giá của bạn đã được gửi! 🎉', type: 'success' });
     setPage(1);
-    await fetchAll();
+    setReviews([]);
+    // Đảm bảo stateRef.current.page = 1 trước khi fetchAll (tránh stale)
+    stateRef.current = { ...stateRef.current, page: 1 };
+    await fetchAll(1);
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -440,10 +781,39 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
   const totalReviews = stats?.totalReviews     ?? stats?.TotalReviews     ?? 0;
   const ratingDist   = stats?.ratingDistribution ?? stats?.RatingDistribution ?? null;
 
+  // Label tập phim cho ReviewCard
+  const episodeLabelMap = React.useMemo(() => {
+    const m = {};
+    (episodes || []).forEach(ep => {
+      m[ep.id] = `S${ep.seasonNumber}E${ep.episodeNumber}${ep.title ? ` — ${ep.title}` : ''}`;
+    });
+    return m;
+  }, [episodes]);
+
   // ── Render ────────────────────────────────────────────────────────────────
+  const sectionTitle = contentType === 'tvshow' && reviewMode === 'episode'
+    ? 'Đánh Giá Theo Tập'
+    : 'Đánh Giá';
+
   return (
     <div>
-      <SectionTitle>Đánh Giá</SectionTitle>
+      {/* Toast notification */}
+      <AnimatePresence>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <SectionTitle>{sectionTitle}</SectionTitle>
+
+      {/* TV show mode tabs — chỉ hiện khi KHÔNG bị lock từ prop */}
+      {contentType === 'tvshow' && !isModeLocked && (
+        <ModeTabs mode={reviewMode} onChange={(m) => { setReviewMode(m); setSelectedEpSync(null); }} />
+      )}
 
       <div style={{
         display: 'grid',
@@ -473,8 +843,13 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
             ) : isEditing ? (
               <AnimatePresence>
                 <ReviewForm
+                  contentType={contentType}
                   movieId={movieId}
+                  tvShowId={tvShowId}
+                  reviewMode={reviewMode}
+                  episodes={episodes}
                   existing={editTarget}
+                  activeEpisodeId={activeEpisodeId}
                   onSuccess={handleFormSuccess}
                   onCancel={() => { setIsEditing(false); setEditTarget(null); }}
                 />
@@ -488,71 +863,95 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Star size={12} style={{ fill: C.gold, color: C.gold }} />
                       <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 13, fontWeight: 700, color: C.gold }}>
-                        Đánh giá gần nhất: {myReview.rating}/10
+                        Đánh giá của bạn: {myReview.rating}/10
                       </span>
-                      <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.textSub }}>
-                        — viết đánh giá mới hoặc sửa bản cũ
-                      </span>
+                      {myReview.episodeId && episodeLabelMap[myReview.episodeId] && (
+                        <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: C.accent }}>
+                          ({episodeLabelMap[myReview.episodeId]})
+                        </span>
+                      )}
                     </div>
                     <button onClick={() => handleEdit(myReview)}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none',
                         border: `1px solid ${C.accentGlow}`, cursor: 'pointer', color: C.accent,
                         padding: '5px 10px', borderRadius: 6,
                         fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 600 }}>
-                      <Edit2 size={11} /> Sửa bản cũ
+                      <Edit2 size={11} /> Sửa
                     </button>
                   </div>
                 )}
-                <ReviewForm movieId={movieId} existing={null} onSuccess={handleFormSuccess} onCancel={null} />
+                <ReviewForm
+                  contentType={contentType}
+                  movieId={movieId}
+                  tvShowId={tvShowId}
+                  reviewMode={reviewMode}
+                  episodes={episodes}
+                  existing={null}
+                  activeEpisodeId={activeEpisodeId}
+                  onSuccess={handleFormSuccess}
+                  onCancel={null}
+                />
               </>
             )}
           </div>
 
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <div style={{ flex: 1, height: 1, background: C.border }} />
-            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
-              color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
-              {totalReviews > 0 ? `${totalReviews} đánh giá` : 'Chưa có đánh giá'}
-            </span>
-            <div style={{ flex: 1, height: 1, background: C.border }} />
-          </div>
+          {/* Divider — khi episode mode và chưa chọn tập thì ẩn list */}
+          {(contentType !== 'tvshow' || reviewMode !== 'episode' || selectedEp) && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+                <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
+                  color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+                  {totalReviews > 0 ? `${totalReviews} đánh giá` : 'Chưa có đánh giá'}
+                </span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+              </div>
 
-          {/* Review list */}
-          {loading ? (
-            <ReviewSkeleton />
-          ) : reviews.length > 0 ? (
-            <AnimatePresence mode="popLayout">
-              {reviews.map((r, i) => (
-                <ReviewCard
-                  key={r.id}
-                  review={r}
-                  currentUserId={currentUser?.id}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  index={i}
-                />
-              ))}
-            </AnimatePresence>
-          ) : (
-            <div style={{ padding: '32px 0', textAlign: 'center',
-              color: C.textDim, fontFamily: "'Nunito', sans-serif", fontSize: 14 }}>
-              Chưa có đánh giá nào. Hãy là người đầu tiên! 🎬
-            </div>
+              {loading ? (
+                <ReviewSkeleton />
+              ) : reviews.length > 0 ? (
+                <AnimatePresence mode="popLayout">
+                  {reviews.map((r, i) => (
+                    <ReviewCard
+                      key={r.id}
+                      review={r}
+                      currentUserId={currentUser?.id}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      index={i}
+                      episodeLabel={r.episodeId ? episodeLabelMap[r.episodeId] : null}
+                    />
+                  ))}
+                </AnimatePresence>
+              ) : (
+                <div style={{ padding: '32px 0', textAlign: 'center',
+                  color: C.textDim, fontFamily: "'Nunito', sans-serif", fontSize: 14 }}>
+                  Chưa có đánh giá nào. Hãy là người đầu tiên! 🎬
+                </div>
+              )}
+
+              {reviews.length === PAGE_SIZE && (
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  style={{ width: '100%', marginTop: 12, padding: '10px', borderRadius: 8,
+                    background: 'none', border: `1px solid ${C.border}`,
+                    color: C.textSub, cursor: 'pointer',
+                    fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'all 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = C.borderBright}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                >
+                  Xem thêm đánh giá
+                </button>
+              )}
+            </>
           )}
 
-          {reviews.length === PAGE_SIZE && (
-            <button
-              onClick={() => setPage(p => p + 1)}
-              style={{ width: '100%', marginTop: 12, padding: '10px', borderRadius: 8,
-                background: 'none', border: `1px solid ${C.border}`,
-                color: C.textSub, cursor: 'pointer',
-                fontFamily: "'Nunito', sans-serif", fontSize: 13, transition: 'all 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = C.borderBright}
-              onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-            >
-              Xem thêm đánh giá
-            </button>
+          {/* Placeholder khi episode mode nhưng chưa chọn tập */}
+          {contentType === 'tvshow' && reviewMode === 'episode' && !selectedEp && (
+            <div style={{ padding: '32px 0', textAlign: 'center',
+              color: C.textDim, fontFamily: "'Nunito', sans-serif", fontSize: 14 }}>
+              Chọn tập ở form bên trên để xem đánh giá theo từng tập 📺
+            </div>
           )}
         </div>
 
@@ -561,8 +960,12 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
           <div style={{ padding: '24px', background: C.card, borderRadius: 14,
             border: `1px solid ${C.border}`, marginBottom: 16 }}>
             <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 16 }}>
-              Điểm trung bình
+              letterSpacing: '0.1em', color: C.textDim, textTransform: 'uppercase', marginBottom: 4 }}>
+              {contentType === 'tvshow' && reviewMode === 'episode' && selectedEp
+                ? `Điểm tập — ${episodeLabelMap[selectedEp] || ''}`
+                : contentType === 'tvshow'
+                ? 'Điểm cả show'
+                : 'Điểm trung bình'}
             </p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
               <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 56,
@@ -595,6 +998,7 @@ const ReviewSection = ({ movieId, movieRating, voteCount, currentUser }) => {
               <RatingDistribution distribution={ratingDist} total={totalReviews} />
             </div>
           )}
+
         </div>
 
       </div>

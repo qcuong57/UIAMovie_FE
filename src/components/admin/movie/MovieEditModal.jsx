@@ -1,10 +1,86 @@
-// src/components/admin/MovieEditModal.jsx
+// src/components/admin/movie/MovieEditModal.jsx  ← REDESIGNED light theme
 import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
-import { Button, Input, Modal } from '../../ui';
-import { C, FONT_BODY } from '../../../context/homeTokens';
+import { Button, Modal } from '../../ui';
 
+const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
+const T = {
+  bg:          '#F4F3EF',
+  surface:     '#FFFFFF',
+  surfaceAlt:  '#FAFAF8',
+  accent:      '#1C5F3A',
+  accentLight: '#EAF5EF',
+  accentText:  '#155230',
+  text:        '#18181B',
+  textSub:     '#71717A',
+  textMuted:   '#A1A1AA',
+  border:      'rgba(0,0,0,0.08)',
+  borderFocus: 'rgba(28,95,58,0.4)',
+  red:         '#DC2626',
+};
+
+// ── Field components ──────────────────────────────────────────────────────────
+function LightInput({ label, value, onChange, placeholder, error }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {label && (
+        <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {label}
+        </label>
+      )}
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          height: 42, padding: '0 14px',
+          background: T.surface,
+          border: `1px solid ${error ? 'rgba(220,38,38,0.5)' : focused ? T.borderFocus : T.border}`,
+          borderRadius: 10, color: T.text, outline: 'none',
+          fontFamily: FONT, fontSize: 13.5,
+          transition: 'border-color 0.15s', boxSizing: 'border-box', width: '100%',
+        }}
+      />
+      {error && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red }}>{error}</p>}
+    </div>
+  );
+}
+
+function LightTextarea({ label, value, onChange, placeholder, rows = 4 }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {label && (
+        <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {label}
+        </label>
+      )}
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          padding: '10px 14px',
+          background: T.surface,
+          border: `1px solid ${focused ? T.borderFocus : T.border}`,
+          borderRadius: 10, color: T.text, outline: 'none',
+          fontFamily: FONT, fontSize: 13.5, lineHeight: 1.65,
+          resize: 'vertical', transition: 'border-color 0.15s',
+          boxSizing: 'border-box', width: '100%',
+        }}
+      />
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function MovieEditModal({ movie, onClose, onSaved }) {
   const [form,   setForm]   = useState({ title: '', description: '', imdbRating: '' });
   const [saving, setSaving] = useState(false);
@@ -27,7 +103,6 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
     if (rating !== null && (isNaN(rating) || rating < 0 || rating > 10)) {
       setError('Rating phải từ 0 đến 10'); return;
     }
-
     setSaving(true); setError('');
     try {
       await axiosInstance.put(`/movies/${movie.id}`, {
@@ -39,16 +114,14 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
       onClose();
     } catch (e) {
       setError(e?.message ?? 'Có lỗi xảy ra');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   return (
     <Modal
       isOpen={!!movie}
       onClose={onClose}
-      title={`Chỉnh sửa: ${movie?.title ?? ''}`}
+      title={`Chỉnh sửa phim`}
       size="md"
       footer={
         <>
@@ -59,60 +132,68 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         </>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT }}>
+
         {/* Poster preview */}
         {movie?.posterUrl && (
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
-            <img src={movie.posterUrl} alt="" style={{ width: 48, height: 68, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }}/>
+          <div style={{
+            display: 'flex', gap: 14, alignItems: 'center',
+            padding: '12px 14px', borderRadius: 10,
+            background: T.surfaceAlt, border: `1px solid ${T.border}`,
+          }}>
+            <img src={movie.posterUrl} alt=""
+              style={{ width: 48, height: 68, borderRadius: 8, objectFit: 'cover', flexShrink: 0, border: `1px solid ${T.border}` }}
+            />
             <div>
-              <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Đang chỉnh sửa</p>
-              <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: 'white', fontWeight: 600 }}>{movie?.title}</p>
-              {movie?.tmdbId && <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>TMDB #{movie.tmdbId}</p>}
+              <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>
+                Đang chỉnh sửa
+              </p>
+              <p style={{ fontFamily: FONT, fontSize: 14, color: T.text, fontWeight: 700, lineHeight: 1.4 }}>
+                {movie?.title}
+              </p>
+              {movie?.tmdbId && (
+                <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                  TMDB #{movie.tmdbId}
+                </p>
+              )}
             </div>
           </div>
         )}
 
-        <Input
+        <LightInput
           label="Tên phim"
           placeholder="Tên phim..."
           value={form.title}
           onChange={v => setForm(f => ({ ...f, title: v }))}
-          error={error && error.includes('tên') ? error : ''}
+          error={/tên|Tên/i.test(error) ? error : ''}
         />
 
-        {/* Description textarea */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Mô tả
-          </label>
-          <textarea
-            value={form.description}
-            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="Nội dung mô tả phim..."
-            rows={4}
-            style={{
-              width: '100%', padding: '10px 14px',
-              background: '#111', border: `1px solid ${C.border}`,
-              borderRadius: 8, color: 'white', outline: 'none',
-              fontFamily: FONT_BODY, fontSize: 13, resize: 'vertical',
-              lineHeight: 1.6,
-            }}
-          />
-        </div>
+        <LightTextarea
+          label="Mô tả"
+          placeholder="Nội dung mô tả phim..."
+          value={form.description}
+          onChange={v => setForm(f => ({ ...f, description: v }))}
+          rows={4}
+        />
 
-        <Input
+        <LightInput
           label="Rating IMDB (0–10)"
           placeholder="VD: 8.5"
           value={form.imdbRating}
           onChange={v => setForm(f => ({ ...f, imdbRating: v }))}
-          error={error && error.includes('Rating') ? error : ''}
+          error={/Rating/i.test(error) ? error : ''}
         />
 
-        {error && !error.includes('tên') && !error.includes('Rating') && (
-          <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: '#e5181e' }}>{error}</p>
+        {error && !/tên|Tên|Rating/i.test(error) && (
+          <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</p>
         )}
 
-        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
+        <p style={{
+          fontFamily: FONT, fontSize: 12, color: T.textMuted,
+          lineHeight: 1.65, padding: '10px 14px',
+          background: T.surfaceAlt, borderRadius: 9,
+          border: `1px solid ${T.border}`, margin: 0,
+        }}>
           Chỉ có thể sửa tên, mô tả và rating. Để cập nhật thông tin khác hãy xóa và import lại từ TMDB.
         </p>
       </div>

@@ -1,4 +1,4 @@
-// src/components/movie/shared/BackdropCarousel.jsx
+// src/components/movie/ui/BackdropCarousel.jsx
 // Gồm cả BackdropLightbox (chỉ dùng nội bộ trong carousel)
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";

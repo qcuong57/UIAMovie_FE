@@ -1,153 +1,165 @@
 // src/services/reviewService.js
-// Review/Rating API Service
+// Maps 1-to-1 với RatingReviewController.cs
+// Route prefix: /api/ratingreview
 
 import axiosInstance from '../config/axios';
 
-// NOTE: axiosInstance đã unwrap response.data trong interceptor rồi,
-// nên tất cả response ở đây = response.data từ server.
-// Để callers dùng res.data nhất quán, ta wrap lại thành { data: payload }.
-const wrap = (payload) => ({ data: payload });
+const BASE = '/ratingreview';
 
 const reviewService = {
+  // ═══════════════════════════════════════════════════════════════════
+  // PUBLIC — Tạo / Sửa / Xóa
+  // ═══════════════════════════════════════════════════════════════════
+
   /**
-   * Lấy TẤT CẢ reviews (không lọc theo phim)
-   * @param {number} pageNumber - Trang (default: 1)
-   * @param {number} pageSize - Số items per trang (default: 50)
+   * POST /api/ratingreview — Tạo review mới.
+   * Body: RatingReviewDTO
+   *   • { movieId, rating, reviewText?, isSpoiler }           → review phim
+   *   • { tvShowId, rating, reviewText?, isSpoiler }          → review cả show
+   *   • { tvShowId, episodeId, rating, reviewText?, isSpoiler } → review tập
    */
-  getAllReviews: async (pageNumber = 1, pageSize = 50) => {
-    try {
-      const payload = await axiosInstance.get('/ratingreview', {
-        params: { pageNumber, pageSize },
-      });
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error fetching all reviews:', error);
-      throw error;
-    }
+  createReview: async (dto) => {
+    const response = await axiosInstance.post(BASE, dto);
+    return response; // { data: ApiResponseDTO<CreateReviewResponseDTO> }
   },
 
   /**
-   * Lấy reviews của phim
-   * @param {string} movieId - Movie ID
-   * @param {number} pageNumber - Trang (default: 1)
-   * @param {number} pageSize - Số items per trang (default: 20)
+   * PUT /api/ratingreview/{reviewId} — Cập nhật review của mình.
+   * Body: { rating, reviewText?, isSpoiler }
    */
-  getMovieReviews: async (movieId, pageNumber = 1, pageSize = 20) => {
-    try {
-      const payload = await axiosInstance.get(
-        `/ratingreview/movies/${movieId}`,
-        { params: { pageNumber, pageSize } }
-      );
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error fetching movie reviews:', error);
-      throw error;
-    }
+  updateReview: async (reviewId, dto) => {
+    const response = await axiosInstance.put(`${BASE}/${reviewId}`, dto);
+    return response;
   },
 
   /**
-   * Lấy thống kê rating của phim
-   * @param {string} movieId - Movie ID
-   */
-  getMovieRatingStats: async (movieId) => {
-    try {
-      const payload = await axiosInstance.get(
-        `/ratingreview/movies/${movieId}/stats`
-      );
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error fetching rating stats:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Lấy review theo ID
-   * @param {string} reviewId - Review ID
-   */
-  getReviewById: async (reviewId) => {
-    try {
-      const payload = await axiosInstance.get(`/ratingreview/${reviewId}`);
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error fetching review:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Tạo review mới (cần đăng nhập)
-   * @param {Object} data - { movieId, rating, reviewText, isSpoiler }
-   */
-  createReview: async (data) => {
-    try {
-      const payload = await axiosInstance.post('/ratingreview', data);
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error creating review:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Cập nhật review (cần đăng nhập)
-   * @param {string} reviewId - Review ID
-   * @param {Object} data - { rating, reviewText, isSpoiler }
-   */
-  updateReview: async (reviewId, data) => {
-    try {
-      const payload = await axiosInstance.put(
-        `/ratingreview/${reviewId}`,
-        data
-      );
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error updating review:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Xóa review (cần đăng nhập)
-   * @param {string} reviewId - Review ID
+   * DELETE /api/ratingreview/{reviewId} — Xóa review của mình.
    */
   deleteReview: async (reviewId) => {
-    try {
-      const payload = await axiosInstance.delete(`/ratingreview/${reviewId}`);
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error deleting review:', error);
-      throw error;
-    }
+    const response = await axiosInstance.delete(`${BASE}/${reviewId}`);
+    return response;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PUBLIC — Lấy danh sách reviews
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/ratingreview/movies/{movieId}?pageNumber=&pageSize=
+   * Returns: ApiResponseDTO<MovieReviewsResponseDTO>
+   *   → .data.reviews: ReviewDTO[]
+   */
+  getMovieReviews: async (movieId, pageNumber = 1, pageSize = 8) => {
+    const response = await axiosInstance.get(`${BASE}/movies/${movieId}`, {
+      params: { pageNumber, pageSize },
+    });
+    return response; // caller reads response.data
   },
 
   /**
-   * Lấy reviews của user hiện tại (cần đăng nhập)
+   * GET /api/ratingreview/tvshows/{tvShowId}?pageNumber=&pageSize=
+   * Returns: ApiResponseDTO<TvShowReviewsResponseDTO>
+   *   → .data.reviews: ReviewDTO[]
+   */
+  getTvShowReviews: async (tvShowId, pageNumber = 1, pageSize = 8) => {
+    const response = await axiosInstance.get(`${BASE}/tvshows/${tvShowId}`, {
+      params: { pageNumber, pageSize },
+    });
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/episodes/{episodeId}?pageNumber=&pageSize=
+   * Returns: ApiResponseDTO<EpisodeReviewsResponseDTO>
+   *   → .data.reviews: ReviewDTO[]
+   */
+  getEpisodeReviews: async (episodeId, pageNumber = 1, pageSize = 8) => {
+    const response = await axiosInstance.get(`${BASE}/episodes/${episodeId}`, {
+      params: { pageNumber, pageSize },
+    });
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview?pageNumber=&pageSize= — Tất cả reviews (homepage carousel)
+   * Returns: ApiResponseDTO<AllReviewsResponseDTO>
+   */
+  getAllReviews: async (pageNumber = 1, pageSize = 50) => {
+    const response = await axiosInstance.get(BASE, {
+      params: { pageNumber, pageSize },
+    });
+    return response;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PUBLIC — Stats
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/ratingreview/movies/{movieId}/stats
+   * Returns: ApiResponseDTO<MovieRatingStatsDTO>
+   *   → .data.averageRating, .data.totalReviews, .data.ratingDistribution
+   */
+  getMovieRatingStats: async (movieId) => {
+    const response = await axiosInstance.get(`${BASE}/movies/${movieId}/stats`);
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/tvshows/{tvShowId}/stats
+   * Returns: ApiResponseDTO<TvShowRatingStatsDTO>
+   */
+  getTvShowRatingStats: async (tvShowId) => {
+    const response = await axiosInstance.get(`${BASE}/tvshows/${tvShowId}/stats`);
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/episodes/{episodeId}/stats
+   * Returns: ApiResponseDTO<EpisodeRatingStatsDTO>
+   */
+  getEpisodeRatingStats: async (episodeId) => {
+    const response = await axiosInstance.get(`${BASE}/episodes/${episodeId}/stats`);
+    return response;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AUTHENTICATED — Kiểm tra user đã review chưa
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/ratingreview/check/movies/{movieId}
+   * Returns: ApiResponseDTO<CheckReviewResponseDTO>
+   *   → .data.hasReview: bool, .data.review: ReviewDTO | null
+   */
+  checkUserMovieReview: async (movieId) => {
+    const response = await axiosInstance.get(`${BASE}/check/movies/${movieId}`);
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/check/tvshows/{tvShowId}
+   */
+  checkUserTvShowReview: async (tvShowId) => {
+    const response = await axiosInstance.get(`${BASE}/check/tvshows/${tvShowId}`);
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/check/episodes/{episodeId}
+   */
+  checkUserEpisodeReview: async (episodeId) => {
+    const response = await axiosInstance.get(`${BASE}/check/episodes/${episodeId}`);
+    return response;
+  },
+
+  /**
+   * GET /api/ratingreview/my — Tất cả reviews của user hiện tại
+   * Returns: ApiResponseDTO<UserReviewsResponseDTO>
    */
   getMyReviews: async () => {
-    try {
-      const payload = await axiosInstance.get('/ratingreview/my');
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error fetching my reviews:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Kiểm tra user đã review phim này chưa (cần đăng nhập)
-   * @param {string} movieId - Movie ID
-   */
-  checkUserReview: async (movieId) => {
-    try {
-      const payload = await axiosInstance.get(
-        `/ratingreview/check/${movieId}`
-      );
-      return wrap(payload);
-    } catch (error) {
-      console.error('Error checking review:', error);
-      throw error;
-    }
+    const response = await axiosInstance.get(`${BASE}/my`);
+    return response;
   },
 };
 

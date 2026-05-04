@@ -1,78 +1,125 @@
 // src/pages/SearchPage.jsx
+// ── Chỉ đọc params từ URL (do Navbar / NavbarFilterModal truyền vào).
+// ── KHÔNG có SearchBar / FilterPanel / SearchTabs riêng trên trang này.
+// ── Hỗ trợ cả Movie lẫn TV Show với tab toggle.
+
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { SlidersHorizontal, Tv, Film } from "lucide-react";
 
 import movieService from "../../services/movieService";
-import genreService from "../../services/genreService";
+import tvShowService from "../../services/tvShowService";
 import BackButton from "../../components/common/BackButton";
 import Pagination from "../../components/common/Pagination";
-import { usePagination } from "../../hooks/usePagination";
 
-import {
-  C,
-  FONT_DISPLAY,
-  FONT_BODY,
-} from "../../context/homeTokens";
+import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import { useIsMobile } from "../../hooks/useIsMobile";
-import SearchBar from "../../components/search/SearchBar";
-import SearchTabs from "../../components/search/SearchTabs";
-import FilterPanel, { Chip } from "../../components/search/FilterPanel";
 import MovieCard from "../../components/movie/MovieCard";
-import ActorCard from "../../components/search/ActorCard";
-import {
-  SkeletonCard,
-  EmptySearch,
-  NoResults,
-} from "../../components/search/SearchUI";
+import { SkeletonCard, NoResults } from "../../components/search/SearchUI";
 
-// ── Grids ───────────────────────────────────────────────────────
+const ACCENT = '#e5181e';
+
+// ── Grids ────────────────────────────────────────────────────────────────────
 const movieGrid = (isMobile) => ({
   display: "grid",
   gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(7, 1fr)",
   gap: isMobile ? 10 : 12,
 });
 
-const ACTOR_GRID = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-  gap: 14,
-};
-
-// ── Debounce ────────────────────────────────────────────────────
-function useDebounce(value, delay = 380) {
-  const [deb, setDeb] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDeb(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return deb;
-}
-
-// ── Normalize API response ──────────────────────────────────────
+// ── Normalize API response ───────────────────────────────────────────────────
 const toMovies = (res) => {
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res?.items)) return res.items;
-  if (Array.isArray(res?.movies)) return res.movies;
-  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res))              return res;
+  if (Array.isArray(res?.items))       return res.items;
+  if (Array.isArray(res?.movies))      return res.movies;
+  if (Array.isArray(res?.tvShows))     return res.tvShows;
+  if (Array.isArray(res?.data))        return res.data;
   if (Array.isArray(res?.data?.items)) return res.data.items;
   return [];
 };
 
-const toSlug = (name) =>
-  (name || "unknown")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+// Normalize TV Show sang shape giống Movie để dùng chung card
+const normalizeTvShow = (s) => ({
+  id:          s.id,
+  title:       s.title ?? s.name,
+  year:        s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : s.year ?? null,
+  rating:      s.rating ?? s.imdbRating ?? 0,
+  posterUrl:   s.posterUrl ?? s.poster ?? null,
+  backdropUrl: s.backdropUrl ?? s.backdrop ?? null,
+  genres:      s.genres ?? [],
+  description: s.description ?? '',
+  releaseDate: s.firstAirDate ?? null,
+  isTvShow:    true,
+});
 
-// ── Mobile movie card ───────────────────────────────────────────
-const MobileMovieCard = ({ movie, navigate }) => {
-  const [imgErr, setImgErr] = React.useState(false);
+const normalizeMovie = (m) => ({
+  ...m,
+  year: m.year ?? (m.releaseDate ? new Date(m.releaseDate).getFullYear() : null),
+  isTvShow: false,
+});
+
+// ── Country code → label map ──────────────────────────────────────────────────
+const COUNTRY_LABEL = {
+  US: "Âu Mỹ", PL: "Ba Lan", TW: "Đài Loan", KR: "Hàn Quốc",
+  HK: "Hồng Kông", JP: "Nhật Bản", PH: "Philippines", TH: "Thái Lan",
+  CN: "Trung Quốc", VN: "Việt Nam",
+};
+
+const TV_STATUS_LABEL = {
+  "Returning Series": "Đang chiếu",
+  "Ended":            "Đã kết thúc",
+  "Canceled":         "Đã hủy",
+  "In Production":    "Đang sản xuất",
+};
+
+// ── ContentTypeTabs ───────────────────────────────────────────────────────────
+const ContentTypeTabs = ({ activeTab, onTabChange, movieCount, tvCount, loading }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 24,
+    background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 4, width: 'fit-content',
+    border: '1px solid rgba(255,255,255,0.07)' }}>
+    {[
+      { key: 'movie', label: 'Phim', icon: Film, count: movieCount },
+      { key: 'tvshow', label: 'TV Show', icon: Tv, count: tvCount },
+    ].map(({ key, label, icon: Icon, count }) => {
+      const active = activeTab === key;
+      return (
+        <motion.button
+          key={key}
+          onClick={() => onTabChange(key)}
+          whileTap={{ scale: 0.97 }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '8px 18px',
+            borderRadius: 7, border: 'none', cursor: 'pointer',
+            background: active ? ACCENT : 'transparent',
+            color: active ? 'white' : 'rgba(255,255,255,0.4)',
+            fontFamily: FONT_BODY, fontSize: 13, fontWeight: active ? 700 : 500,
+            transition: 'all 0.18s',
+          }}
+        >
+          <Icon size={14} strokeWidth={active ? 2.5 : 2} />
+          {label}
+          {!loading && count != null && (
+            <span style={{
+              padding: '1px 7px', borderRadius: 99, fontSize: 10, fontWeight: 700,
+              background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+              color: active ? 'white' : 'rgba(255,255,255,0.35)',
+            }}>
+              {count}
+            </span>
+          )}
+        </motion.button>
+      );
+    })}
+  </div>
+);
+
+// ── MobileCard (dùng chung cho movie & tvshow) ────────────────────────────────
+const MobileCard = ({ item, navigate, isFavorited = false, onFavoriteToggle }) => {
+  const [imgErr, setImgErr]         = React.useState(false);
   const [favLoading, setFavLoading] = React.useState(false);
-  const [localFav, setLocalFav] = React.useState(false);
+  const [localFav, setLocalFav]     = React.useState(isFavorited);
+
+  React.useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
 
   const handleFav = async (e) => {
     e.stopPropagation();
@@ -80,33 +127,46 @@ const MobileMovieCard = ({ movie, navigate }) => {
     setFavLoading(true);
     try {
       if (localFav) {
-        await movieService.removeFavorite(movie.id);
+        await (item.isTvShow ? tvShowService.removeFavorite?.(item.id) : movieService.removeFavorite(item.id));
         setLocalFav(false);
+        onFavoriteToggle?.(item, false);
       } else {
-        await movieService.addFavorite(movie.id);
+        await (item.isTvShow ? tvShowService.addFavorite?.(item.id) : movieService.addFavorite(item.id));
         setLocalFav(true);
+        onFavoriteToggle?.(item, true);
       }
-    } catch {
-    } finally {
-      setFavLoading(false);
-    }
+    } catch { /* noop */ } finally { setFavLoading(false); }
+  };
+
+  const handleClick = () => {
+    if (item.isTvShow) navigate(`/tvshow/${item.id}/info`);
+    else navigate(`/movie/${item.id}/info`);
   };
 
   return (
-    <div onClick={() => navigate(`/movie/${movie.id}/info`)} style={{ cursor: "pointer" }}>
+    <div onClick={handleClick} style={{ cursor: "pointer" }}>
       <div style={{ position: "relative", borderRadius: 3, overflow: "hidden", aspectRatio: "2/3", background: "#161616" }}>
-        {movie.posterUrl && !imgErr ? (
-          <img src={movie.posterUrl} alt={movie.title} onError={() => setImgErr(true)}
+        {item.posterUrl && !imgErr ? (
+          <img src={item.posterUrl} alt={item.title} onError={() => setImgErr(true)}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         ) : (
           <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center",
-            justifyContent: "center", background: "#161616", fontSize: 24, opacity: 0.3 }}>▶</div>
+            justifyContent: "center", background: "#161616", fontSize: 24, opacity: 0.3 }}>
+            {item.isTvShow ? '📺' : '▶'}
+          </div>
         )}
-        {movie.rating > 0 && (
+        {/* TV Show badge */}
+        {item.isTvShow && (
+          <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 6px', borderRadius: 3,
+            background: 'rgba(229,24,30,0.85)', backdropFilter: 'blur(4px)' }}>
+            <span style={{ fontFamily: FONT_BODY, fontSize: 8, fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>TV</span>
+          </div>
+        )}
+        {item.rating > 0 && (
           <div style={{ position: "absolute", top: 6, left: 6, padding: "2px 7px", borderRadius: 2,
             background: "rgba(0,0,0,0.8)", backdropFilter: "blur(6px)" }}>
             <span style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700, color: C.gold }}>
-              {movie.rating.toFixed(1)}
+              {item.rating.toFixed(1)}
             </span>
           </div>
         )}
@@ -131,155 +191,194 @@ const MobileMovieCard = ({ movie, navigate }) => {
         <p style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 600, color: C.text,
           lineHeight: 1.3, marginBottom: 2, display: "-webkit-box", WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          {movie.title}
+          {item.title}
         </p>
-        {movie.year && (
-          <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: C.textDim }}>{movie.year}</p>
+        {item.year && (
+          <p style={{ fontFamily: FONT_BODY, fontSize: 10, color: C.textDim }}>{item.year}</p>
         )}
       </div>
     </div>
   );
 };
 
-// ══════════════════════════════════════════════════════════════
+// ── ActiveFilterBadge ─────────────────────────────────────────────────────────
+const FilterBadge = ({ label }) => (
+  <span style={{
+    padding: "3px 10px", borderRadius: 999,
+    background: "rgba(229,24,30,0.12)", border: "1px solid rgba(229,24,30,0.3)",
+    color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
+  }}>
+    {label}
+  </span>
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
 export default function SearchPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [query, setQuery] = useState(searchParams.get("q") || "");
-  const [tab, setTab] = useState("movies");
-  const [genres, setGenres] = useState([]);
-  const [allMovies, setAllMovies] = useState([]);
-  const [actors, setActors] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // ── Đọc tất cả params từ URL ────────────────────────────────────────────────
+  const query         = searchParams.get("q")              || "";
+  const genreIds      = searchParams.getAll("genreIds");
+  const minRating     = parseFloat(searchParams.get("minRating")) || 0;
+  const originCountry = searchParams.get("originCountry")  || "";
+  const fromYear      = parseInt(searchParams.get("fromYear"))  || 0;
+  const toYear        = parseInt(searchParams.get("toYear"))    || 0;
+  const status        = searchParams.get("status")          || "";
+  const sortBy        = searchParams.get("sortBy")          || "rating";
+  const sortDesc      = searchParams.get("sortDesc") !== "false";
+  const page          = parseInt(searchParams.get("page"))  || 1;
+  const pageSize      = parseInt(searchParams.get("pageSize")) || 20;
+  const tabParam      = searchParams.get("tab")             || "movie";
 
-  const [showFilter, setShowFilter] = useState(false);
-  const [selGenre, setSelGenre] = useState(null);
-  const [selYear, setSelYear] = useState(null);
-  const [selCountry, setSelCountry] = useState(null);
-  const [sortBy, setSortBy] = useState("rating");
-  const [minRating, setMinRating] = useState(0);
+  // Build date strings từ fromYear/toYear (chung cho cả movie và tvshow)
+  const fromDateStr = fromYear ? `${fromYear}-01-01` : "";
+  const toDateStr   = toYear   ? `${toYear}-12-31`   : "";
 
-  const debouncedQuery = useDebounce(query);
-  const filterCount = [selGenre, selYear, selCountry, minRating > 0].filter(Boolean).length;
+  const [activeTab,    setActiveTab]    = useState(tabParam);
+  const [movies,       setMovies]       = useState([]);
+  const [tvShows,      setTvShows]      = useState([]);
+  const [movieTotal,   setMovieTotal]   = useState(0);
+  const [tvTotal,      setTvTotal]      = useState(0);
+  const [loadingMovie, setLoadingMovie] = useState(false);
+  const [loadingTv,    setLoadingTv]    = useState(false);
+  const [favIds,       setFavIds]       = useState(new Set());
 
-  const moviePg = usePagination({ total: allMovies.length });
-  const pageMovies = moviePg.paginate(allMovies);
-  const actorPg = usePagination({ total: actors.length });
-  const pageActors = actorPg.paginate(actors);
+  const loading = activeTab === 'movie' ? loadingMovie : loadingTv;
+  const allItems = activeTab === 'movie' ? movies : tvShows;
+  const totalCount = activeTab === 'movie' ? movieTotal : tvTotal;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  const goToPage = useCallback((newPage) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("page", newPage);
+    navigate(`/search?${next}`, { replace: true });
+    window.scrollTo({ top: 100, behavior: "smooth" });
+  }, [searchParams, navigate]);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab);
+    next.set("page", 1);
+    // Xóa status khi chuyển sang tab Phim vì status chỉ áp dụng cho TV Show
+    if (tab === "movie") next.delete("status");
+    navigate(`/search?${next}`, { replace: true });
+  };
+
+  // ── Badge labels cho các filter đang active ──────────────────────────────────
+  const activeFilters = [
+    ...(genreIds.length     ? [`${genreIds.length} thể loại`] : []),
+    ...(minRating > 0       ? [`IMDb ${minRating}+`]          : []),
+    ...(originCountry       ? [COUNTRY_LABEL[originCountry] ?? originCountry] : []),
+    ...(fromYear || toYear  ? [fromYear && toYear && fromYear !== toYear ? `${fromYear} – ${toYear}` : `${fromYear || toYear}`] : []),
+    ...(status              ? [TV_STATUS_LABEL[status] ?? status]         : []),
+    ...(sortBy !== "rating" ? [sortBy === "releaseDate" || sortBy === "firstairdate" ? "Mới nhất" : "Tên A-Z"] : []),
+  ];
+
+  // ── Reset page=1 khi filter thay đổi ────────────────────────────────────────
+  const filterKey = [query, genreIds.join(","), minRating, originCountry, fromYear, toYear, status, sortBy, sortDesc].join("|");
+  const prevFilterKey = React.useRef(filterKey);
   useEffect(() => {
-    if (debouncedQuery) setSearchParams({ q: debouncedQuery }, { replace: true });
-    else setSearchParams({}, { replace: true });
-  }, [debouncedQuery]);
+    if (prevFilterKey.current !== filterKey && page !== 1) {
+      const next = new URLSearchParams(searchParams);
+      next.set("page", 1);
+      navigate(`/search?${next}`, { replace: true });
+    }
+    prevFilterKey.current = filterKey;
+  }, [filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Fetch Movies ─────────────────────────────────────────────────────────────
+  const fetchMovies = useCallback(async () => {
+    setLoadingMovie(true);
+    try {
+      const raw = await movieService.getMovies({
+        page,
+        pageSize,
+        search:          query.trim() || undefined,
+        genreIds:        genreIds.length ? genreIds : undefined,
+        minRating:       minRating > 0  ? minRating : undefined,
+        originCountry:   originCountry  || undefined,
+        fromReleaseDate: fromDateStr    || undefined,
+        toReleaseDate:   toDateStr      || undefined,
+        sortBy,
+        sortDesc,
+      });
+      const items = toMovies(raw);
+      const total = raw?.totalCount ?? raw?.data?.totalCount ?? items.length;
+      setMovies(items.map(normalizeMovie));
+      setMovieTotal(total);
+    } catch (e) {
+      console.error("[SearchPage] fetchMovies:", e);
+      setMovies([]);
+      setMovieTotal(0);
+    } finally {
+      setLoadingMovie(false);
+    }
+  }, [query, genreIds.join(","), minRating, originCountry, fromYear, toYear, sortBy, sortDesc, page, pageSize]);
+
+  // ── Fetch TV Shows ────────────────────────────────────────────────────────────
+  const fetchTvShows = useCallback(async () => {
+    setLoadingTv(true);
+    try {
+      const raw = await tvShowService.getTvShows({
+        page,
+        pageSize,
+        search:           query.trim() || undefined,
+        genreIds:         genreIds.length ? genreIds : undefined,
+        minRating:        minRating > 0  ? minRating : undefined,
+        originCountry:    originCountry  || undefined,
+        fromFirstAirDate: fromDateStr    || undefined,
+        toFirstAirDate:   toDateStr      || undefined,
+        sortBy:           sortBy === 'releaseDate' ? 'firstairdate' : sortBy,
+        sortDesc,
+        status:           status         || undefined,
+      });
+      const items = toMovies(raw);
+      const total = raw?.totalCount ?? raw?.data?.totalCount ?? items.length;
+      setTvShows(items.map(normalizeTvShow));
+      setTvTotal(total);
+    } catch (e) {
+      console.error("[SearchPage] fetchTvShows:", e);
+      setTvShows([]);
+      setTvTotal(0);
+    } finally {
+      setLoadingTv(false);
+    }
+  }, [query, genreIds.join(","), minRating, originCountry, fromYear, toYear, status, sortBy, sortDesc, page, pageSize]);
+
+  useEffect(() => { fetchMovies(); }, [fetchMovies]);
+  useEffect(() => { fetchTvShows(); }, [fetchTvShows]);
+
+  // ── Load favorites ────────────────────────────────────────────────────────────
   useEffect(() => {
-    genreService.getAllGenres().then((res) => {
-      const raw = Array.isArray(res) ? res : (res?.genres ?? res?.data ?? []);
-      setGenres(raw);
+    const extractIds = (res, idField) => {
+      const raw = Array.isArray(res) ? res
+        : res?.data ? (Array.isArray(res.data) ? res.data : res.data?.items ?? res.data?.movies ?? res.data?.tvShows ?? [])
+        : res?.items ?? res?.movies ?? res?.tvShows ?? [];
+      return raw.map(f => String(f[idField] ?? f.movie?.id ?? f.tvShow?.id ?? f.id ?? '')).filter(Boolean);
+    };
+
+    Promise.allSettled([
+      movieService.getFavorites(),
+      tvShowService.getFavorites?.() ?? Promise.resolve([]),
+    ]).then(([movieRes, tvRes]) => {
+      const ids = new Set();
+      if (movieRes.status === 'fulfilled')
+        extractIds(movieRes.value, 'movieId').forEach(id => ids.add(id));
+      if (tvRes.status === 'fulfilled')
+        extractIds(tvRes.value, 'tvShowId').forEach(id => ids.add(id));
+      setFavIds(ids);
     }).catch(() => {});
   }, []);
 
-  const clearFilters = useCallback(() => {
-    setSelGenre(null); setSelYear(null); setSelCountry(null);
-    setMinRating(0); setSortBy("rating");
-  }, []);
-
-  const fetchMovies = useCallback(async () => {
-    setLoading(true);
-    try {
-      let result = [];
-      if (debouncedQuery.trim()) {
-        const raw = await movieService.searchMovies(debouncedQuery);
-        result = toMovies(raw);
-      } else {
-        const res = await movieService.getMovies(1, 500);
-        result = toMovies(res);
-      }
-      result = result.map((m) => ({
-        ...m,
-        year: m.year ?? (m.releaseDate ? new Date(m.releaseDate).getFullYear() : null),
-      }));
-      if (selGenre)
-        result = result.filter((m) => m.genres?.some((g) =>
-          typeof g === "string" ? g.toLowerCase() === selGenre.toLowerCase()
-            : g?.name?.toLowerCase() === selGenre.toLowerCase()));
-      if (selYear)
-        result = result.filter((m) => String(m.year) === String(selYear));
-      if (selCountry)
-        result = result.filter((m) => m.originCountry?.toUpperCase() === selCountry.toUpperCase());
-      if (minRating > 0)
-        result = result.filter((m) => (m.rating ?? m.imdbRating ?? 0) >= minRating);
-      result = [...result].sort((a, b) => {
-        if (sortBy === "rating") return (b.rating ?? b.imdbRating ?? 0) - (a.rating ?? a.imdbRating ?? 0);
-        if (sortBy === "releaseDate") return new Date(b.releaseDate || 0) - new Date(a.releaseDate || 0);
-        if (sortBy === "title") return (a.title || "").localeCompare(b.title || "", "vi");
-        return 0;
-      });
-      setAllMovies(result);
-      moviePg.goTo(1);
-    } catch (e) {
-      console.error("[SearchPage] fetchMovies:", e);
-      setAllMovies([]);
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, selGenre, selYear, selCountry, sortBy, minRating]);
-
-  const fetchActors = useCallback(async () => {
-    if (!debouncedQuery.trim()) { setActors([]); return; }
-    setLoading(true);
-    try {
-      const fn = movieService.searchMoviesByActor ?? movieService.searchByActor ?? movieService.getMoviesByActor;
-      if (!fn) { setActors([]); return; }
-      const raw = await fn.call(movieService, debouncedQuery);
-      const movies = toMovies(raw);
-      const map = new Map();
-      const q = debouncedQuery.toLowerCase();
-      movies.forEach((movie) => {
-        (movie.cast || []).forEach((member) => {
-          if (!member.name?.toLowerCase().includes(q)) return;
-          const key = member.name.toLowerCase();
-          if (map.has(key)) {
-            const e = map.get(key);
-            e.movieCount++;
-            if (!e.knownFor.includes(movie.title)) e.knownFor += `, ${movie.title}`;
-          } else {
-            map.set(key, { id: member.id ?? member.personId ?? null, name: member.name,
-              profileUrl: member.profileUrl ?? null, knownFor: movie.title,
-              biography: member.biography ?? null, birthday: member.birthday ?? null,
-              placeOfBirth: member.placeOfBirth ?? null, movieCount: 1 });
-          }
-        });
-        const d = movie.directorDetail;
-        if (d?.name?.toLowerCase().includes(q)) {
-          const key = d.name.toLowerCase();
-          if (map.has(key)) map.get(key).movieCount++;
-          else map.set(key, { id: null, name: d.name, profileUrl: d.profileUrl ?? null,
-            knownFor: `Đạo diễn — ${movie.title}`, biography: d.biography ?? null,
-            birthday: d.birthday ?? null, placeOfBirth: d.placeOfBirth ?? null, movieCount: 1 });
-        }
-      });
-      setActors([...map.values()]);
-      actorPg.goTo(1);
-    } catch (e) {
-      console.error("[SearchPage] fetchActors:", e);
-      setActors([]);
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery]);
-
-  useEffect(() => { if (tab === "movies") fetchMovies(); }, [fetchMovies, tab]);
-  useEffect(() => { if (tab === "actors") fetchActors(); }, [fetchActors, tab]);
-  useEffect(() => { if (moviePg.page > 1) window.scrollTo({ top: 100, behavior: "smooth" }); }, [moviePg.page]);
-  useEffect(() => { if (actorPg.page > 1) window.scrollTo({ top: 100, behavior: "smooth" }); }, [actorPg.page]);
-
-  const genresForFilter = genres.map((g) =>
-    typeof g === "string" ? { id: g, name: g } : { id: g.name, name: g.name });
+  // ── Tiêu đề hiển thị ────────────────────────────────────────────────────────
+  const hasFilter = activeFilters.length > 0;
+  const subtitle = !loading && (query || hasFilter)
+    ? `${totalCount || allItems.length} ${activeTab === 'tvshow' ? 'TV show' : 'phim'}${query ? ` cho "${query}"` : ""}${hasFilter ? ` · ${activeFilters.length} bộ lọc` : ""}`
+    : null;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, paddingTop: 68 }}>
@@ -296,187 +395,150 @@ export default function SearchPage() {
 
       <div style={{ maxWidth: 1300, margin: "0 auto", padding: isMobile ? "24px 16px 80px" : "36px 32px 100px" }}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 36 }}
+          style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 28 }}
         >
           <BackButton />
           <div>
             <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 26 : 32,
               fontWeight: 700, color: C.text, letterSpacing: "0.01em", lineHeight: 1 }}>
-              Tìm kiếm
+              {query ? `Kết quả cho "${query}"` : hasFilter ? "Kết quả lọc" : "Tìm kiếm"}
             </h1>
             <AnimatePresence mode="wait">
-              {debouncedQuery && !loading && (
+              {subtitle && (
                 <motion.p
-                  key={`${tab}-${debouncedQuery}-${allMovies.length}`}
+                  key={subtitle}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                   style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 400,
                     color: C.textDim, marginTop: 6, letterSpacing: "0.01em" }}
                 >
-                  {tab === "movies"
-                    ? `${allMovies.length} phim${filterCount > 0 ? ` · ${filterCount} bộ lọc` : ""}`
-                    : `${actors.length} diễn viên / đạo diễn`}{" "}
-                  cho &ldquo;{debouncedQuery}&rdquo;
+                  {subtitle}
                 </motion.p>
               )}
             </AnimatePresence>
           </div>
         </motion.div>
 
-        <SearchBar value={query} onChange={setQuery} />
-        <SearchTabs tab={tab} onTabChange={setTab} totalMovies={allMovies.length}
-          totalActors={actors.length} filterCount={filterCount} showFilter={showFilter}
-          onToggleFilter={() => setShowFilter((v) => !v)} />
-        <FilterPanel show={showFilter && tab === "movies"} genres={genresForFilter}
-          selGenre={selGenre} onGenreChange={setSelGenre}
-          selYear={selYear} onYearChange={setSelYear}
-          selCountry={selCountry} onCountryChange={setSelCountry}
-          sortBy={sortBy} onSortChange={(v) => setSortBy(v || "rating")}
-          minRating={minRating} onRatingChange={setMinRating}
-          filterCount={filterCount} onClearAll={clearFilters} />
+        {/* ── Content Type Tabs ── */}
+        <ContentTypeTabs
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          movieCount={movieTotal}
+          tvCount={tvTotal}
+          loading={loadingMovie || loadingTv}
+        />
 
+        {/* ── Active filter badges ── */}
         <AnimatePresence>
-          {filterCount > 0 && !showFilter && tab === "movies" && (
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 18 }}>
-              {selGenre && <Chip label={selGenre} onRemove={() => setSelGenre(null)} />}
-              {selYear && <Chip label={selYear} onRemove={() => setSelYear(null)} />}
-              {selCountry && <Chip label={selCountry} onRemove={() => setSelCountry(null)} />}
-              {minRating > 0 && <Chip label={`${minRating}+`} onRemove={() => setMinRating(0)} />}
+          {hasFilter && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 24 }}
+            >
+              <SlidersHorizontal size={13} style={{ color: "rgba(229,24,30,0.7)", flexShrink: 0 }} />
+              {activeFilters.map((label) => <FilterBadge key={label} label={label} />)}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Results */}
-        <AnimatePresence mode="wait">
+        {/* ── Hint khi chưa có gì ── */}
+        {!query && !hasFilter && !loading && allItems.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            style={{ textAlign: "center", padding: "100px 0" }}
+          >
+            <div style={{ width: 40, height: 1, background: C.border, margin: "0 auto 24px" }} />
+            <p style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 700,
+              color: C.textSub, marginBottom: 8 }}>
+              Dùng thanh tìm kiếm hoặc bộ lọc trên navbar
+            </p>
+            <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.textDim, fontWeight: 400 }}>
+              Nhập từ khoá hoặc chọn bộ lọc ở trên để xem kết quả
+            </p>
+          </motion.div>
+        )}
 
-          {/* ── Movies ── */}
-          {tab === "movies" && (
-            <motion.div key="movies" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+        {/* ── Skeleton loading ── */}
+        {loading && allItems.length === 0 && (
+          <div style={movieGrid(isMobile)}>
+            {Array.from({ length: isMobile ? 6 : 14 }).map((_, i) => (
+              <div key={i} style={isMobile ? {} : { zoom: 0.78 }}><SkeletonCard /></div>
+            ))}
+          </div>
+        )}
 
-              {!debouncedQuery && filterCount === 0 && !loading && allMovies.length === 0 && <EmptySearch />}
+        {/* ── Không có kết quả ── */}
+        {!loading && allItems.length === 0 && (query || hasFilter) && (
+          <NoResults query={query} />
+        )}
 
-              {loading && allMovies.length === 0 && (
-                <div style={movieGrid(isMobile)}>
-                  {Array.from({ length: isMobile ? 6 : 14 }).map((_, i) => (
-                    <div key={i} style={isMobile ? {} : { zoom: 0.78 }}><SkeletonCard /></div>
-                  ))}
-                </div>
-              )}
+        {/* ── Danh sách ── */}
+        {allItems.length > 0 && (
+          <>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${activeTab}-p${page}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: loading ? 0.45 : 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                style={movieGrid(isMobile)}
+              >
+                {allItems.map((item) => (
+                  <div key={item.id} style={isMobile ? {} : { zoom: 0.78 }}>
+                    {isMobile ? (
+                      <MobileCard
+                        item={item}
+                        navigate={navigate}
+                        isFavorited={favIds.has(String(item.id))}
+                        onFavoriteToggle={(it, isNowFav) => {
+                          setFavIds(prev => {
+                            const next = new Set(prev);
+                            isNowFav ? next.add(String(it.id)) : next.delete(String(it.id));
+                            return next;
+                          });
+                        }}
+                      />
+                    ) : (
+                      <MovieCard
+                        movie={item}
+                        index={0}
+                        onClick={(it) => {
+                          if (it.isTvShow) navigate(`/tvshow/${it.id}/info`);
+                          else navigate(`/movie/${it.id}/info`);
+                        }}
+                        isFavorited={favIds.has(String(item.id))}
+                        onFavoriteToggle={(it, isNowFav) => {
+                          setFavIds(prev => {
+                            const next = new Set(prev);
+                            isNowFav ? next.add(String(it.id)) : next.delete(String(it.id));
+                            return next;
+                          });
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            </AnimatePresence>
 
-              {!loading && allMovies.length === 0 && (debouncedQuery || filterCount > 0) && (
-                <NoResults query={debouncedQuery} />
-              )}
-
-              {allMovies.length > 0 && (
-                <>
-                  {/*
-                    Fade cả grid khi đổi trang — không animate từng card riêng lẻ
-                    key đổi theo page → Framer tự fade out/in
-                  */}
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={`movies-p${moviePg.page}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: loading ? 0.45 : 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                      style={movieGrid(isMobile)}
-                    >
-                      {pageMovies.map((m) => (
-                        <div key={m.id} style={isMobile ? {} : { zoom: 0.78 }}>
-                          {isMobile ? (
-                            <MobileMovieCard movie={m} navigate={navigate} />
-                          ) : (
-                            <MovieCard movie={m} index={0}
-                              onClick={(movie) => navigate(`/movie/${movie.id}/info`)} />
-                          )}
-                        </div>
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
-
-                  <Pagination
-                    {...moviePg.props}
-                    itemLabel="phim"
-                  />
-                </>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── Actors ── */}
-          {tab === "actors" && (
-            <motion.div key="actors" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-
-              {!debouncedQuery && (
-                <div style={{ textAlign: "center", padding: "80px 0" }}>
-                  <div style={{ width: 40, height: 1, background: C.border, margin: "0 auto 24px" }} />
-                  <p style={{ fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 700,
-                    color: C.textSub, marginBottom: 8 }}>
-                    Tìm diễn viên & đạo diễn
-                  </p>
-                  <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.textDim, fontWeight: 400 }}>
-                    Nhập tên để tìm kiếm
-                  </p>
-                </div>
-              )}
-
-              {loading && actors.length === 0 && debouncedQuery && (
-                <div style={ACTOR_GRID}>
-                  {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
-                </div>
-              )}
-
-              {!loading && actors.length === 0 && debouncedQuery && (
-                <NoResults query={debouncedQuery} isActor />
-              )}
-
-              {actors.length > 0 && (
-                <>
-                  <p style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 400,
-                    color: C.textDim, marginBottom: 16, letterSpacing: "0.01em" }}>
-                    {actors.length} diễn viên / đạo diễn
-                  </p>
-
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={`actors-p${actorPg.page}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: loading ? 0.45 : 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                      style={ACTOR_GRID}
-                    >
-                      {pageActors.map((a, i) => (
-                        <ActorCard key={`${a.name}-${i}`} actor={a} index={0}
-                          onActorClick={(actor) =>
-                            navigate(`/person/${toSlug(actor.name)}`, { state: { actor } })} />
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
-
-                  <Pagination
-                    {...actorPg.props}
-                    itemLabel="diễn viên"
-                  />
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemLabel={activeTab === 'tvshow' ? 'TV show' : 'phim'}
+            />
+          </>
+        )}
       </div>
 
-      {/* Floating loading indicator */}
+      {/* ── Floating loading indicator ── */}
       <AnimatePresence>
-        {loading && (allMovies.length > 0 || actors.length > 0) && (
+        {loading && allItems.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.2 }}
             style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
@@ -484,7 +546,7 @@ export default function SearchPage() {
               background: "rgba(10,10,10,0.96)", borderRadius: 3, border: `1px solid ${C.border}`,
               backdropFilter: "blur(20px)", zIndex: 9000, boxShadow: "0 8px 32px rgba(0,0,0,0.8)" }}>
             <div style={{ width: 12, height: 12, borderRadius: "50%",
-              border: `1.5px solid rgba(229,24,30,0.2)`, borderTopColor: C.accent,
+              border: "1.5px solid rgba(229,24,30,0.2)", borderTopColor: C.accent,
               animation: "spin 0.7s linear infinite" }} />
             <span style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 400,
               color: C.textSub, letterSpacing: "0.02em" }}>Đang tải</span>

@@ -14,13 +14,19 @@ import {
 } from "../../context/homeTokens";
 
 // ── GenreCard ─────────────────────────────────────────────────────────────────
-const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => {
+const GenreCard = ({
+  genre,
+  onClick,
+  index,
+  movies = [],
+  tvShows = [],
+  isMobile = false,
+}) => {
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
 
   // Tên tiếng Việt — Title Case, không ALL CAPS
   const rawName = GENRE_VI[genre.name] || genre.name;
-  // Chuyển "HÀNH ĐỘNG" → "Hành Động" nếu đang là caps
   const viName = rawName
     .split(" ")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -28,12 +34,20 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
 
   const color = GENRE_COLOR[genre.name] || C.accent;
 
-  const bgMovie = movies.find((m) =>
-    m.genres?.some((g) => g.toLowerCase() === genre.name.toLowerCase()),
-  );
-  const bgImg = bgMovie?.backdropUrl || bgMovie?.posterUrl || null;
+  // Tìm backdrop: ưu tiên movie có backdrop, fallback sang tvShow
+  const matchGenre = (item) =>
+    item.genres?.some((g) => g.toLowerCase() === genre.name.toLowerCase());
 
-  const fontSize = 16; // cố định, không phụ thuộc độ dài tên
+  const bgMovie  = movies.find((m) => matchGenre(m) && (m.backdropUrl || m.posterUrl));
+  const bgTvShow = tvShows.find((s) => matchGenre(s) && (s.backdropUrl || s.posterUrl));
+
+  // Ưu tiên backdrop > poster, và movie > tvShow (có thể đổi tuỳ ý)
+  const bgImg =
+    bgMovie?.backdropUrl  ||
+    bgTvShow?.backdropUrl ||
+    bgMovie?.posterUrl    ||
+    bgTvShow?.posterUrl   ||
+    null;
 
   return (
     <motion.div
@@ -81,7 +95,6 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
             objectFit: "cover",
             transform: hovered ? "scale(1.08)" : "scale(1.02)",
             transition: "transform 0.7s cubic-bezier(0.25,0.1,0.25,1)",
-            // Tối hơn + desaturate nhẹ để chữ nổi hơn mà không chói
             filter: hovered
               ? "brightness(0.75) saturate(1.1)"
               : "brightness(0.6) saturate(1.0)",
@@ -97,7 +110,7 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
         />
       )}
 
-      {/* Subtle color wash — chỉ ở góc, không phủ toàn bộ */}
+      {/* Subtle color wash */}
       <div
         style={{
           position: "absolute",
@@ -108,7 +121,7 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
         }}
       />
 
-      {/* Vignette gradient — tạo depth */}
+      {/* Vignette gradient */}
       <div
         style={{
           position: "absolute",
@@ -129,7 +142,6 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
           padding: "0 18px 16px",
         }}
       >
-        {/* Tên thể loại — title case, elegant */}
         <motion.p
           animate={{
             y: hovered ? -2 : 0,
@@ -190,7 +202,7 @@ const GenreCard = ({ genre, onClick, index, movies = [], isMobile = false }) => 
         </div>
       </div>
 
-      {/* Accent line — bottom, mỏng hơn và fade in đẹp hơn */}
+      {/* Accent line */}
       <motion.div
         animate={{ scaleX: hovered ? 1 : 0, opacity: hovered ? 1 : 0 }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
@@ -239,7 +251,6 @@ const MoreCard = () => {
           : "rgba(255,255,255,0.015)",
       }}
     >
-      {/* Icon circle */}
       <motion.div
         animate={{ scale: hovered ? 1.08 : 1 }}
         transition={{ duration: 0.25 }}
@@ -358,6 +369,7 @@ export default function GenreSection({
   selectedGenre,
   onGenreSelect,
   movies = [],
+  tvShows = [],   // ← prop mới
 }) {
   const scrollRef = useRef(null);
   const isMobile = useIsMobile();
@@ -397,8 +409,7 @@ export default function GenreSection({
       </div>
 
       <div className="relative" style={{ paddingLeft: isMobile ? 16 : 48 }}>
-        <ArrowBtn dir={-1}
-            onClick={() => scroll(-1)} disabled={!canLeft} />
+        <ArrowBtn dir={-1} onClick={() => scroll(-1)} disabled={!canLeft} />
 
         <div
           ref={scrollRef}
@@ -425,8 +436,9 @@ export default function GenreSection({
               genre={genre}
               index={i}
               movies={movies}
+              tvShows={tvShows}
               isMobile={isMobile}
-            onClick={() =>
+              onClick={() =>
                 onGenreSelect?.(selectedGenre === genre.id ? null : genre.id)
               }
             />
@@ -434,8 +446,7 @@ export default function GenreSection({
           <MoreCard />
         </div>
 
-        <ArrowBtn dir={1}
-            onClick={() => scroll(1)} disabled={!canRight} />
+        <ArrowBtn dir={1} onClick={() => scroll(1)} disabled={!canRight} />
       </div>
     </section>
   );

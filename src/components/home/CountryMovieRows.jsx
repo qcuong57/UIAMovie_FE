@@ -1,5 +1,6 @@
 // src/components/home/CountryMovieRows.jsx
 // Phong cách Netflix — tinh tế, sang trọng, dark luxury
+// ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -7,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import movieService from "../../services/movieService";
+import tvShowService from "../../services/tvShowService";
 import MovieCard from "../movie/MovieCard";
 import { FONT_BODY, FONT_DISPLAY } from "../../context/homeTokens";
 
@@ -17,7 +19,7 @@ const COUNTRIES = [
     label: "Hàn Quốc",
     flag: "🇰🇷",
     tagline: "K-Drama & Cinema",
-    accent: "#e8c97e", // gold warm
+    accent: "#e8c97e",
     glow: "rgba(232,201,126,0.12)",
   },
   {
@@ -25,7 +27,7 @@ const COUNTRIES = [
     label: "Trung Quốc",
     flag: "🇨🇳",
     tagline: "C-Drama & Wuxia",
-    accent: "#e87e7e", // rose
+    accent: "#e87e7e",
     glow: "rgba(232,126,126,0.12)",
   },
   {
@@ -33,7 +35,7 @@ const COUNTRIES = [
     label: "Hollywood",
     flag: "🇺🇸",
     tagline: "Blockbuster & Series",
-    accent: "#7eaee8", // cool blue
+    accent: "#7eaee8",
     glow: "rgba(126,174,232,0.12)",
   },
   {
@@ -41,24 +43,36 @@ const COUNTRIES = [
     label: "Nhật Bản",
     flag: "🇯🇵",
     tagline: "Anime & J-Cinema",
-    accent: "#c47ee8", // soft violet
+    accent: "#c47ee8",
     glow: "rgba(196,126,232,0.12)",
   },
 ];
 
-// ── Normalize ─────────────────────────────────────────────────
-const normalize = (m) => ({
+// ── Normalize movie ────────────────────────────────────────────
+const normalizeMovie = (m) => ({
   id: m.id,
   title: m.title,
-  year: m.releaseDate
-    ? new Date(m.releaseDate).getFullYear()
-    : (m.year ?? null),
+  year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : (m.year ?? null),
   rating: m.rating ?? m.imdbRating ?? 0,
   posterUrl: m.posterUrl ?? null,
   backdropUrl: m.backdropUrl ?? null,
   genres: m.genres ?? [],
   description: m.description ?? "",
   duration: m.duration ?? null,
+  isTvShow: false,
+});
+
+// ── Normalize TV show ──────────────────────────────────────────
+const normalizeTvShow = (s) => ({
+  id: s.id,
+  title: s.title ?? s.name,
+  year: s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : (s.year ?? null),
+  rating: s.rating ?? s.voteAverage ?? 0,
+  posterUrl: s.posterUrl ?? null,
+  backdropUrl: s.backdropUrl ?? null,
+  genres: s.genres ?? [],
+  description: s.description ?? s.overview ?? "",
+  isTvShow: true,
 });
 
 // ── Shimmer skeleton ──────────────────────────────────────────
@@ -80,59 +94,53 @@ const Skeleton = () => (
 const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const [movies, setMovies] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const rowRef = useRef(null);
-  const hasFetched = useRef(false); // ← guard chống double-fetch (React 18 StrictMode)
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (hasFetched.current) return; // ← chặn lần gọi thứ 2
+    if (hasFetched.current) return;
     hasFetched.current = true;
 
-    movieService
-      .getMoviesByCountry(country.code)
-      .then((res) => {
-        // Backend trả PaginatedDTO: { items: [...], totalCount, pageNumber, pageSize }
-        // Axios interceptor có thể đã unwrap data một lần rồi
-        let raw = [];
+    const extractItems = (res, normalize) => {
+      if (!res) return [];
+      let raw = [];
+      if (Array.isArray(res)) raw = res;
+      else if (res?.items && Array.isArray(res.items)) raw = res.items;
+      else if (res?.data?.items && Array.isArray(res.data.items)) raw = res.data.items;
+      else if (res?.movies && Array.isArray(res.movies)) raw = res.movies;
+      else if (res?.tvShows && Array.isArray(res.tvShows)) raw = res.tvShows;
+      else if (res?.data?.movies && Array.isArray(res.data.movies)) raw = res.data.movies;
+      else if (res?.data && Array.isArray(res.data)) raw = res.data;
+      return raw.map(normalize);
+    };
 
-        if (Array.isArray(res)) {
-          raw = res;
-        } else if (res?.items && Array.isArray(res.items)) {
-          // PaginatedDTO đã unwrap: { items: [...] }
-          raw = res.items;
-        } else if (res?.data?.items && Array.isArray(res.data.items)) {
-          // Chưa unwrap: { data: { items: [...] } }
-          raw = res.data.items;
-        } else if (res?.movies && Array.isArray(res.movies)) {
-          raw = res.movies;
-        } else if (res?.data?.movies && Array.isArray(res.data.movies)) {
-          raw = res.data.movies;
-        } else if (res?.data && Array.isArray(res.data)) {
-          raw = res.data;
-        }
-        setMovies(
-          raw
-            .map(normalize)
-            .sort((a, b) => (b.year || 0) - (a.year || 0))
-            .slice(0, 20),
-        );
-      })
-      .catch((err) => {
-        console.error(`[CountryMovieRows] ${country.code} error:`, err);
-        setMovies([]);
-      })
-      .finally(() => setLoading(false));
+    Promise.all([
+      movieService.getMoviesByCountry(country.code).catch(() => []),
+      tvShowService.getTvShows({ originCountry: country.code, pageSize: 20, sortBy: "rating" }).catch(() => []),
+    ]).then(([moviesRes, tvRes]) => {
+      const movies  = extractItems(moviesRes, normalizeMovie);
+      const tvShows = extractItems(tvRes,     normalizeTvShow);
+
+      // Merge + sort theo năm mới nhất, lấy top 20
+      const merged = [...movies, ...tvShows]
+        .sort((a, b) => (b.year || 0) - (a.year || 0))
+        .slice(0, 20);
+
+      setItems(merged);
+    }).catch((err) => {
+      console.error(`[CountryMovieRows] ${country.code} error:`, err);
+      setItems([]);
+    }).finally(() => setLoading(false));
   }, [country.code]);
 
-  if (!loading && movies.length === 0) return null;
+  if (!loading && items.length === 0) return null;
 
   const COLS = isMobile ? 2 : 5;
-  const maxPage = Math.max(0, Math.ceil(movies.length / COLS) - 1);
-  const visible = isMobile
-    ? movies
-    : movies.slice(page * COLS, page * COLS + COLS);
+  const maxPage = Math.max(0, Math.ceil(items.length / COLS) - 1);
+  const visible = isMobile ? items : items.slice(page * COLS, page * COLS + COLS);
 
   return (
     <motion.section
@@ -176,9 +184,7 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
                 marginBottom: 2,
               }}
             >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>
-                {country.flag}
-              </span>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>{country.flag}</span>
               <span
                 style={{
                   fontFamily: FONT_BODY,
@@ -212,46 +218,29 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
 
         {/* Right: Prev / Next + See all */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Prev / Next — ẩn trên mobile, chỉ hiện khi có nhiều hơn 1 trang */}
           {!isMobile && !loading && maxPage > 0 && (
             <div style={{ display: "flex", gap: 6 }}>
               {[
-                {
-                  dir: -1,
-                  icon: <ChevronLeft size={16} strokeWidth={2} />,
-                  can: page > 0,
-                },
-                {
-                  dir: 1,
-                  icon: <ChevronRight size={16} strokeWidth={2} />,
-                  can: page < maxPage,
-                },
+                { dir: -1, icon: <ChevronLeft size={16} strokeWidth={2} />, can: page > 0 },
+                { dir:  1, icon: <ChevronRight size={16} strokeWidth={2} />, can: page < maxPage },
               ].map(({ dir, icon, can }) => (
                 <button
                   key={dir}
                   onClick={() => can && setPage((p) => p + dir)}
                   disabled={!can}
                   style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: "50%",
+                    width: 34, height: 34, borderRadius: "50%",
                     background: "rgba(12,12,12,0.88)",
                     border: "1px solid rgba(255,255,255,0.15)",
                     backdropFilter: "blur(10px)",
                     color: "#fff",
                     cursor: can ? "pointer" : "default",
                     opacity: can ? 1 : 0.22,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display: "flex", alignItems: "center", justifyContent: "center",
                     transition: "opacity 0.2s, transform 0.15s",
                   }}
-                  onMouseEnter={(e) =>
-                    can && (e.currentTarget.style.transform = "scale(1.1)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.transform = "scale(1)")
-                  }
+                  onMouseEnter={(e) => can && (e.currentTarget.style.transform = "scale(1.1)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                 >
                   {icon}
                 </button>
@@ -259,31 +248,19 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
             </div>
           )}
 
-          {/* See all */}
+          {/* See all — link đến browse với filter quốc gia */}
           <motion.button
             whileHover={{ gap: 8 }}
             onClick={() => navigate(`/browse?country=${country.code}`)}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: FONT_BODY,
-              fontSize: 12,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.35)",
-              letterSpacing: "0.04em",
-              padding: "6px 0",
-              transition: "color 0.2s",
+              display: "flex", alignItems: "center", gap: 5,
+              background: "none", border: "none", cursor: "pointer",
+              fontFamily: FONT_BODY, fontSize: 12, fontWeight: 600,
+              color: "rgba(255,255,255,0.35)", letterSpacing: "0.04em",
+              padding: "6px 0", transition: "color 0.2s",
             }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = "rgba(255,255,255,0.7)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = "rgba(255,255,255,0.35)")
-            }
+            onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
           >
             Xem tất cả
             <ArrowUpRight size={13} strokeWidth={2.5} />
@@ -304,7 +281,6 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
           }}
         />
 
-        {/* Card grid + next arrow */}
         <div
           ref={rowRef}
           style={{
@@ -314,7 +290,6 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
           }}
         >
           {isMobile ? (
-            /* Mobile: scroll ngang tự do, không có nút mũi tên */
             <div
               style={{
                 display: "flex",
@@ -334,11 +309,11 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
                       <Skeleton />
                     </div>
                   ))
-                : movies.map((m) => (
-                    <div key={m.id} style={{ flexShrink: 0 }}>
+                : items.map((item) => (
+                    <div key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`} style={{ flexShrink: 0 }}>
                       <MovieCard
-                        movie={m}
-                        isFavorited={favIds?.has(String(m.id))}
+                        movie={item}
+                        isFavorited={favIds?.has(String(item.id))}
                         onFavoriteToggle={onFavToggle}
                         cardWidth={160}
                       />
@@ -346,7 +321,6 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
                   ))}
             </div>
           ) : (
-            /* Desktop: grid có nút mũi tên */
             <>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -362,19 +336,17 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
                   }}
                 >
                   {loading
-                    ? Array.from({ length: COLS }).map((_, i) => (
-                        <Skeleton key={i} />
-                      ))
-                    : visible.map((m, i) => (
+                    ? Array.from({ length: COLS }).map((_, i) => <Skeleton key={i} />)
+                    : visible.map((item, i) => (
                         <motion.div
-                          key={m.id}
+                          key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.06, duration: 0.3 }}
                         >
                           <MovieCard
-                            movie={m}
-                            isFavorited={favIds?.has(String(m.id))}
+                            movie={item}
+                            isFavorited={favIds?.has(String(item.id))}
                             onFavoriteToggle={onFavToggle}
                           />
                         </motion.div>
@@ -387,9 +359,7 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
 
         {/* ── Dot pagination ── */}
         {!isMobile && !loading && maxPage > 0 && (
-          <div
-            style={{ display: "flex", gap: 6, marginTop: 16, paddingLeft: 2 }}
-          >
+          <div style={{ display: "flex", gap: 6, marginTop: 16, paddingLeft: 2 }}>
             {Array.from({ length: maxPage + 1 }).map((_, i) => (
               <motion.button
                 key={i}
@@ -397,16 +367,12 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
                 animate={{
                   width: i === page ? 24 : 6,
                   opacity: i === page ? 1 : 0.3,
-                  background:
-                    i === page ? country.accent : "rgba(255,255,255,0.5)",
+                  background: i === page ? country.accent : "rgba(255,255,255,0.5)",
                 }}
                 transition={{ duration: 0.25 }}
                 style={{
-                  height: 3,
-                  borderRadius: 2,
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
+                  height: 3, borderRadius: 2,
+                  border: "none", cursor: "pointer", padding: 0,
                 }}
               />
             ))}
@@ -419,8 +385,7 @@ const CountryBlock = ({ country, index, favIds, onFavToggle }) => {
         style={{
           marginTop: 40,
           height: 1,
-          background:
-            "linear-gradient(to right, rgba(255,255,255,0.06) 0%, transparent 80%)",
+          background: "linear-gradient(to right, rgba(255,255,255,0.06) 0%, transparent 80%)",
         }}
       />
     </motion.section>
@@ -469,7 +434,7 @@ export default function CountryMovieRows({ favIds, onFavToggle }) {
             letterSpacing: "-0.02em",
           }}
         >
-          Phim Theo Quốc Gia
+          Phim & Series Theo Quốc Gia
         </h2>
       </motion.div>
 

@@ -1,32 +1,38 @@
 // src/components/admin/AdminPersons.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, User, Calendar, MapPin, Film } from 'lucide-react';
-import { Input, Spinner, Modal } from '../ui';
+import { Search, User, Calendar, MapPin, Film, Tv } from 'lucide-react';
+import { Modal } from '../ui';
 import { usePagination } from '../../hooks/usePagination';
 import Pagination from '../common/Pagination';
 import axiosInstance from '../../config/axios';
-import { C, FONT_DISPLAY, FONT_BODY } from '../../context/homeTokens';
+
+const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
+const T = {
+  bg:          '#F4F3EF',
+  surface:     '#FFFFFF',
+  surfaceAlt:  '#FAFAF8',
+  surfaceHov:  '#F6F6F3',
+  accent:      '#1C5F3A',
+  accentLight: '#EAF5EF',
+  accentText:  '#155230',
+  text:        '#18181B',
+  textSub:     '#71717A',
+  textMuted:   '#A1A1AA',
+  border:      'rgba(0,0,0,0.08)',
+  shadow:      '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
+};
 
 const PAGE_SIZE = 20;
+const BATCH = 10;
 
-// Lấy danh sách phim → fetch detail từng phim (có cast + directorDetail)
-// Batch 10 request cùng lúc để tránh quá tải
-const fetchPersonsFromMovies = async () => {
-  // Bước 1: lấy danh sách ID phim
-  const listRes = await axiosInstance.get('/movies?pageSize=500');
-  const movies = Array.isArray(listRes) ? listRes
-    : listRes?.items ?? listRes?.movies ?? listRes?.data?.items ?? listRes?.data ?? [];
-
-  if (movies.length === 0) return [];
-
-  // Bước 2: fetch detail từng phim theo batch 10
-  const BATCH = 10;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fetchDetailsBatch = async (items, endpoint) => {
   const details = [];
-  for (let i = 0; i < movies.length; i += BATCH) {
-    const batch = movies.slice(i, i + BATCH);
+  for (let i = 0; i < items.length; i += BATCH) {
+    const batch = items.slice(i, i + BATCH);
     const results = await Promise.allSettled(
-      batch.map(m => axiosInstance.get(`/movies/${m.id}`))
+      batch.map(item => axiosInstance.get(`/${endpoint}/${item.id}`))
     );
     for (const r of results) {
       if (r.status === 'fulfilled') {
@@ -35,212 +41,288 @@ const fetchPersonsFromMovies = async () => {
       }
     }
   }
+  return details;
+};
 
-  // Bước 3: tổng hợp person từ cast + directorDetail
+// ── Fetch persons from movies ─────────────────────────────────────────────────
+const fetchPersonsFromMovies = async () => {
+  const listRes = await axiosInstance.get('/movies?pageSize=500');
+  const movies  = Array.isArray(listRes) ? listRes
+    : listRes?.items ?? listRes?.movies ?? listRes?.data?.items ?? listRes?.data ?? [];
+
+  if (movies.length === 0) return new Map();
+
+  const details   = await fetchDetailsBatch(movies, 'movies');
   const personMap = new Map();
 
   const upsert = (key, data, type, movie) => {
-    if (!personMap.has(key)) {
-      personMap.set(key, { ...data, movies: [], type });
-    }
+    if (!personMap.has(key)) personMap.set(key, { ...data, movies: [], tvShows: [], type });
     const entry = personMap.get(key);
     entry.movies.push({ id: movie.id, title: movie.title, posterUrl: movie.posterUrl });
-    // Cập nhật type nếu là đạo diễn (ưu tiên hơn)
     if (type === 'director') entry.type = 'director';
   };
 
   for (const m of details) {
-    // Cast
     if (Array.isArray(m.cast)) {
-      for (const c of m.cast) {
-        const key = c.tmdbPersonId ?? c.name;
-        upsert(key, c, 'cast', m);
-      }
+      for (const c of m.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', m);
     }
-    // Director
     if (m.directorDetail) {
       const d = m.directorDetail;
-      const key = d.tmdbPersonId ?? d.name;
-      upsert(key, d, 'director', m);
-    }
-    // Director name only fallback
-    else if (m.director) {
-      const key = m.director;
-      upsert(key, { name: m.director, profileUrl: null }, 'director', m);
+      upsert(d.tmdbPersonId ?? d.name, d, 'director', m);
+    } else if (m.director) {
+      upsert(m.director, { name: m.director, profileUrl: null }, 'director', m);
     }
   }
 
-  return Array.from(personMap.values())
-    .filter(p => p.name)
-    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'vi'));
+  return personMap;
 };
 
-const PersonCard = ({ person, onClick }) => {
+// ── Fetch persons from TV shows ───────────────────────────────────────────────
+const fetchPersonsFromTvShows = async () => {
+  const listRes = await axiosInstance.get('/tvshows?pageSize=500');
+  const shows   = Array.isArray(listRes) ? listRes
+    : listRes?.items ?? listRes?.tvShows ?? listRes?.data?.items ?? listRes?.data ?? [];
+
+  if (shows.length === 0) return new Map();
+
+  const details   = await fetchDetailsBatch(shows, 'tvshows');
+  const personMap = new Map();
+
+  const upsert = (key, data, type, show) => {
+    if (!personMap.has(key)) personMap.set(key, { ...data, movies: [], tvShows: [], type });
+    const entry = personMap.get(key);
+    entry.tvShows.push({ id: show.id, title: show.title, posterUrl: show.posterUrl });
+    if (type === 'director') entry.type = 'director';
+  };
+
+  for (const s of details) {
+    if (Array.isArray(s.cast)) {
+      for (const c of s.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', s);
+    }
+    // TV shows thường dùng creators thay vì director
+    if (Array.isArray(s.creators)) {
+      for (const cr of s.creators) upsert(cr.tmdbPersonId ?? cr.name, cr, 'director', s);
+    } else if (s.directorDetail) {
+      const d = s.directorDetail;
+      upsert(d.tmdbPersonId ?? d.name, d, 'director', s);
+    }
+  }
+
+  return personMap;
+};
+
+// ── Merge hai Map persons lại với nhau ───────────────────────────────────────
+const mergePersonMaps = (mapA, mapB) => {
+  const merged = new Map(mapA);
+
+  for (const [key, personB] of mapB) {
+    if (!merged.has(key)) {
+      merged.set(key, { ...personB });
+    } else {
+      const existing = merged.get(key);
+      existing.movies   = [...(existing.movies   ?? []), ...(personB.movies   ?? [])];
+      existing.tvShows  = [...(existing.tvShows  ?? []), ...(personB.tvShows  ?? [])];
+      if (personB.type === 'director') existing.type = 'director';
+      // Ưu tiên giữ thông tin phong phú hơn (có profileUrl, biography...)
+      if (!existing.profileUrl && personB.profileUrl) existing.profileUrl = personB.profileUrl;
+      if (!existing.biography  && personB.biography)  existing.biography  = personB.biography;
+      if (!existing.birthday   && personB.birthday)   existing.birthday   = personB.birthday;
+      if (!existing.placeOfBirth && personB.placeOfBirth) existing.placeOfBirth = personB.placeOfBirth;
+    }
+  }
+
+  return merged;
+};
+
+// ── PersonCard ────────────────────────────────────────────────────────────────
+const PersonCard = ({ person, index, onClick }) => {
   const [imgErr, setImgErr] = useState(false);
+  const isDirector  = person.type === 'director';
+  const totalWorks  = (person.movies?.length ?? 0) + (person.tvShows?.length ?? 0);
+
   return (
     <motion.div
-      whileHover={{ y: -4, boxShadow: '0 16px 40px rgba(0,0,0,0.6)' }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.02 }}
       onClick={() => onClick(person)}
-      style={{
-        background: '#0d0d0d',
-        border: `1px solid ${C.border}`,
-        borderRadius: 10,
-        overflow: 'hidden',
-        cursor: 'pointer',
-      }}
+      style={{ background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.1)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = T.shadow}
     >
       {/* Photo */}
-      <div style={{ aspectRatio: '2/3', background: '#1a1a1a', overflow: 'hidden', position: 'relative' }}>
+      <div style={{ aspectRatio: '2/3', background: T.bg, overflow: 'hidden', position: 'relative' }}>
         {person.profileUrl && !imgErr ? (
           <img src={person.profileUrl} alt={person.name}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
-            onError={() => setImgErr(true)}
-          />
+            onError={() => setImgErr(true)} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <User size={40} color="rgba(255,255,255,0.1)" />
+            <User size={36} color={T.textMuted} strokeWidth={1.2} />
           </div>
         )}
-        {/* Type badge */}
+        {/* Role badge */}
         <div style={{
           position: 'absolute', top: 8, left: 8,
-          padding: '2px 8px', borderRadius: 4,
-          background: person.type === 'director' ? 'rgba(229,24,30,0.85)' : 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          fontFamily: FONT_BODY, fontSize: 9, fontWeight: 700,
-          color: 'white', letterSpacing: '0.06em', textTransform: 'uppercase',
+          padding: '3px 8px', borderRadius: 5,
+          background: isDirector ? T.accent : T.surface,
+          boxShadow: T.shadow,
+          fontFamily: FONT, fontSize: 9.5, fontWeight: 700,
+          color: isDirector ? 'white' : T.textSub,
+          letterSpacing: '0.05em', textTransform: 'uppercase',
         }}>
-          {person.type === 'director' ? 'Đạo diễn' : 'Diễn viên'}
+          {isDirector ? 'Đạo diễn' : 'Diễn viên'}
         </div>
       </div>
+
       {/* Info */}
       <div style={{ padding: '12px 12px 14px' }}>
-        <p style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700, color: 'white', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {person.name}
         </p>
-        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
-          {person.movies?.length ?? 0} phim
+        <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>
+          {totalWorks} tác phẩm
         </p>
       </div>
     </motion.div>
   );
 };
 
-const PersonDetail = ({ person, onClose }) => {
-  const [imgErr, setImgErr] = useState(false);
-  if (!person) return null;
+// ── WorksSection (dùng chung cho movies & tvshows) ───────────────────────────
+const WorksSection = ({ items, icon: Icon, label, color }) => {
+  if (!items?.length) return null;
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-      {/* Photo */}
-      <div style={{ width: 160, flexShrink: 0, borderRadius: 10, overflow: 'hidden', background: '#1a1a1a' }}>
-        {person.profileUrl && !imgErr ? (
-          <img src={person.profileUrl} alt={person.name}
-            style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', objectPosition: 'center 15%', display: 'block' }}
-            onError={() => setImgErr(true)}
-          />
-        ) : (
-          <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <User size={48} color="rgba(255,255,255,0.1)" />
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <Icon size={11} color={color ?? T.textMuted} />
+        {items.length} {label}
+      </p>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+        {items.slice(0, 8).map(item => (
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, background: T.surfaceAlt, border: `1px solid ${T.border}` }}>
+            {item.posterUrl && (
+              <img src={item.posterUrl} alt="" style={{ width: 18, height: 25, borderRadius: 3, objectFit: 'cover' }} />
+            )}
+            <span style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {item.title}
+            </span>
           </div>
-        )}
-      </div>
-
-      {/* Details */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 900, color: 'white', margin: 0 }}>
-            {person.name}
-          </h2>
-          <span style={{
-            fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-            background: person.type === 'director' ? 'rgba(229,24,30,0.15)' : 'rgba(255,255,255,0.06)',
-            border: `1px solid ${person.type === 'director' ? 'rgba(229,24,30,0.3)' : C.border}`,
-            color: person.type === 'director' ? C.accent : 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-          }}>
-            {person.type === 'director' ? 'Đạo diễn' : 'Diễn viên'}
+        ))}
+        {items.length > 8 && (
+          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, alignSelf: 'center' }}>
+            +{items.length - 8} khác
           </span>
-        </div>
-
-        {/* Meta */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          {person.birthday && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <Calendar size={13} color="rgba(255,255,255,0.3)" />
-              <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
-                {new Date(person.birthday).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}
-              </span>
-            </div>
-          )}
-          {person.placeOfBirth && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <MapPin size={13} color="rgba(255,255,255,0.3)" />
-              <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{person.placeOfBirth}</span>
-            </div>
-          )}
-          {person.tmdbPersonId && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>TMDB ID: #{person.tmdbPersonId}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Biography */}
-        {person.biography && (
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-              Tiểu sử
-            </p>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, maxHeight: 140, overflowY: 'auto' }}>
-              {person.biography}
-            </p>
-          </div>
-        )}
-
-        {/* Movies */}
-        {person.movies?.length > 0 && (
-          <div>
-            <p style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-              <Film size={11} style={{ display: 'inline', marginRight: 5 }} />
-              {person.movies.length} phim
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {person.movies.slice(0, 8).map(m => (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}` }}>
-                  {m.posterUrl && <img src={m.posterUrl} alt="" style={{ width: 20, height: 28, borderRadius: 3, objectFit: 'cover' }} />}
-                  <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {m.title}
-                  </span>
-                </div>
-              ))}
-              {person.movies.length > 8 && (
-                <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.25)', alignSelf: 'center' }}>
-                  +{person.movies.length - 8} phim khác
-                </span>
-              )}
-            </div>
-          </div>
         )}
       </div>
     </div>
   );
 };
 
+// ── PersonDetail ──────────────────────────────────────────────────────────────
+const PersonDetail = ({ person }) => {
+  const [imgErr, setImgErr] = useState(false);
+  if (!person) return null;
+  const isDirector = person.type === 'director';
+
+  return (
+    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', fontFamily: FONT }}>
+      {/* Photo */}
+      <div style={{ width: 160, flexShrink: 0, borderRadius: 12, overflow: 'hidden', background: T.bg, border: `1px solid ${T.border}` }}>
+        {person.profileUrl && !imgErr ? (
+          <img src={person.profileUrl} alt={person.name}
+            style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', objectPosition: 'center 15%', display: 'block' }}
+            onError={() => setImgErr(true)} />
+        ) : (
+          <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <User size={48} color={T.textMuted} strokeWidth={1} />
+          </div>
+        )}
+      </div>
+
+      {/* Details */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Name & role */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.02em' }}>
+            {person.name}
+          </h2>
+          <span style={{
+            fontFamily: FONT, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
+            background: isDirector ? T.accentLight : T.bg,
+            border: `1px solid ${isDirector ? `${T.accent}30` : T.border}`,
+            color: isDirector ? T.accentText : T.textSub,
+          }}>
+            {isDirector ? 'Đạo diễn' : 'Diễn viên'}
+          </span>
+        </div>
+
+        {/* Meta */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
+          {person.birthday && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Calendar size={13} color={T.textMuted} />
+              <span style={{ fontFamily: FONT, fontSize: 13, color: T.textSub }}>
+                {new Date(person.birthday).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
+            </div>
+          )}
+          {person.placeOfBirth && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <MapPin size={13} color={T.textMuted} />
+              <span style={{ fontFamily: FONT, fontSize: 13, color: T.textSub }}>{person.placeOfBirth}</span>
+            </div>
+          )}
+          {person.tmdbPersonId && (
+            <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>TMDB ID: #{person.tmdbPersonId}</span>
+          )}
+        </div>
+
+        {/* Biography */}
+        {person.biography && (
+          <div style={{ marginBottom: 18 }}>
+            <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Tiểu sử</p>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.7, maxHeight: 140, overflowY: 'auto' }}>
+              {person.biography}
+            </p>
+          </div>
+        )}
+
+        {/* Movies */}
+        <WorksSection
+          items={person.movies}
+          icon={Film}
+          label="phim điện ảnh"
+          color={T.accent}
+        />
+
+        {/* TV Shows */}
+        <WorksSection
+          items={person.tvShows}
+          icon={Tv}
+          label="TV show"
+          color="#2563EB"
+        />
+      </div>
+    </div>
+  );
+};
+
+// ── AdminPersons ──────────────────────────────────────────────────────────────
 export default function AdminPersons() {
   const [allPersons, setAllPersons] = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [loadMsg,    setLoadMsg]    = useState('Đang tải danh sách phim...');
   const [search,     setSearch]     = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [selected,   setSelected]   = useState(null);
 
   useEffect(() => {
-    setLoadMsg('Đang tải danh sách phim...');
-    fetchPersonsFromMovies()
-      .then(persons => {
+    Promise.all([fetchPersonsFromMovies(), fetchPersonsFromTvShows()])
+      .then(([movieMap, tvMap]) => {
+        const merged = mergePersonMaps(movieMap, tvMap);
+        const persons = Array.from(merged.values())
+          .filter(p => p.name)
+          .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'vi'));
         setAllPersons(persons);
-        setLoadMsg('');
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -248,68 +330,73 @@ export default function AdminPersons() {
 
   const filtered = allPersons.filter(p => {
     const q = search.toLowerCase();
-    const matchSearch = !q || p.name?.toLowerCase().includes(q);
-    const matchType   = !typeFilter || p.type === typeFilter;
-    return matchSearch && matchType;
+    return (!q || p.name?.toLowerCase().includes(q)) && (!typeFilter || p.type === typeFilter);
   });
 
-  const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
+  const pagination  = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
   const pagePersons = pagination.paginate(filtered);
 
   return (
-    <div style={{ padding: '36px 40px 64px', maxWidth: 1300 }}>
+    <div style={{ padding: '28px 32px 56px', maxWidth: 1200, fontFamily: FONT }}>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 6 }}>Quản lý</p>
-        <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>
-          Diễn viên & Đạo diễn ({filtered.length})
-        </h1>
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 3 }}>Quản lý</p>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
+          Diễn viên & Đạo diễn
+          <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 500, color: T.textMuted, letterSpacing: 0 }}>({filtered.length})</span>
+        </h2>
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-        <div style={{ flex: 1 }}>
-          <Input type="search" placeholder="Tìm theo tên..." value={search} onChange={setSearch} onClear={() => setSearch('')} />
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={15} color={T.textMuted} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          <input
+            placeholder="Tìm theo tên..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', height: 40, padding: '0 14px 0 38px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none' }}
+          />
         </div>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{
-          height: 42, padding: '0 12px', borderRadius: 8,
-          background: '#111', border: `1px solid ${C.border}`,
-          color: typeFilter ? 'white' : 'rgba(255,255,255,0.35)',
-          fontFamily: FONT_BODY, fontSize: 13, outline: 'none', cursor: 'pointer',
-        }}>
+        <select
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value)}
+          style={{ height: 40, padding: '0 14px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, color: typeFilter ? T.text : T.textMuted, fontFamily: FONT, fontSize: 13.5, outline: 'none', cursor: 'pointer', minWidth: 140 }}
+        >
           <option value="">Tất cả</option>
-          <option value="cast" style={{ background: '#111' }}>Diễn viên</option>
-          <option value="director" style={{ background: '#111' }}>Đạo diễn</option>
+          <option value="cast">Diễn viên</option>
+          <option value="director">Đạo diễn</option>
         </select>
       </div>
 
+      {/* Grid */}
       {loading ? (
-        <div style={{ padding: '64px 0', textAlign: 'center' }}>
-          <Spinner size="md" color="red" />
-          <p style={{ fontFamily: FONT_BODY, fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 16 }}>
-            {loadMsg}
-          </p>
+        <div style={{ padding: '80px 0', textAlign: 'center' }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: 'spin 0.75s linear infinite', margin: '0 auto 12px' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Đang tải dữ liệu…</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: '80px 0', textAlign: 'center' }}>
+          <User size={32} color={T.textMuted} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy kết quả</p>
         </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
             <AnimatePresence>
               {pagePersons.map((p, i) => (
-                <motion.div key={p.tmdbPersonId ?? p.name} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }}>
-                  <PersonCard person={p} onClick={setSelected} />
-                </motion.div>
+                <PersonCard key={p.tmdbPersonId ?? p.name} person={p} index={i} onClick={setSelected} />
               ))}
             </AnimatePresence>
           </div>
-
-          {/* Pagination */}
           <Pagination {...pagination.props} itemLabel="người" />
         </>
       )}
 
       {/* Detail modal */}
-      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="" size="xl" showCloseBtn>
-        <PersonDetail person={selected} onClose={() => setSelected(null)} />
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết" size="xl" showCloseBtn>
+        <PersonDetail person={selected} />
       </Modal>
     </div>
   );
