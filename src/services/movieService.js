@@ -165,6 +165,23 @@ const movieService = {
   },
 
   /**
+   * [Admin] Bật / tắt Premium cho phim.
+   * Gọi PATCH /api/movies/{id}/premium
+   * @param {string}  movieId   - Movie ID
+   * @param {boolean} isPremium - true = Premium, false = Free
+   * @returns {Promise<{ message: string }>}
+   */
+  setPremium: async (movieId, isPremium) => {
+    try {
+      const response = await axiosInstance.patch(`/movies/${movieId}/premium`, { isPremium });
+      return response.data;
+    } catch (error) {
+      console.error('[movieService] Error setting premium:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy danh sách phim yêu thích (cần đăng nhập)
    */
   getFavorites: async () => {

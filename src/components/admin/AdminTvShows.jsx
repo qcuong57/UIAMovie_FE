@@ -3,14 +3,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, Search, Tv, Eye, Pencil,
+  AlertCircle, Search, Tv, Eye, Pencil, Crown,
 } from 'lucide-react';
 import tvShowService from '../../services/tvShowService';
 import { Button, Modal } from '../ui';
 import AdminTmdbSearch from './AdminTmdbSearch';
 import TvShowDetailPanel from './tvshow/TvShowDetailPanel';
 import TvShowEditModal   from './tvshow/TvShowEditModal';
-import { T, FONT_BODY as FONT } from '../../context/adminTokens';
+import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -23,8 +23,56 @@ const SpinnerLight = () => (
   </>
 );
 
+// ── Premium badge (hiển thị inline bên cạnh tên) ─────────────────────────────
+const PremiumBadge = () => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    padding: '2px 7px', borderRadius: 5,
+    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    fontSize: 10, fontWeight: 700, color: '#fff',
+    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+    boxShadow: '0 1px 4px rgba(245,158,11,0.35)',
+  }}>
+    <Crown size={9} style={{ flexShrink: 0 }} /> PRO
+  </span>
+);
+
+// ── Premium toggle button ─────────────────────────────────────────────────────
+function PremiumToggle({ isPremium, loading, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      title={isPremium ? 'Đang là Premium — bấm để chuyển về Free' : 'Đang là Free — bấm để đặt Premium'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 10px', borderRadius: 20,
+        border: isPremium ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(0,0,0,0.1)',
+        background: isPremium
+          ? 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)'
+          : 'rgba(0,0,0,0.04)',
+        cursor: loading ? 'wait' : 'pointer',
+        fontFamily: FONT,
+        fontSize: 11.5, fontWeight: 700,
+        color: isPremium ? '#92400E' : '#71717A',
+        transition: 'all 0.18s',
+        opacity: loading ? 0.6 : 1,
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => { if (!loading) e.currentTarget.style.filter = 'brightness(0.95)'; }}
+      onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; }}
+    >
+      {loading
+        ? <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
+        : <Crown size={11} style={{ flexShrink: 0 }} />
+      }
+      {isPremium ? 'Premium' : 'Free'}
+    </button>
+  );
+}
+
 // ── Table header ──────────────────────────────────────────────────────────────
-const Th = ({ children, sortKey, sortBy, sortDir, onSort }) => {
+const Th = ({ children, sortKey, sortBy, sortDir, onSort, width }) => {
   const active = sortBy === sortKey;
   return (
     <th onClick={() => sortKey && onSort?.(sortKey)} style={{
@@ -34,7 +82,7 @@ const Th = ({ children, sortKey, sortBy, sortDir, onSort }) => {
       letterSpacing: '0.07em', textTransform: 'uppercase',
       cursor: sortKey ? 'pointer' : 'default', whiteSpace: 'nowrap',
       userSelect: 'none', borderBottom: `1px solid ${T.border}`,
-      background: T.surfaceAlt,
+      background: T.surfaceAlt, width,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {children}
@@ -58,113 +106,37 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
   );
 }
 
-// ── TMDB Card (TV Show) ───────────────────────────────────────────────────────
-const TmdbCard = ({ show, onImport, importing, imported, importMsg }) => {
-  const [copied, setCopied] = useState(false);
-  const year = show.firstAirDate ? new Date(show.firstAirDate).getFullYear() : null;
-
-  const copyId = () => {
-    navigator.clipboard.writeText(String(show.id));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
+// ── Ghost Button (dùng cho Tải lại / Import — đồng bộ style AdminRevenue) ────
+const GhostBtn = ({ onClick, children, active, accent }) => {
+  const [hov, setHov] = useState(false);
   return (
-    <div style={{
-      background: imported ? '#EFF6FF' : T.surface,
-      border: `1px solid ${imported ? 'rgba(59,130,246,0.25)' : T.border}`,
-      borderRadius: 10, overflow: 'hidden',
-      transition: 'box-shadow 0.15s',
-    }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = T.shadow}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: FONT, fontSize: 13, fontWeight: (active || accent) ? 600 : 500,
+        color: accent ? '#fff' : hov ? T.text : T.textSub,
+        background: accent ? T.accent : hov ? T.surfaceHov : T.surface,
+        border: `1px solid ${accent ? T.accent : hov ? T.borderMed : T.border}`,
+        borderRadius: 9, padding: '8px 16px',
+        cursor: 'pointer', outline: 'none',
+        transition: 'all 0.13s',
+        whiteSpace: 'nowrap',
+      }}
     >
-      <div style={{ display: 'flex', gap: 0 }}>
-        {/* Poster */}
-        <div style={{ width: 54, flexShrink: 0, background: T.bg }}>
-          {show.posterUrl
-            ? <img src={show.posterUrl} alt="" style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
-            : <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📺</div>
-          }
-        </div>
-        {/* Info */}
-        <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 4 }}>
-            <p style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: T.text, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-              {show.name ?? show.title}
-            </p>
-            {imported && (
-              <span style={{ flexShrink: 0, fontFamily: FONT, fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#DBEAFE', border: '1px solid rgba(59,130,246,0.3)', color: '#1D4ED8' }}>
-                ✓ Đã có
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            {show.voteAverage > 0 && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT, fontSize: 10.5, fontWeight: 700, color: T.gold }}>
-                <Star size={9} style={{ fill: T.gold, color: T.gold }}/> {show.voteAverage.toFixed(1)}
-              </span>
-            )}
-            {year && <span style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted }}>{year}</span>}
-            {show.originCountry?.[0] && (
-              <span style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted }}>
-                {COUNTRY_FLAG[show.originCountry[0]] ?? '🌐'} {show.originCountry[0]}
-              </span>
-            )}
-            {show.numberOfSeasons > 0 && (
-              <span style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted }}>{show.numberOfSeasons} mùa</span>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={copyId} style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              background: T.surfaceAlt, border: `1px solid ${T.border}`,
-              borderRadius: 5, padding: '3px 8px', cursor: 'pointer',
-              fontFamily: FONT, fontSize: 10,
-              color: copied ? '#1D4ED8' : T.textMuted, transition: 'color 0.15s',
-            }}>
-              {copied ? <Check size={9}/> : <Copy size={9}/>} #{show.id}
-            </button>
-            <button
-              disabled={imported || importing}
-              onClick={() => !imported && onImport(show.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '4px 12px', borderRadius: 6, cursor: imported ? 'default' : 'pointer',
-                background: imported ? T.surfaceAlt : T.accent,
-                border: `1px solid ${imported ? T.border : T.accent}`,
-                fontFamily: FONT, fontSize: 11, fontWeight: 600,
-                color: imported ? T.textMuted : '#fff',
-                opacity: importing ? 0.7 : 1, transition: 'all 0.15s',
-              }}
-            >
-              {importing ? <SpinnerLight /> : imported ? <><Check size={10}/>Đã có</> : <><Download size={10}/>Import</>}
-            </button>
-          </div>
-        </div>
-      </div>
-      {importMsg && (
-        <div style={{
-          padding: '7px 12px',
-          background: importMsg.type === 'success' ? '#EFF6FF' : importMsg.type === 'warn' ? '#FEFCE8' : '#FEF2F2',
-          borderTop: `1px solid ${T.border}`,
-          fontFamily: FONT, fontSize: 11.5,
-          color: importMsg.type === 'success' ? '#1D4ED8' : importMsg.type === 'warn' ? '#D97706' : T.red,
-        }}>
-          {importMsg.text}
-        </div>
-      )}
-    </div>
+      {children}
+    </button>
   );
 };
-
 
 // ── Pagination controls ───────────────────────────────────────────────────────
 const PaginationBar = ({ page, totalPages, total, onPage }) => {
   if (totalPages <= 1) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, fontFamily: FONT }}>
-      <span style={{ fontSize: 12, color: T.textMuted }}>{total} TV show</span>
+      <span style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>{total.toLocaleString()} TV show</span>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={() => onPage(page - 1)} disabled={page <= 1}
           style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: page <= 1 ? 'not-allowed' : 'pointer', fontSize: 13, color: page <= 1 ? T.textMuted : T.text, opacity: page <= 1 ? 0.5 : 1 }}>
@@ -192,18 +164,19 @@ const PaginationBar = ({ page, totalPages, total, onPage }) => {
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminTvShows() {
-  const [shows,     setShows]     = useState([]);
-  const [total,     setTotal]     = useState(0);
-  const [page,      setPage]      = useState(1);
-  const [loading,   setLoading]   = useState(true);
-  const [search,    setSearch]    = useState('');
-  const [sortBy,    setSortBy]    = useState('firstairdate');
-  const [sortDir,   setSortDir]   = useState('desc');
-  const [deleteId,   setDeleteId]  = useState(null);
-  const [deleting,   setDeleting]  = useState(false);
-  const [showPanel,  setShowPanel] = useState(false);
-  const [detailId,   setDetailId]  = useState(null);
-  const [editShow,   setEditShow]  = useState(null);
+  const [shows,      setShows]      = useState([]);
+  const [total,      setTotal]      = useState(0);
+  const [page,       setPage]       = useState(1);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState('');
+  const [sortBy,     setSortBy]     = useState('firstairdate');
+  const [sortDir,    setSortDir]    = useState('desc');
+  const [deleteId,   setDeleteId]   = useState(null);
+  const [deleting,   setDeleting]   = useState(false);
+  const [showPanel,  setShowPanel]  = useState(false);
+  const [detailId,   setDetailId]   = useState(null);
+  const [editShow,   setEditShow]   = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
   const debounceRef = useRef(null);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -264,49 +237,91 @@ export default function AdminTvShows() {
     finally { setDeleting(false); }
   };
 
+  /**
+   * Toggle Premium cho 1 TV show.
+   * Optimistic update ngay → rollback nếu API lỗi.
+   */
+  const handleTogglePremium = async (show) => {
+    if (togglingId) return;
+    const next = !show.isPremium;
+    setTogglingId(show.id);
+    setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: next } : s));
+    try {
+      await tvShowService.setPremium(show.id, next);
+    } catch (e) {
+      console.error('[AdminTvShows] togglePremium failed:', e);
+      setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: !next } : s));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
     <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      {/* ── Header — đồng bộ AdminRevenue ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
         <div>
-          <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 3 }}>Quản lý</p>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+            Quản lý
+          </p>
+          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
             TV Shows
-            <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 500, color: T.textMuted, letterSpacing: 0 }}>({total})</span>
+            <span style={{
+              fontSize: 13, fontWeight: 600, color: T.textMuted,
+              letterSpacing: 0, fontFamily: FONT,
+              background: T.surfaceAlt, border: `1px solid ${T.border}`,
+              borderRadius: 8, padding: '2px 10px',
+            }}>
+              {total.toLocaleString()}
+            </span>
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => fetchShows(page, search, sortBy, sortDir)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 500, color: T.textSub }}
-            onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
-            onMouseLeave={e => e.currentTarget.style.background = T.surface}
-          >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <GhostBtn onClick={() => fetchShows(page, search, sortBy, sortDir)}>
             <RefreshCw size={14}/> Tải lại
-          </button>
-          <button onClick={() => setShowPanel(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 9, background: T.accent, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: '#fff' }}
-            onMouseEnter={e => e.currentTarget.style.background = T.accentText}
-            onMouseLeave={e => e.currentTarget.style.background = T.accent}
-          >
+          </GhostBtn>
+          <GhostBtn onClick={() => setShowPanel(true)} accent>
             <Download size={14}/> Import TMDB
-          </button>
+          </GhostBtn>
         </div>
       </div>
 
-      {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 20 }}>
-        <Search size={15} color={T.textMuted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+      {/* ── Search bar — đồng bộ AdminRevenue ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 7,
+        background: T.surface, border: `1px solid ${T.border}`,
+        borderRadius: 10, padding: '0 14px',
+        marginBottom: 20, height: 42,
+        transition: 'border-color 0.13s',
+      }}
+        onFocusCapture={e => e.currentTarget.style.borderColor = T.borderFocus}
+        onBlurCapture={e => e.currentTarget.style.borderColor = T.border}
+      >
+        <Search size={15} color={T.textMuted} style={{ flexShrink: 0 }} />
         <input
           placeholder="Tìm kiếm theo tên TV show..."
           value={search}
           onChange={e => handleSearchChange(e.target.value)}
-          style={{ width: '100%', height: 42, padding: '0 14px 0 42px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none', boxSizing: 'border-box' }}
+          style={{
+            flex: 1, border: 'none', outline: 'none', background: 'transparent',
+            fontFamily: FONT, fontSize: 13.5, color: T.text,
+          }}
         />
+        {search && (
+          <button
+            onClick={() => handleSearchChange('')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, lineHeight: 1, fontSize: 18 }}
+          >×</button>
+        )}
       </div>
 
-      {/* Table */}
-      <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: T.shadow }}>
+      {/* ── Table — đồng bộ AdminRevenue card style ── */}
+      <div style={{
+        background: T.surface, border: `1px solid ${T.border}`,
+        borderRadius: 16, overflow: 'hidden',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -317,27 +332,43 @@ export default function AdminTvShows() {
                 <Th>Quốc gia</Th>
                 <Th>Seasons</Th>
                 <Th>Thể loại</Th>
-                <th style={{ padding: '11px 16px', borderBottom: `1px solid ${T.border}`, background: T.surfaceAlt, width: 120 }}/>
+                {/* Cột Premium — mới thêm */}
+                <Th width={100}>Premium</Th>
+                <th style={{ padding: '11px 16px', borderBottom: `1px solid ${T.border}`, background: T.surfaceAlt, width: 110 }}/>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: '64px 0', textAlign: 'center' }}><SpinnerLight /></td></tr>
+                <tr><td colSpan={8} style={{ padding: '64px 0', textAlign: 'center' }}><SpinnerLight /></td></tr>
               ) : shows.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: '48px 0', textAlign: 'center', fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy TV show</td></tr>
+                <tr>
+                  <td colSpan={8} style={{ padding: '56px 0', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📺</div>
+                    <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy TV show</p>
+                  </td>
+                </tr>
               ) : shows.map((s, i) => (
-                <motion.tr key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
+                <motion.tr
+                  key={s.id}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.02 }}
                   style={{ borderBottom: `1px solid ${T.border}`, transition: 'background 0.1s' }}
                   onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
+                  {/* TV Show info */}
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ width: 32, height: 46, borderRadius: 6, overflow: 'hidden', background: T.bg, flexShrink: 0, border: `1px solid ${T.border}` }}>
                         {s.posterUrl && <img src={s.posterUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{s.title}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
+                            {s.title}
+                          </p>
+                          {s.isPremium && <PremiumBadge />}
+                        </div>
                         <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, marginTop: 2 }}>
                           {s.status ?? ''}
                           {s.tmdbId ? ` · TMDB #${s.tmdbId}` : ''}
@@ -345,6 +376,8 @@ export default function AdminTvShows() {
                       </div>
                     </div>
                   </td>
+
+                  {/* Rating */}
                   <td style={{ padding: '12px 16px' }}>
                     {s.rating ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -353,17 +386,25 @@ export default function AdminTvShows() {
                       </div>
                     ) : <span style={{ color: T.textMuted, fontSize: 13 }}>—</span>}
                   </td>
+
+                  {/* Year */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{s.year ?? '—'}</td>
+
+                  {/* Country */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 12.5 }}>
                     {s.originCountry
                       ? <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: T.textSub }}>{COUNTRY_FLAG[s.originCountry] ?? '🌐'} {s.originCountry}</span>
                       : <span style={{ color: T.textMuted }}>—</span>}
                   </td>
+
+                  {/* Seasons */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>
                     {s.numberOfSeasons != null
                       ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Tv size={12} color={T.textMuted}/> {s.numberOfSeasons}</span>
                       : <span style={{ color: T.textMuted }}>—</span>}
                   </td>
+
+                  {/* Genres */}
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {s.genres?.slice(0, 2).map(g => (
@@ -372,6 +413,17 @@ export default function AdminTvShows() {
                       {(s.genres?.length ?? 0) > 2 && <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>+{s.genres.length - 2}</span>}
                     </div>
                   </td>
+
+                  {/* Premium toggle — mới thêm */}
+                  <td style={{ padding: '12px 16px' }}>
+                    <PremiumToggle
+                      isPremium={!!s.isPremium}
+                      loading={togglingId === s.id}
+                      onClick={() => handleTogglePremium(s)}
+                    />
+                  </td>
+
+                  {/* Actions */}
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 5 }}>
                       <ActionBtn color={T.textSub} bg={T.surfaceAlt} border={T.border} title="Xem chi tiết" onClick={() => setDetailId(s.id)}>
@@ -395,19 +447,31 @@ export default function AdminTvShows() {
       <PaginationBar page={page} totalPages={totalPages} total={total} onPage={handlePage} />
 
       {/* Delete modal */}
-      <Modal isOpen={!!deleteId} onClose={() => setDeleteId(null)} title="Xác nhận xóa TV show" size="sm"
-        footer={<><Button variant="ghost" size="sm" onClick={() => setDeleteId(null)}>Hủy</Button><Button variant="danger" size="sm" loading={deleting} onClick={handleDelete}>Xóa</Button></>}
+      <Modal
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        title="Xác nhận xóa TV show"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteId(null)}>Hủy</Button>
+            <Button variant="danger" size="sm" loading={deleting} onClick={handleDelete}>Xóa</Button>
+          </>
+        }
       >
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <AlertCircle size={18} color={T.red} style={{ flexShrink: 0, marginTop: 1 }}/>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.6 }}>Bạn chắc chắn muốn xóa TV show này? Hành động này không thể hoàn tác.</p>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.6 }}>
+            Bạn chắc chắn muốn xóa TV show này? Hành động này không thể hoàn tác.
+          </p>
         </div>
       </Modal>
 
       {/* Backdrop */}
       <AnimatePresence>
         {showPanel && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setShowPanel(false)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 199, backdropFilter: 'blur(2px)' }}
           />

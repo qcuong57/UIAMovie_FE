@@ -1,21 +1,51 @@
 // src/components/movie/MovieCard.jsx
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader } from 'lucide-react';
+import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import movieService  from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
+import PremiumGateModal from './ui/PremiumGateModal';
 
 // ── Route helpers ────────────────────────────────────────────────
-const infoPath  = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
+const infoPath   = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
 const playerPath = (item) => item.isTvShow ? `/tvshow/${item.id}`      : `/movie/${item.id}`;
 
-// ── MobileCard — card đơn giản cho mobile có nút yêu thích ──────
+// ── Premium helpers ──────────────────────────────────────────────
+function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem('currentUser');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function userHasPremium(user) {
+  if (!user) return false;
+  return (
+    user.isPremium === true ||
+    user.plan === 'premium' ||
+    user.subscription?.active === true
+  );
+}
+
+// ── Portal wrapper — render modal ra ngoài stacking context của card ──
+// Đây là fix chính: motion.div của card tạo ra một stacking context mới
+// (vì có transform + zIndex), khiến modal bị kẹp bên trong dù zIndex=9999.
+// Dùng Portal để mount modal thẳng vào document.body.
+function ModalPortal({ children }) {
+  return createPortal(children, document.body);
+}
+
+// ── MobileCard ───────────────────────────────────────────────────
 const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)' }) => {
   const [imgError, setImgError] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const [localFav, setLocalFav] = useState(isFavorited);
+  const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
@@ -42,11 +72,19 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
     }
   };
 
+  const handleCardClick = () => {
+    if (movie.isPremium && !userHasPremium(getCurrentUser())) {
+      setShowGate(true);
+      return;
+    }
+    navigate(infoPath(movie));
+  };
+
   return (
     <div style={{ width: cardWidth }}>
       {/* Poster */}
       <div
-        onClick={() => navigate(infoPath(movie))}
+        onClick={handleCardClick}
         style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '2/3', background: '#181818', cursor: 'pointer' }}
       >
         {movie.posterUrl && !imgError
@@ -61,7 +99,20 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
             <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 11, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
           </div>
         )}
-        {/* Fav button — góc dưới phải */}
+        {/* Premium badge */}
+        {movie.isPremium && (
+          <div style={{
+            position: 'absolute', top: 6, right: 6,
+            display: 'flex', alignItems: 'center', gap: 3,
+            padding: '2px 6px', borderRadius: 99,
+            background: 'linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))',
+            backdropFilter: 'blur(6px)',
+          }}>
+            <Crown size={9} fill="#1c1400" color="#1c1400" />
+            <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 9, fontWeight: 800, color: '#1c1400', letterSpacing: '0.04em' }}>PREMIUM</span>
+          </div>
+        )}
+        {/* Fav button */}
         <button
           onClick={handleFav}
           disabled={favLoading}
@@ -82,27 +133,54 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
           }
         </button>
       </div>
+
       {/* Title + year */}
-      <div style={{ paddingTop: 6 }} onClick={() => navigate(infoPath(movie))} >
+      <div style={{ paddingTop: 6 }} onClick={handleCardClick}>
         <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 1, cursor: 'pointer' }}>{movie.title}</p>
         {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>}
       </div>
+
+      {/* FIX: Portal để modal không bị stacking context của card kẹp */}
+      <ModalPortal>
+        <PremiumGateModal
+          open={showGate}
+          onClose={() => setShowGate(false)}
+          movieTitle={movie.title}
+        />
+      </ModalPortal>
     </div>
   );
 };
 
+// ── Desktop MovieCard ─────────────────────────────────────────────
 const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, cardWidth }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const [localFav, setLocalFav] = useState(isFavorited);
+  const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
-  // Sync khi parent cập nhật lại isFavorited
   useEffect(() => {
     setLocalFav(isFavorited);
   }, [isFavorited]);
+
+  // ── Premium guard ────────────────────────────────────────────────
+  const isPremiumLocked = movie?.isPremium && !userHasPremium(getCurrentUser());
+
+  const handleNavigateInfo = () => {
+    navigate(infoPath(movie));
+  };
+
+  const handlePlay = (e) => {
+    e.stopPropagation();
+    if (isPremiumLocked) {
+      setShowGate(true);
+      return;
+    }
+    navigate(playerPath(movie));
+  };
 
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
@@ -128,7 +206,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
 
   if (!movie) return null;
 
-  // Mobile: dùng card đơn giản có nút yêu thích
+  // Mobile: dùng card đơn giản
   if (isMobile) {
     return (
       <MobileCard
@@ -158,7 +236,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
             : { scale: 1,    y: 0,  boxShadow: '0 4px 16px rgba(0,0,0,0.45)' }
         }
         transition={{ type: 'spring', stiffness: 270, damping: 25 }}
-        onClick={() => navigate(infoPath(movie))}
+        onClick={handleNavigateInfo}
       >
         {/* ── Poster image ── */}
         {movie.posterUrl && !imgError ? (
@@ -192,13 +270,29 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
           </div>
         )}
 
+        {/* ── Premium badge top-right ── */}
+        {movie.isPremium && (
+          <div
+            className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full"
+            style={{
+              background: 'linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))',
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <Crown size={9} fill="#1c1400" color="#1c1400" />
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 9, fontWeight: 800, color: '#1c1400', letterSpacing: '0.04em' }}>
+              PREMIUM
+            </span>
+          </div>
+        )}
+
         {/* Persistent bottom vignette */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }}
         />
 
-        {/* ── Hover overlay: deep gradient + info panel at bottom ── */}
+        {/* ── Hover overlay ── */}
         <AnimatePresence>
           {isHovered && (
             <motion.div
@@ -216,11 +310,15 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {/* Play */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); navigate(playerPath(movie)); }}
+                    onClick={handlePlay}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
-                    style={{ background: '#fff' }}
+                    style={{ background: isPremiumLocked ? 'rgba(250,204,21,0.9)' : '#fff' }}
+                    title={isPremiumLocked ? 'Nội dung Premium' : 'Phát'}
                   >
-                    <Play size={15} fill="#000" color="#000" className="ml-0.5" />
+                    {isPremiumLocked
+                      ? <Crown size={14} fill="#1c1400" color="#1c1400" />
+                      : <Play size={15} fill="#000" color="#000" className="ml-0.5" />
+                    }
                   </button>
 
                   {/* Add / Favourite */}
@@ -296,6 +394,20 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
           )}
         </AnimatePresence>
       </motion.div>
+
+      {/*
+        FIX: Dùng Portal để render modal ra ngoài DOM tree của card.
+        Nguyên nhân bug: motion.div bên trên có `transform` + `zIndex` → tạo
+        stacking context mới → modal bị kẹp bên trong, không thoát ra được
+        dù zIndex=9999. Portal mount thẳng vào document.body nên thoát hoàn toàn.
+      */}
+      <ModalPortal>
+        <PremiumGateModal
+          open={showGate}
+          onClose={() => setShowGate(false)}
+          movieTitle={movie.title}
+        />
+      </ModalPortal>
     </div>
   );
 };

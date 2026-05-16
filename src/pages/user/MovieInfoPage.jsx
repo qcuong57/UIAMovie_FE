@@ -11,11 +11,38 @@ import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
 import TrailerModal from "../../components/movie/ui/TrailerModal";
 import Skeleton from "../../components/movie/ui/Skeleton";
-import { C, extractYoutubeKey, fmt, fmtRuntime, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
+import {
+  C,
+  extractYoutubeKey,
+  fmt,
+  fmtRuntime,
+  GLOBAL_STYLES,
+} from "../../components/movie/ui/movieConstants";
 
 // ── Extracted components ──────────────────────────────────────────
 import MovieInfoHero from "../../components/movie/film/MovieInfoHero";
 import MovieInfoTabs from "../../components/movie/film/MovieInfoTabs";
+
+// ── Premium gate modal ────────────────────────────────────────────
+import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
+
+// ══════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Kiểm tra user hiện tại có gói Premium không.
+ * Điều chỉnh theo cách bạn lưu thông tin user (JWT claim, localStorage, context…).
+ */
+function userHasPremium(user) {
+  if (!user) return false;
+  // Tuỳ backend: user.isPremium / user.plan === 'premium' / user.subscription?.active
+  return (
+    user.isPremium === true ||
+    user.plan === "premium" ||
+    user.subscription?.active === true
+  );
+}
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -25,16 +52,19 @@ export default function MovieInfoPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [movie,              setMovie]              = useState(null);
-  const [cast,               setCast]               = useState([]);
+  const [movie, setMovie] = useState(null);
+  const [cast, setCast] = useState([]);
   const [directorsFromMovie, setDirectorsFromMovie] = useState([]);
-  const [trailers,           setTrailers]           = useState([]);
-  const [loading,            setLoading]            = useState(true);
-  const [error,              setError]              = useState(null);
-  const [showTrailer,        setShowTrailer]        = useState(false);
-  const [isFav,              setIsFav]              = useState(false);
-  const [activeTab,          setActiveTab]          = useState("cast"); // 'cast' | 'reviews' | 'details'
-  const [imgLoaded,          setImgLoaded]          = useState(false);
+  const [trailers, setTrailers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showTrailer, setShowTrailer] = useState(false);
+  const [isFav, setIsFav] = useState(false);
+  const [activeTab, setActiveTab] = useState("cast"); // 'cast' | 'reviews' | 'details'
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // ── Premium gate state ───────────────────────────────────────────
+  const [showPremiumGate, setShowPremiumGate] = useState(false);
 
   const [currentUser] = useState(() => {
     try {
@@ -63,43 +93,54 @@ export default function MovieInfoPage() {
       const raw = movieRes?.movie || movieRes;
 
       const normalized = {
-        id:          raw.id,
-        title:       raw.title,
-        tagline:     raw.tagline || "",
+        id: raw.id,
+        title: raw.title,
+        tagline: raw.tagline || "",
         description: raw.description || raw.overview || "",
-        year:        raw.releaseDate ? new Date(raw.releaseDate).getFullYear() : raw.year,
+        year: raw.releaseDate
+          ? new Date(raw.releaseDate).getFullYear()
+          : raw.year,
         releaseDate: raw.releaseDate,
-        runtime:     raw.duration || raw.runtime,
-        rating:      raw.rating || raw.voteAverage,
-        voteCount:   raw.voteCount,
-        popularity:  raw.popularity,
-        genres:      raw.genres || [],
-        posterUrl:   raw.posterUrl,
+        runtime: raw.duration || raw.runtime,
+        rating: raw.rating || raw.voteAverage,
+        voteCount: raw.voteCount,
+        popularity: raw.popularity,
+        genres: raw.genres || [],
+        posterUrl: raw.posterUrl,
         backdropUrl: raw.backdropUrl,
-        language:    raw.language || raw.originalLanguage,
-        budget:      raw.budget,
-        revenue:     raw.revenue,
-        tmdbId:      raw.tmdbId,
-        trailerKey:  raw.trailerKey || extractYoutubeKey(
-                       raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl
-                     ),
-        trailers:    raw.trailers || [],
-        reviews:     raw.reviews || [],
-        images:      raw.images  || [],
+        language: raw.language || raw.originalLanguage,
+        budget: raw.budget,
+        revenue: raw.revenue,
+        tmdbId: raw.tmdbId,
+        isPremium: raw.isPremium ?? false, // ← giữ lại trường này
+        trailerKey:
+          raw.trailerKey ||
+          extractYoutubeKey(
+            raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
+          ),
+        trailers: raw.trailers || [],
+        reviews: raw.reviews || [],
+        images: raw.images || [],
       };
       setMovie(normalized);
       if (normalized.trailers?.length) setTrailers(normalized.trailers);
 
       // Directors
       if (raw?.directorDetail) {
-        setDirectorsFromMovie([{
-          id:           raw.directorDetail.id ?? raw.directorDetail.personId ?? raw.directorDetail.tmdbPersonId ?? null,
-          name:         raw.directorDetail.name,
-          profileUrl:   raw.directorDetail.profileUrl,
-          biography:    raw.directorDetail.biography,
-          birthday:     raw.directorDetail.birthday,
-          placeOfBirth: raw.directorDetail.placeOfBirth,
-        }]);
+        setDirectorsFromMovie([
+          {
+            id:
+              raw.directorDetail.id ??
+              raw.directorDetail.personId ??
+              raw.directorDetail.tmdbPersonId ??
+              null,
+            name: raw.directorDetail.name,
+            profileUrl: raw.directorDetail.profileUrl,
+            biography: raw.directorDetail.biography,
+            birthday: raw.directorDetail.birthday,
+            placeOfBirth: raw.directorDetail.placeOfBirth,
+          },
+        ]);
       } else if (raw?.director) {
         setDirectorsFromMovie([{ name: raw.director, profileUrl: null }]);
       }
@@ -109,12 +150,12 @@ export default function MovieInfoPage() {
         const sorted = [...raw.cast]
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((c) => ({
-            id:           c.id ?? c.personId ?? c.tmdbPersonId ?? null,
-            name:         c.name,
-            character:    c.character,
-            profileUrl:   c.profileUrl,
-            biography:    c.biography,
-            birthday:     c.birthday,
+            id: c.id ?? c.personId ?? c.tmdbPersonId ?? null,
+            name: c.name,
+            character: c.character,
+            profileUrl: c.profileUrl,
+            biography: c.biography,
+            birthday: c.birthday,
             placeOfBirth: c.placeOfBirth,
           }));
         setCast(sorted);
@@ -130,10 +171,12 @@ export default function MovieInfoPage() {
   const directors =
     directorsFromMovie.length > 0
       ? directorsFromMovie
-      : cast.filter((p) => p.job === "Director" || p.department === "Directing");
+      : cast.filter(
+          (p) => p.job === "Director" || p.department === "Directing",
+        );
 
   const actors = cast.filter(
-    (p) => p.job !== "Director" && p.department !== "Directing"
+    (p) => p.job !== "Director" && p.department !== "Directing",
   );
 
   const firstTrailerKey =
@@ -142,8 +185,24 @@ export default function MovieInfoPage() {
   const year = movie?.year;
 
   const genreList = Array.isArray(movie?.genres)
-    ? movie.genres.map((g) => (typeof g === "string" ? g : g.name)).filter(Boolean)
+    ? movie.genres
+        .map((g) => (typeof g === "string" ? g : g.name))
+        .filter(Boolean)
     : [];
+
+  // ── Premium guard ────────────────────────────────────────────────
+  /**
+   * Gọi hàm này thay vì navigate trực tiếp.
+   * Nếu phim là premium và user chưa có gói → show modal.
+   * Ngược lại → vào xem bình thường.
+   */
+  const handlePlay = () => {
+    if (movie?.isPremium && !userHasPremium(currentUser)) {
+      setShowPremiumGate(true);
+      return;
+    }
+    navigate(`/movie/${id}`);
+  };
 
   // ── Loading ──────────────────────────────────────────────────────
   if (loading) {
@@ -157,11 +216,25 @@ export default function MovieInfoPage() {
         }}
       >
         <style>{GLOBAL_STYLES}</style>
-        <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            padding: "20px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <Skeleton w={90} h={32} r={20} />
         </div>
         <Skeleton w="100%" h={420} r={0} />
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px", width: "100%" }}>
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "40px 24px",
+            width: "100%",
+          }}
+        >
           <Skeleton w={340} h={40} r={6} style={{ marginBottom: 16 }} />
           <Skeleton w={200} h={20} r={4} style={{ marginBottom: 32 }} />
           <Skeleton w="100%" h={80} r={8} style={{ marginBottom: 12 }} />
@@ -248,7 +321,7 @@ export default function MovieInfoPage() {
         firstTrailerKey={firstTrailerKey}
         isFav={isFav}
         onToggleFav={() => setIsFav((v) => !v)}
-        onPlay={() => navigate(`/movie/${id}`)}
+        onPlay={handlePlay}
         onTrailer={() => setShowTrailer(true)}
         imgLoaded={imgLoaded}
         onImgLoad={() => setImgLoaded(true)}
@@ -297,7 +370,9 @@ export default function MovieInfoPage() {
 
         {/* Backdrop carousel */}
         {(() => {
-          const backdrops = (movie?.images || []).filter((i) => i.imageType === "backdrop");
+          const backdrops = (movie?.images || []).filter(
+            (i) => i.imageType === "backdrop",
+          );
           if (!backdrops.length) return null;
           return <BackdropCarousel backdrops={backdrops} />;
         })()}
@@ -326,6 +401,13 @@ export default function MovieInfoPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Premium Gate Modal */}
+      <PremiumGateModal
+        open={showPremiumGate}
+        onClose={() => setShowPremiumGate(false)}
+        movieTitle={movie?.title}
+      />
     </div>
   );
 }

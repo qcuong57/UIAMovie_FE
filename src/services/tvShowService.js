@@ -106,6 +106,25 @@ const tvShowService = {
   },
 
   /**
+   * GET /api/tvshows/search/actor?actorName=... — tìm theo tên diễn viên.
+   * @param {string} actorName
+   * @returns {TvShowDTO[]}
+   */
+  searchByActor: async (actorName) => {
+    try {
+      if (!actorName?.trim()) return [];
+      const response = await axiosInstance.get('/tvshows/search/actor', {
+        params: { actorName },
+      });
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error searching tvshows by actor:', error);
+      throw error;
+    }
+  },
+
+  /**
    * GET /api/tvshows/genre/{genreId} — lọc theo thể loại.
    * @param {string} genreId - GUID
    */
@@ -172,6 +191,51 @@ const tvShowService = {
       return envelope?.data ?? envelope;
     } catch (error) {
       console.error('[tvShowService] Error fetching episode:', error);
+      throw error;
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // WATCH — Premium gate cho TV show & episode
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/tvshows/{id}/watch — lấy video URLs của TV show (trailer/teaser).
+   *   - Show FREE    → trả về videos cho mọi user (kể cả chưa đăng nhập)
+   *   - Show PREMIUM → cần đăng nhập + có Premium hợp lệ → 401/403 nếu không đủ
+   * @param {string} tvShowId - GUID
+   * @returns {{ canWatch: boolean, videos: object[] }}
+   */
+  watchTvShow: async (tvShowId) => {
+    try {
+      const response = await axiosInstance.get(`/tvshows/${tvShowId}/watch`);
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error watching tvshow:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * GET /api/tvshows/{id}/seasons/{seasonNumber}/episodes/{episodeNumber}/watch
+   * Lấy videoUrl của một episode cụ thể.
+   *   - Show FREE    → trả về videoUrl cho mọi user
+   *   - Show PREMIUM → cần đăng nhập + có Premium hợp lệ → 401/403 nếu không đủ
+   * @param {string} tvShowId     - GUID
+   * @param {number} seasonNumber
+   * @param {number} episodeNumber
+   * @returns {{ canWatch: boolean, videoUrl: string }}
+   */
+  watchEpisode: async (tvShowId, seasonNumber, episodeNumber) => {
+    try {
+      const response = await axiosInstance.get(
+        `/tvshows/${tvShowId}/seasons/${seasonNumber}/episodes/${episodeNumber}/watch`
+      );
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error watching episode:', error);
       throw error;
     }
   },
@@ -535,6 +599,21 @@ const tvShowService = {
       return envelope?.data ?? envelope;
     } catch (error) {
       console.error('[tvShowService] Error syncing new episodes:', error);
+      throw error;
+    }
+  },
+  /**
+   * PATCH /api/tvshows/{id}/premium — bật/tắt Premium nhanh (Admin only).
+   * Body: { isPremium: boolean }
+   * @param {string}  tvShowId  - GUID
+   * @param {boolean} isPremium
+   */
+  setPremium: async (tvShowId, isPremium) => {
+    try {
+      const response = await axiosInstance.patch(`/tvshows/${tvShowId}/premium`, { isPremium });
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error setting premium:', error);
       throw error;
     }
   },

@@ -5,7 +5,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Play, Heart, Clock, Calendar, Globe, Star } from "lucide-react";
+import { Play, Heart, Clock, Calendar, Globe, Star, Crown } from "lucide-react";
 import BackButton from "../../common/BackButton";
 import StatPill from "../ui/StatPill";
 import { C, fmt, fmtRuntime } from "../ui/movieConstants";
@@ -193,6 +193,29 @@ export default function MovieInfoHero({
                   {g}
                 </span>
               ))}
+
+              {/* Badge Premium — cùng style genre pill nhưng màu vàng */}
+              {movie?.isPremium && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "3px 10px",
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: "'Nunito', sans-serif",
+                    background: "rgba(250,204,21,0.15)",
+                    color: "#facc15",
+                    border: "1px solid rgba(250,204,21,0.35)",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  <Crown size={10} fill="#facc15" color="#facc15" strokeWidth={0} />
+                  Premium
+                </span>
+              )}
             </motion.div>
           )}
 

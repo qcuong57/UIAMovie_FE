@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Mail, Camera, Check, Eye, EyeOff, Lock, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Camera, Check, Eye, EyeOff, Lock, Loader2, Crown, Zap, CalendarDays, Clock, AlertTriangle, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../../services/authService';
 import axiosInstance from '../../config/axios';
+import paymentService from '../../services/paymentService';
 
 // ── Design tokens (khớp với dự án) ──────────────────────────────────────────
 const C = {
@@ -169,6 +170,385 @@ function SectionCard({ title, subtitle, children }) {
   );
 }
 
+// ── Cancel Confirm Modal ──────────────────────────────────────────────────────
+function CancelModal({ isOpen, endDate, onConfirm, onClose, loading }) {
+  const fmt = (iso) => iso
+    ? new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !loading) onClose(); };
+    if (isOpen) document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, loading, onClose]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          {/* Overlay */}
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={!loading ? onClose : undefined}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+          />
+          {/* Panel */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 16 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative', zIndex: 1,
+              width: '100%', maxWidth: 420,
+              background: '#111', borderRadius: 16,
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.7)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 22px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={16} color="#f87171" />
+                </div>
+                <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 800, fontSize: 15, color: '#f0f0f0' }}>
+                  Hủy gói Premium?
+                </span>
+              </div>
+              {!loading && (
+                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', display: 'flex', padding: 4, borderRadius: 6 }}>
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Main warning */}
+              <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 13.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
+                Bạn có chắc muốn hủy gói Premium không?
+              </p>
+
+              {/* Info box */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10,
+              }}>
+                {[
+                  'Gói Premium sẽ bị thu hồi ngay lập tức',
+                  'Bạn sẽ mất quyền truy cập nội dung Premium ngay sau khi xác nhận',
+                  'Hành động này không thể hoàn tác — bạn cần mua lại nếu muốn dùng Premium',
+                ].map((text, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.25)', marginTop: 6, flexShrink: 0 }} />
+                    <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12.5, color: 'rgba(255,255,255,0.45)', lineHeight: 1.55 }}>
+                      {text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Auto-expire notice */}
+              <div style={{
+                background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.2)',
+                borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'flex-start', gap: 9,
+              }}>
+                <Info size={13} color="#60a5fa" style={{ marginTop: 1, flexShrink: 0 }} />
+                <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 12, color: '#93c5fd', lineHeight: 1.55 }}>
+                  Lưu ý: Nếu chỉ muốn <strong style={{ color: '#bfdbfe' }}>không gia hạn</strong> sau khi hết hạn, bạn không cần làm gì — gói sẽ tự động kết thúc.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '0 22px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <motion.button
+                onClick={onClose}
+                disabled={loading}
+                whileHover={!loading ? { background: 'rgba(255,255,255,0.08)' } : {}}
+                style={{
+                  padding: '9px 18px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.09)',
+                  background: 'rgba(255,255,255,0.04)', color: '#888',
+                  fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 13, fontWeight: 600,
+                  cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.5 : 1,
+                }}
+              >
+                Giữ lại gói
+              </motion.button>
+              <motion.button
+                onClick={onConfirm}
+                disabled={loading}
+                whileHover={!loading ? { filter: 'brightness(1.1)' } : {}}
+                whileTap={!loading ? { scale: 0.97 } : {}}
+                style={{
+                  padding: '9px 18px', borderRadius: 8, border: 'none',
+                  background: loading ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.85)',
+                  color: '#fff',
+                  fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 13, fontWeight: 700,
+                  cursor: loading ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 7,
+                }}
+              >
+                {loading
+                  ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+                      style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+                  : null}
+                {loading ? 'Đang hủy...' : 'Xác nhận hủy'}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ── Plan Card ─────────────────────────────────────────────────────────────────
+function PlanCard({ user, onUpgrade, onCancelSuccess, onCancelled }) {
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // API trả về: subscriptionType: "Premium" | "Free", subscriptionExpiredAt, subscriptionStartedAt
+  const isPremium =
+    user?.subscriptionType?.toLowerCase() === 'premium' ||
+    user?.subscriptionPlan?.toLowerCase() === 'premium' ||
+    !!user?.isPremium;
+
+  const startDate = user?.subscriptionStartedAt ?? user?.premiumStartDate ?? user?.subscriptionStartDate ?? null;
+  const endDate   = user?.subscriptionExpiredAt  ?? user?.premiumEndDate   ?? user?.subscriptionEndDate   ?? null;
+
+  const fmt = (iso) => {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+  const daysLeft = (endIso) => {
+    if (!endIso) return null;
+    return Math.max(0, Math.ceil((new Date(endIso) - new Date()) / 86400000));
+  };
+  const remaining = daysLeft(endDate);
+  const isExpiringSoon = remaining !== null && remaining <= 7;
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      const userId = user?.id;
+      if (!userId) throw new Error('Không xác định được tài khoản.');
+      await paymentService.cancelSubscription(userId);
+      setShowCancel(false);
+      // Cập nhật state cha ngay lập tức — không cần reload trang
+      onCancelled?.();
+      onCancelSuccess?.('Đã hủy gói Premium thành công. Tài khoản chuyển về Miễn phí.');
+    } catch (e) {
+      onCancelSuccess?.(e.message ?? 'Hủy gói thất bại', 'error');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (isPremium) {
+    return (
+      <>
+        <CancelModal
+          isOpen={showCancel}
+          endDate={endDate}
+          onConfirm={handleCancel}
+          onClose={() => !cancelling && setShowCancel(false)}
+          loading={cancelling}
+        />
+
+        <motion.div
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          style={{
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(234,179,8,0.1) 0%, rgba(180,83,9,0.08) 100%)',
+            border: '1px solid rgba(234,179,8,0.25)',
+            padding: '18px 20px',
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              background: 'linear-gradient(135deg, #facc15 0%, #f59e0b 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 14px rgba(250,204,21,0.3)',
+            }}>
+              <Crown size={17} color="#1c1400" />
+            </div>
+            <div>
+              <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 800, fontSize: 14, color: '#facc15' }}>
+                Gói Premium
+              </div>
+              <div style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: 'rgba(250,204,21,0.5)' }}>
+                Đang hoạt động
+              </div>
+            </div>
+            {isExpiringSoon && (
+              <div style={{
+                marginLeft: 'auto',
+                background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.28)',
+                borderRadius: 7, padding: '3px 9px',
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                <Clock size={10} color="#f87171" />
+                <span style={{ fontSize: 10, color: '#f87171', fontWeight: 700, fontFamily: "'Nunito', sans-serif" }}>
+                  Sắp hết hạn
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Dates */}
+          {(startDate || endDate) && (
+            <div style={{ display: 'grid', gridTemplateColumns: startDate && endDate ? '1fr 1fr' : '1fr', gap: 8 }}>
+              {startDate && (
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 9, padding: '10px 13px', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <CalendarDays size={13} color="rgba(250,204,21,0.5)" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: "'Nunito', sans-serif", marginBottom: 2 }}>Ngày bắt đầu</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.8)', fontFamily: "'Be Vietnam Pro', sans-serif" }}>{fmt(startDate)}</div>
+                  </div>
+                </div>
+              )}
+              {endDate && (
+                <div style={{
+                  background: isExpiringSoon ? 'rgba(239,68,68,0.07)' : 'rgba(255,255,255,0.04)',
+                  border: isExpiringSoon ? '1px solid rgba(239,68,68,0.18)' : '1px solid transparent',
+                  borderRadius: 9, padding: '10px 13px', display: 'flex', alignItems: 'flex-start', gap: 8,
+                }}>
+                  <CalendarDays size={13} color={isExpiringSoon ? '#f87171' : 'rgba(250,204,21,0.5)'} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: "'Nunito', sans-serif", marginBottom: 2 }}>Hết hạn</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: isExpiringSoon ? '#f87171' : 'rgba(255,255,255,0.8)', fontFamily: "'Be Vietnam Pro', sans-serif" }}>{fmt(endDate)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Days remaining bar */}
+          {remaining !== null && endDate && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'Nunito', sans-serif" }}>Thời gian còn lại</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: isExpiringSoon ? '#f87171' : '#facc15', fontFamily: "'Nunito', sans-serif" }}>
+                  {remaining} ngày
+                </span>
+              </div>
+              <div style={{ height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, (remaining / 30) * 100)}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  style={{
+                    height: '100%', borderRadius: 99,
+                    background: isExpiringSoon
+                      ? 'linear-gradient(90deg,#ef4444,#f87171)'
+                      : 'linear-gradient(90deg,#facc15,#f59e0b)',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Auto-expire notice */}
+          <div style={{
+            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 9, padding: '10px 13px',
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+          }}>
+            <Info size={12} color="rgba(255,255,255,0.25)" style={{ marginTop: 1.5, flexShrink: 0 }} />
+            <span style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11.5, color: 'rgba(255,255,255,0.35)', lineHeight: 1.55 }}>
+              Gói sẽ <strong style={{ color: 'rgba(255,255,255,0.5)' }}>tự động kết thúc khi hết hạn</strong> — không bị trừ phí thêm, không cần hủy thủ công.
+            </span>
+          </div>
+
+          {/* Cancel button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <motion.button
+              onClick={() => setShowCancel(true)}
+              whileHover={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.35)' }}
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8, padding: '7px 14px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                transition: 'all 0.15s',
+              }}
+            >
+              <X size={12} color="#f87171" />
+              <span style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 12, fontWeight: 600, color: '#f87171' }}>
+                Hủy gói
+              </span>
+            </motion.button>
+          </div>
+        </motion.div>
+      </>
+    );
+  }
+
+  // Free plan — màu xanh lá, khớp với card "Miễn phí" ở trang premium
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      style={{
+        borderRadius: 12,
+        background: 'linear-gradient(135deg, rgba(70,211,105,0.08) 0%, rgba(34,197,94,0.05) 100%)',
+        border: '1px solid rgba(70,211,105,0.25)',
+        padding: '16px 18px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: 'rgba(70,211,105,0.15)',
+          border: '1px solid rgba(70,211,105,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 12px rgba(70,211,105,0.15)',
+        }}>
+          <Zap size={17} color="#46d369" />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 700, fontSize: 13, color: '#46d369' }}>
+            Gói Miễn phí
+          </div>
+          <div style={{ fontFamily: "'Nunito', sans-serif", fontSize: 11, color: 'rgba(70,211,105,0.55)', marginTop: 1 }}>
+            Nâng cấp để xem không giới hạn
+          </div>
+        </div>
+      </div>
+      {onUpgrade && (
+        <motion.button
+          onClick={onUpgrade}
+          whileHover={{ scale: 1.04, filter: 'brightness(1.1)' }}
+          whileTap={{ scale: 0.97 }}
+          style={{
+            flexShrink: 0,
+            background: 'linear-gradient(135deg,#facc15 0%,#f59e0b 100%)',
+            border: 'none', borderRadius: 9,
+            padding: '8px 15px',
+            display: 'flex', alignItems: 'center', gap: 5,
+            cursor: 'pointer',
+            boxShadow: '0 0 16px rgba(250,204,21,0.22)',
+          }}
+        >
+          <Crown size={12} color="#1c1400" />
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#1c1400', fontFamily: "'Be Vietnam Pro', sans-serif", whiteSpace: 'nowrap' }}>
+            Nâng cấp
+          </span>
+        </motion.button>
+      )}
+    </motion.div>
+  );
+}
+
 // ── Avatar upload ─────────────────────────────────────────────────────────────
 function AvatarSection({ user, onAvatarChange }) {
   const [hovered, setHovered] = useState(false);
@@ -270,11 +650,17 @@ export default function ProfilePage() {
   };
 
   // ── Fetch latest user info ────────────────────────────────────────────────
+  const [userDetail, setUserDetail] = useState(currentUser ?? {});
+
   useEffect(() => {
     axiosInstance.get('/user/me')
-      .then(data => {
-        setUsername(data.username ?? '');
-        setEmail(data.email ?? '');
+      .then(res => {
+        // axiosInstance interceptor unwrap response.data → res có thể là { success, data, message }
+        // hoặc trực tiếp là object user tuỳ interceptor
+        const d = res?.data ?? res;
+        setUsername(d.username ?? d.name ?? '');
+        setEmail(d.email ?? '');
+        setUserDetail(prev => ({ ...prev, ...d }));
       })
       .catch(() => {});
   }, []);
@@ -352,10 +738,16 @@ export default function ProfilePage() {
     }
   };
 
-  // ── Subscription badge ────────────────────────────────────────────────────
+  // ── Subscription badge (top bar) ─────────────────────────────────────────
+  const isPremium =
+    userDetail?.subscriptionType?.toLowerCase() === 'premium' ||
+    userDetail?.subscriptionPlan?.toLowerCase() === 'premium' ||
+    !!userDetail?.isPremium;
   const subLabel = currentUser?.role === 'Admin'
-    ? { label: 'Admin', color: '#e50914', bg: 'rgba(229,9,20,0.12)' }
-    : { label: 'Standard', color: '#888', bg: 'rgba(255,255,255,0.05)' };
+    ? { label: 'Admin',   color: '#e50914', bg: 'rgba(229,9,20,0.12)' }
+    : isPremium
+      ? { label: '✦ Premium', color: '#facc15', bg: 'rgba(234,179,8,0.12)' }
+      : { label: '⚡ Miễn phí', color: '#46d369', bg: 'rgba(70,211,105,0.10)' };
 
   return (
     <div style={{
@@ -444,6 +836,25 @@ export default function ProfilePage() {
               <Check size={14}/> Lưu thay đổi
             </Btn>
           </div>
+        </SectionCard>
+
+        {/* ── Gói đăng ký ── */}
+        <SectionCard
+          title="Gói đăng ký"
+          subtitle={isPremium ? 'Thông tin gói Premium của bạn' : 'Nâng cấp để mở khoá toàn bộ nội dung'}
+        >
+          <PlanCard
+            user={userDetail}
+            onUpgrade={() => navigate('/premium')}
+            onCancelSuccess={showToast}
+            onCancelled={() => setUserDetail(prev => ({
+              ...prev,
+              subscriptionType: 'Free',
+              subscriptionExpiredAt: null,
+              subscriptionStartedAt: null,
+              isPremium: false,
+            }))}
+          />
         </SectionCard>
 
         {/* ── Đổi mật khẩu ── */}

@@ -1,7 +1,7 @@
 // src/components/admin/user/UserDetailPanel.jsx  ← REDESIGNED
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil, CheckCircle, XCircle } from 'lucide-react';
+import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil, CheckCircle, XCircle, Crown, AlertCircle } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -146,7 +146,37 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
                 <MetaRow icon={Mail}      label="Email"          value={user.email} />
                 <MetaRow icon={User}      label="Tên đăng nhập"  value={user.username} />
                 <MetaRow icon={Shield}    label="Quyền"          value={rStyle.label} accent={role === 'admin' ? T.accent : undefined} />
-                <MetaRow icon={Star}      label="Subscription"   value={user.subscriptionType ?? '—'} />
+                <MetaRow icon={Crown} label="Subscription"
+                  value={user.subscriptionType
+                    ? (user.subscriptionType === 'yearly_premium' ? 'Premium · Năm'
+                      : user.subscriptionType === 'monthly_premium' ? 'Premium · Tháng'
+                      : user.subscriptionType)
+                    : '—'}
+                  accent={user.subscriptionType ? '#D97706' : undefined}
+                />
+                {user.subscriptionType && (
+                  <>
+                    {(user.subscriptionStartedAt || user.subscriptionCreatedAt) && (
+                      <MetaRow
+                        icon={Calendar}
+                        label="Ngày kích hoạt"
+                        value={new Date(user.subscriptionStartedAt ?? user.subscriptionCreatedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        accent={'#16A34A'}
+                      />
+                    )}
+                    {user.subscriptionExpiredAt && (() => {
+                      const isExpired = new Date(user.subscriptionExpiredAt) < new Date();
+                      return (
+                        <MetaRow
+                          icon={isExpired ? AlertCircle : Clock}
+                          label="Ngày hết hạn"
+                          value={new Date(user.subscriptionExpiredAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) + (isExpired ? ' (Đã hết hạn)' : '')}
+                          accent={isExpired ? '#DC2626' : '#D97706'}
+                        />
+                      );
+                    })()}
+                  </>
+                )}
                 <MetaRow icon={Calendar}  label="Ngày tạo"       value={user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'} />
                 <MetaRow
                   icon={user.is2FaEnabled ? CheckCircle : XCircle}

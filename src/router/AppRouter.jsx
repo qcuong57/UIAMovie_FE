@@ -33,6 +33,8 @@ import WatchHistoryPage from "../pages/user/WatchHistoryPage";
 import AdminPage from "../pages/admin/AdminPage";
 import TvShowInfoPage from "../pages/user/TvShowInfoPage";
 import TvShowDetailPage from "../pages/user/TvShowDetailPage";
+import PremiumPage from "../pages/PremiumPage";
+import PaymentResultPage from "../pages/PaymentResultPage";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const isLoggedIn = () => {
@@ -94,6 +96,8 @@ const AppRouter = () => (
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/trending" element={<TrendingPage />} />
         <Route path="/watch-history" element={<WatchHistoryPage />} />
+        <Route path="/premium" element={<PremiumPage />} />
+        <Route path="/payment/result" element={<PaymentResultPage />} />
       </Route>
 
       {/* ── Admin (layout riêng, không dùng Navbar) ── */}

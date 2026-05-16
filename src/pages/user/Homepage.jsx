@@ -17,6 +17,7 @@ import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import genreService from "../../services/genreService";
 import aiService from "../../services/aiService";
+import authService from "../../services/authService";
 import AiChatWidget from "../../components/ai/AiChatWidget";
 
 import {
@@ -46,6 +47,7 @@ const normalizeMovie = (m) => ({
   genres: m.genres || [],
   description: m.description || "",
   duration: m.duration || null,
+  isPremium: m.isPremium ?? false, // ← FIX: map field premium
   isTvShow: false,
 });
 
@@ -58,6 +60,7 @@ const normalizeTvShow = (s) => ({
   backdropUrl: s.backdropUrl || null,
   genres: s.genres || [],
   description: s.description || s.overview || "",
+  isPremium: s.isPremium ?? false, // ← FIX: map field premium
   isTvShow: true,
 });
 
@@ -278,6 +281,9 @@ export default function HomePage() {
     try {
       setLoading(true);
       setError(null);
+
+      // Đồng bộ trạng thái Premium từ server vào localStorage trước khi render
+      await authService.refreshPremiumStatus();
 
       const [
         moviesData,

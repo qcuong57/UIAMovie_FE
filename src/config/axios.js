@@ -6,7 +6,7 @@ const API_BASE_URL =  'http://localhost:5000/api/';
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 20000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -37,6 +37,13 @@ axiosInstance.interceptors.response.use(
 
     // 401 và chưa retry → thử refresh token
     if (error.response?.status === 401 && !original._retry) {
+
+      // Auth endpoints (login/register/...) không refresh → trả lỗi thẳng về component
+      const isAuthEndpoint = /\/(auth|Auth)\//i.test(original.url || '');
+      if (isAuthEndpoint) {
+        return Promise.reject(error); // giữ nguyên error để .response còn đầy đủ
+      }
+
       const refreshToken = localStorage.getItem('refreshToken');
 
       // Không có refresh token → về landing
@@ -85,8 +92,7 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    const message = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
-    return Promise.reject(new Error(message));
+    return Promise.reject(error); // giữ nguyên .response để component đọc được message
   }
 );
 

@@ -1,6 +1,6 @@
 // src/components/admin/movie/MovieEditModal.jsx  ← REDESIGNED light theme
 import React, { useState, useEffect } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Crown } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { Button, Modal } from '../../ui';
 
@@ -18,6 +18,8 @@ const T = {
   border:      'rgba(0,0,0,0.08)',
   borderFocus: 'rgba(28,95,58,0.4)',
   red:         '#DC2626',
+  gold:        '#D97706',
+  goldLight:   '#FEF3C7',
 };
 
 // ── Field components ──────────────────────────────────────────────────────────
@@ -80,9 +82,75 @@ function LightTextarea({ label, value, onChange, placeholder, rows = 4 }) {
   );
 }
 
+/**
+ * Toggle switch kiểu pill cho trường isPremium.
+ * Bấm vào thẻ label → checkbox ẩn toggle → giao diện đổi màu.
+ */
+function PremiumToggleField({ value, onChange }) {
+  const id = 'premium-toggle-edit';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Loại nội dung
+      </label>
+      <label
+        htmlFor={id}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+          background: value ? T.goldLight : T.surfaceAlt,
+          border: `1px solid ${value ? 'rgba(217,119,6,0.35)' : T.border}`,
+          transition: 'all 0.18s',
+          userSelect: 'none',
+        }}
+      >
+        {/* Hidden checkbox */}
+        <input
+          id={id}
+          type="checkbox"
+          checked={value}
+          onChange={e => onChange(e.target.checked)}
+          style={{ display: 'none' }}
+        />
+
+        {/* Visual toggle pill */}
+        <div style={{
+          width: 36, height: 20, borderRadius: 10, flexShrink: 0,
+          background: value
+            ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
+            : 'rgba(0,0,0,0.12)',
+          position: 'relative', transition: 'background 0.18s',
+          boxShadow: value ? '0 1px 6px rgba(245,158,11,0.4)' : 'none',
+        }}>
+          <div style={{
+            position: 'absolute', top: 2,
+            left: value ? 18 : 2,
+            width: 16, height: 16, borderRadius: '50%',
+            background: '#fff',
+            transition: 'left 0.18s',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          }} />
+        </div>
+
+        {/* Label text + icon */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Crown size={14} color={value ? T.gold : T.textMuted} style={{ flexShrink: 0, transition: 'color 0.18s' }} />
+          <span style={{
+            fontFamily: FONT, fontSize: 13.5, fontWeight: value ? 700 : 500,
+            color: value ? '#92400E' : T.textSub,
+            transition: 'color 0.18s',
+          }}>
+            {value ? 'Premium — Chỉ tài khoản Premium mới xem được' : 'Free — Ai cũng xem được'}
+          </span>
+        </div>
+      </label>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function MovieEditModal({ movie, onClose, onSaved }) {
-  const [form,   setForm]   = useState({ title: '', description: '', imdbRating: '' });
+  const [form,   setForm]   = useState({ title: '', description: '', imdbRating: '', isPremium: false });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
@@ -92,6 +160,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         title:       movie.title       ?? '',
         description: movie.description ?? '',
         imdbRating:  movie.rating != null ? String(movie.rating) : '',
+        isPremium:   movie.isPremium   ?? false,
       });
       setError('');
     }
@@ -109,8 +178,15 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         title:       form.title.trim(),
         description: form.description.trim() || null,
         imdbRating:  rating,
+        isPremium:   form.isPremium,
       });
-      onSaved?.({ ...movie, title: form.title.trim(), description: form.description.trim(), rating });
+      onSaved?.({
+        ...movie,
+        title:       form.title.trim(),
+        description: form.description.trim(),
+        rating,
+        isPremium:   form.isPremium,
+      });
       onClose();
     } catch (e) {
       setError(e?.message ?? 'Có lỗi xảy ra');
@@ -184,6 +260,12 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
           error={/Rating/i.test(error) ? error : ''}
         />
 
+        {/* NEW: Premium toggle */}
+        <PremiumToggleField
+          value={form.isPremium}
+          onChange={v => setForm(f => ({ ...f, isPremium: v }))}
+        />
+
         {error && !/tên|Tên|Rating/i.test(error) && (
           <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</p>
         )}
@@ -194,7 +276,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
           background: T.surfaceAlt, borderRadius: 9,
           border: `1px solid ${T.border}`, margin: 0,
         }}>
-          Chỉ có thể sửa tên, mô tả và rating. Để cập nhật thông tin khác hãy xóa và import lại từ TMDB.
+          Chỉ có thể sửa tên, mô tả, rating và loại nội dung. Để cập nhật thông tin khác hãy xóa và import lại từ TMDB.
         </p>
       </div>
     </Modal>

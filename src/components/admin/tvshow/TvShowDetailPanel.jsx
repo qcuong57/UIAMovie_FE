@@ -382,11 +382,22 @@ function EpisodeVideoZone({ episode, onUpdated }) {
 }
 
 // ── SeasonAccordion ───────────────────────────────────────────────────────────
-const SeasonAccordion = ({ season, showId }) => {
+const SeasonAccordion = ({ season, showId, invalidated }) => {
   const [open, setOpen] = useState(false);
   const [episodes, setEpisodes] = useState(season.episodes ?? []);
   const [loadingEps, setLoadingEps] = useState(false);
   const [loaded, setLoaded] = useState((season.episodes ?? []).length > 0);
+
+  // Bug 4 fix: khi backend báo season này đã bị cache bust sau sync,
+  // reset loaded=false để lần mở tiếp theo sẽ fetch lại thay vì dùng snapshot cũ.
+  const prevInvalidated = React.useRef(false);
+  React.useEffect(() => {
+    if (invalidated && !prevInvalidated.current) {
+      setLoaded(false);
+      setEpisodes([]);
+    }
+    prevInvalidated.current = invalidated;
+  }, [invalidated]);
 
   const handleEpisodeUpdated = (updated) => {
     setEpisodes(prev => prev.map(ep => ep.id === updated.id ? updated : ep));
@@ -616,6 +627,8 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
   // State cho quá trình Sync tập mới
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  // Bug 4 fix: lưu danh sách season numbers đã bị cache bust để truyền xuống SeasonAccordion
+  const [invalidatedSeasons, setInvalidatedSeasons] = useState([]);
 
   // Tách hàm load riêng để gọi lại sau khi sync thành công
   const loadShowData = () => {
@@ -647,11 +660,17 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
   const handleSyncEpisodes = async () => {
     setSyncing(true);
     setSyncMsg(null);
+    setInvalidatedSeasons([]); // reset trước khi sync mới
     try {
       const res = await axiosInstance.post(`/tvshows/${showId}/sync`);
       const data = res?.data?.data ?? res?.data;
       setSyncMsg({ type: "success", text: data?.message || "Đồng bộ tập mới thành công!" });
-      loadShowData(); // Load lại data để lấy số tập mới
+      // Bug 4 fix: đánh dấu các season cần re-fetch TRƯỚC khi loadShowData
+      // để SeasonAccordion nhận được invalidated=true và reset loaded=false
+      if (Array.isArray(data?.invalidatedSeasons) && data.invalidatedSeasons.length > 0) {
+        setInvalidatedSeasons(data.invalidatedSeasons);
+      }
+      loadShowData(); // Load lại data để lấy số tập / season mới
       setTimeout(() => setSyncMsg(null), 5000); // Ẩn thông báo sau 5s
     } catch (error) {
       const msg = error?.response?.data?.message || "Đồng bộ thất bại, hãy thử lại";
@@ -966,7 +985,12 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                     <div>
                       <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>{show.seasons.length} Season{show.seasons.length > 1 ? "s" : ""}</p>
                       {show.seasons.sort((a, b) => (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0)).map((season) => (
-                        <SeasonAccordion key={season.id ?? season.seasonNumber} season={season} showId={show.id} />
+                        <SeasonAccordion
+                          key={season.id ?? season.seasonNumber}
+                          season={season}
+                          showId={show.id}
+                          invalidated={invalidatedSeasons.includes(season.seasonNumber)}
+                        />
                       ))}
                     </div>
                   )}

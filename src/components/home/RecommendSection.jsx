@@ -6,12 +6,23 @@ import { useNavigate } from "react-router-dom";
 import {
   Sparkles, TrendingUp, CalendarDays, Star,
   Play, Plus, ChevronDown, Heart, Loader,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Crown,
 } from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import movieService from "../../services/movieService";
 import MovieCardHorizontal from "../movie/tvshow/MovieCardHorizontal";
+import PremiumGateModal from "../movie/ui/PremiumGateModal";
+
+// ── Premium helpers ──────────────────────────────────────────────
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem("currentUser") || "null"); }
+  catch { return null; }
+}
+function userHasPremium(user) {
+  if (!user) return false;
+  return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
+}
 
 // ── Constants ─────────────────────────────────────────────────────
 const AUTO_PLAY_INTERVAL = 5000;
@@ -116,11 +127,13 @@ const ProgressDot = ({ isActive, onClick }) => (
 const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction }) => {
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
+  const [showGate, setShowGate] = useState(false);
   const { localFav, favLoading, handleFavoriteClick } = useFavorite(
     item?.id, isFavorited, onFavoriteToggle, item,
   );
   if (!item) return null;
   const matchPct = item.rating ? Math.round(item.rating * 10) : null;
+  const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
 
   const slideVariants = {
     enter:  (dir) => ({ opacity: 0, x: dir > 0 ? 32 : -32, scale: 1.03 }),
@@ -182,6 +195,21 @@ const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction })
         </div>
       )}
 
+      {/* Premium badge */}
+      {item.isPremium && (
+        <div style={{
+          position: "absolute", top: item.isTvShow ? 40 : 12, left: 12,
+          display: "flex", alignItems: "center", gap: 3,
+          background: "linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))",
+          backdropFilter: "blur(6px)", borderRadius: 99, padding: "2px 8px",
+        }}>
+          <Crown size={9} fill="#1c1400" color="#1c1400" />
+          <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, color: "#1c1400", letterSpacing: "0.04em" }}>
+            PREMIUM
+          </span>
+        </div>
+      )}
+
       {/* Bottom overlay */}
       <div style={{
         position: "absolute", inset: 0,
@@ -226,15 +254,23 @@ const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction })
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={(e) => { e.stopPropagation(); navigate(getRoute(item)); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isPremiumLocked) { setShowGate(true); return; }
+                  navigate(getRoute(item));
+                }}
                 style={{
                   height: 34, padding: "0 16px", borderRadius: 999, border: "none",
-                  background: "#fff", display: "flex", alignItems: "center", gap: 6,
-                  cursor: "pointer", fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700, color: "#000",
+                  background: isPremiumLocked ? "rgba(250,204,21,0.9)" : "#fff",
+                  display: "flex", alignItems: "center", gap: 6,
+                  cursor: "pointer", fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700,
+                  color: isPremiumLocked ? "#1c1400" : "#000",
                 }}
               >
-                <Play size={12} fill="#000" color="#000" style={{ marginLeft: 1 }} />
-                Xem ngay
+                {isPremiumLocked
+                  ? <><Crown size={12} fill="#1c1400" color="#1c1400" /> Premium</>
+                  : <><Play size={12} fill="#000" color="#000" style={{ marginLeft: 1 }} /> Xem ngay</>
+                }
               </button>
               <button
                 onClick={handleFavoriteClick} disabled={favLoading}
@@ -267,6 +303,12 @@ const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction })
           )}
         </AnimatePresence>
       </div>
+      {/* Premium Gate Modal */}
+      <PremiumGateModal
+        open={showGate}
+        onClose={() => setShowGate(false)}
+        movieTitle={item.title}
+      />
     </motion.div>
   );
 };
@@ -275,6 +317,7 @@ const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction })
 const SmallCard = ({ movie: item, onClick, isFavorited, onFavoriteToggle, isActive = false }) => {
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
+  const [showGate, setShowGate] = useState(false);
   const { localFav, favLoading, handleFavoriteClick } = useFavorite(
     item?.id, isFavorited, onFavoriteToggle, item,
   );
@@ -282,6 +325,7 @@ const SmallCard = ({ movie: item, onClick, isFavorited, onFavoriteToggle, isActi
 
   const matchPct = item.rating ? Math.round(item.rating * 10) : null;
   const showHoverState = isHovered || isActive;
+  const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
 
   return (
     <motion.div
@@ -360,16 +404,25 @@ const SmallCard = ({ movie: item, onClick, isFavorited, onFavoriteToggle, isActi
             <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }} onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); navigate(getRoute(item)); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isPremiumLocked) { setShowGate(true); return; }
+                    navigate(getRoute(item));
+                  }}
                   style={{
-                    width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fff",
+                    width: 26, height: 26, borderRadius: "50%", border: "none",
+                    background: isPremiumLocked ? "rgba(250,204,21,0.9)" : "#fff",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     cursor: "pointer", flexShrink: 0,
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.12)")}
                   onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  title={isPremiumLocked ? "Nội dung Premium" : "Phát"}
                 >
-                  <Play size={10} fill="#000" color="#000" style={{ marginLeft: 1 }} />
+                  {isPremiumLocked
+                    ? <Crown size={10} fill="#1c1400" color="#1c1400" />
+                    : <Play size={10} fill="#000" color="#000" style={{ marginLeft: 1 }} />
+                  }
                 </button>
                 <button
                   onClick={handleFavoriteClick} disabled={favLoading}
@@ -436,6 +489,12 @@ const SmallCard = ({ movie: item, onClick, isFavorited, onFavoriteToggle, isActi
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Premium Gate Modal */}
+      <PremiumGateModal
+        open={showGate}
+        onClose={() => setShowGate(false)}
+        movieTitle={item.title}
+      />
     </motion.div>
   );
 };

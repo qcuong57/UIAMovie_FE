@@ -1,26 +1,102 @@
 // src/pages/LandingPage.jsx
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Film, Shield, Zap, Star, Check, ArrowLeft, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
-import { useIsMobile } from '../hooks/useIsMobile';
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Play,
+  Film,
+  Shield,
+  Zap,
+  Star,
+  Check,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Ban,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import authService from "../services/authService";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 const C = {
-  bg:      '#070707',
-  card:    '#111111',
-  input:   '#0a0a0a',
-  border:  'rgba(255,255,255,0.07)',
-  borderF: 'rgba(229,9,20,0.45)',
-  borderE: 'rgba(229,9,20,0.6)',
-  accent:  '#e50914',
-  accentL: 'rgba(229,9,20,0.1)',
-  accentG: 'rgba(229,9,20,0.3)',
-  text:    '#f0f0f0',
-  sub:     '#666',
-  dim:     '#333',
-  green:   '#46d369',
+  bg: "#070707",
+  card: "#111111",
+  input: "#0a0a0a",
+  border: "rgba(255,255,255,0.07)",
+  borderF: "rgba(229,9,20,0.45)",
+  borderE: "rgba(229,9,20,0.6)",
+  accent: "#e50914",
+  accentL: "rgba(229,9,20,0.1)",
+  accentG: "rgba(229,9,20,0.3)",
+  text: "#f0f0f0",
+  sub: "#666",
+  dim: "#333",
+  orange: "#f97316",
+  orangeL: "rgba(249,115,22,0.1)",
+  green: "#46d369",
 };
+
+// ─── Banned account banner ───────────────────────────────────────────────────
+function BannedMsg({ reason }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97, y: -6 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        padding: "14px 16px",
+        borderRadius: 8,
+        marginBottom: 14,
+        background: "rgba(249,115,22,0.08)",
+        border: "1px solid rgba(249,115,22,0.35)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            flexShrink: 0,
+            background: "rgba(249,115,22,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Ban size={14} style={{ color: "#f97316" }} />
+        </div>
+        <span
+          style={{
+            fontFamily: "'Be Vietnam Pro', sans-serif",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#f97316",
+          }}
+        >
+          Tài khoản đã bị khóa
+        </span>
+      </div>
+      {reason && (
+        <p
+          style={{
+            fontFamily: "'Nunito', sans-serif",
+            fontSize: 12.5,
+            color: "rgba(249,115,22,0.8)",
+            lineHeight: 1.5,
+            margin: 0,
+            paddingLeft: 36,
+          }}
+        >
+          {reason}
+        </p>
+      )}
+    </motion.div>
+  );
+}
 
 // ─── Validation helpers (khớp RegisterValidator.cs + LoginValidator.cs) ────────
 
@@ -32,98 +108,128 @@ const HAS_DIGIT = /[0-9]/;
 const HAS_SPECIAL = /[!@#$%^&*]/;
 
 function validateEmail(v) {
-  if (!v.trim()) return 'Email không được để trống';
-  if (!EMAIL_RE.test(v.trim())) return 'Email không hợp lệ';
-  if (v.length > 255) return 'Email tối đa 255 ký tự';
-  return '';
+  if (!v.trim()) return "Email không được để trống";
+  if (!EMAIL_RE.test(v.trim())) return "Email không hợp lệ";
+  if (v.length > 255) return "Email tối đa 255 ký tự";
+  return "";
 }
 
 function validateUsername(v) {
-  if (!v.trim()) return 'Username không được để trống';
-  if (v.trim().length < 3 || v.trim().length > 50) return 'Username phải từ 3–50 ký tự';
-  if (!USERNAME_RE.test(v.trim())) return 'Username chỉ được chứa chữ, số, dấu gạch dưới';
-  return '';
+  if (!v.trim()) return "Username không được để trống";
+  if (v.trim().length < 3 || v.trim().length > 50)
+    return "Username phải từ 3–50 ký tự";
+  if (!USERNAME_RE.test(v.trim()))
+    return "Username chỉ được chứa chữ, số, dấu gạch dưới";
+  return "";
 }
 
 function validatePassword(v) {
-  if (!v) return 'Mật khẩu không được để trống';
-  if (v.length < 8) return 'Mật khẩu tối thiểu 8 ký tự';
-  if (!HAS_UPPER.test(v)) return 'Mật khẩu phải chứa ít nhất 1 chữ hoa';
-  if (!HAS_LOWER.test(v)) return 'Mật khẩu phải chứa ít nhất 1 chữ thường';
-  if (!HAS_DIGIT.test(v)) return 'Mật khẩu phải chứa ít nhất 1 số';
-  if (!HAS_SPECIAL.test(v)) return 'Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*)';
-  return '';
+  if (!v) return "Mật khẩu không được để trống";
+  if (v.length < 8) return "Mật khẩu tối thiểu 8 ký tự";
+  if (!HAS_UPPER.test(v)) return "Mật khẩu phải chứa ít nhất 1 chữ hoa";
+  if (!HAS_LOWER.test(v)) return "Mật khẩu phải chứa ít nhất 1 chữ thường";
+  if (!HAS_DIGIT.test(v)) return "Mật khẩu phải chứa ít nhất 1 số";
+  if (!HAS_SPECIAL.test(v))
+    return "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*)";
+  return "";
 }
 
 function validateConfirm(pass, confirm) {
-  if (!confirm) return 'Vui lòng xác nhận mật khẩu';
-  if (pass !== confirm) return 'Xác nhận mật khẩu không khớp';
-  return '';
+  if (!confirm) return "Vui lòng xác nhận mật khẩu";
+  if (pass !== confirm) return "Xác nhận mật khẩu không khớp";
+  return "";
 }
 
 // ─── Shared UI ──────────────────────────────────────────────────────────────
 
-function InputField({ label, type = 'text', value, onChange, onBlur, onEnter, placeholder, autoFocus, error, touched }) {
+function InputField({
+  label,
+  type = "text",
+  value,
+  onChange,
+  onBlur,
+  onEnter,
+  placeholder,
+  autoFocus,
+  error,
+  touched,
+}) {
   const [focused, setFocused] = useState(false);
   const [showPass, setShowPass] = useState(false);
-  const isPass = type === 'password';
+  const isPass = type === "password";
   const hasError = touched && error;
 
-  const borderColor = hasError
-    ? C.borderE
-    : focused
-    ? C.borderF
-    : C.border;
+  const borderColor = hasError ? C.borderE : focused ? C.borderF : C.border;
 
   const labelColor = hasError
-    ? 'rgba(229,9,20,0.9)'
+    ? "rgba(229,9,20,0.9)"
     : focused
-    ? 'rgba(229,9,20,0.8)'
-    : '#555';
+      ? "rgba(229,9,20,0.8)"
+      : "#555";
 
   return (
     <div style={{ marginBottom: hasError ? 8 : 14 }}>
       {label && (
-        <label style={{
-          display: 'block', marginBottom: 6,
-          fontFamily: "'Nunito', sans-serif", fontSize: 11, fontWeight: 700,
-          color: labelColor,
-          textTransform: 'uppercase', letterSpacing: '0.08em',
-          transition: 'color 0.15s',
-        }}>
+        <label
+          style={{
+            display: "block",
+            marginBottom: 6,
+            fontFamily: "'Nunito', sans-serif",
+            fontSize: 11,
+            fontWeight: 700,
+            color: labelColor,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            transition: "color 0.15s",
+          }}
+        >
           {label}
         </label>
       )}
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: "relative" }}>
         <input
-          type={isPass && showPass ? 'text' : type}
+          type={isPass && showPass ? "text" : type}
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           autoFocus={autoFocus}
           onFocus={() => setFocused(true)}
-          onBlur={() => { setFocused(false); onBlur && onBlur(); }}
-          onKeyDown={e => e.key === 'Enter' && onEnter && onEnter()}
+          onBlur={() => {
+            setFocused(false);
+            onBlur && onBlur();
+          }}
+          onKeyDown={(e) => e.key === "Enter" && onEnter && onEnter()}
           style={{
-            width: '100%', padding: isPass ? '11px 40px 11px 14px' : '11px 14px',
+            width: "100%",
+            padding: isPass ? "11px 40px 11px 14px" : "11px 14px",
             background: C.input,
             border: `1px solid ${borderColor}`,
-            borderRadius: 6, color: C.text, outline: 'none',
-            fontFamily: "'Nunito', sans-serif", fontSize: 13.5,
-            transition: 'border-color 0.15s',
+            borderRadius: 6,
+            color: C.text,
+            outline: "none",
+            fontFamily: "'Nunito', sans-serif",
+            fontSize: 13.5,
+            transition: "border-color 0.15s",
           }}
         />
         {isPass && (
           <button
             type="button"
-            onClick={() => setShowPass(v => !v)}
+            onClick={() => setShowPass((v) => !v)}
             style={{
-              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: C.sub, display: 'flex', padding: 0,
+              position: "absolute",
+              right: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: C.sub,
+              display: "flex",
+              padding: 0,
             }}
           >
-            {showPass ? <EyeOff size={15}/> : <Eye size={15}/>}
+            {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         )}
       </div>
@@ -131,13 +237,17 @@ function InputField({ label, type = 'text', value, onChange, onBlur, onEnter, pl
         {hasError && (
           <motion.div
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
-            animate={{ opacity: 1, height: 'auto', marginTop: 5 }}
+            animate={{ opacity: 1, height: "auto", marginTop: 5 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             transition={{ duration: 0.15 }}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              fontFamily: "'Nunito', sans-serif", fontSize: 11.5,
-              color: '#ff6b6b', lineHeight: 1.4,
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              fontFamily: "'Nunito', sans-serif",
+              fontSize: 11.5,
+              color: "#ff6b6b",
+              lineHeight: 1.4,
             }}
           >
             <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -152,29 +262,44 @@ function InputField({ label, type = 'text', value, onChange, onBlur, onEnter, pl
 function SubmitBtn({ loading, onClick, children, disabled }) {
   return (
     <motion.button
-      whileHover={!loading && !disabled ? { filter: 'brightness(1.1)' } : {}}
+      whileHover={!loading && !disabled ? { filter: "brightness(1.1)" } : {}}
       whileTap={!loading && !disabled ? { scale: 0.98 } : {}}
       onClick={onClick}
       disabled={loading || disabled}
       style={{
-        width: '100%', padding: '12px', marginTop: 6,
-        borderRadius: 6, border: 'none',
-        cursor: loading || disabled ? 'default' : 'pointer',
-        background: loading || disabled ? 'rgba(229,9,20,0.45)' : C.accent,
-        color: '#fff', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', gap: 8,
+        width: "100%",
+        padding: "12px",
+        marginTop: 6,
+        borderRadius: 6,
+        border: "none",
+        cursor: loading || disabled ? "default" : "pointer",
+        background: loading || disabled ? "rgba(229,9,20,0.45)" : C.accent,
+        color: "#fff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
         fontFamily: "'Be Vietnam Pro', sans-serif",
-        fontSize: 14, fontWeight: 700,
-        transition: 'background 0.15s',
+        fontSize: 14,
+        fontWeight: 700,
+        transition: "background 0.15s",
       }}
     >
       {loading ? (
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
-          style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }}
+          transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
+          style={{
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            border: "2px solid rgba(255,255,255,0.3)",
+            borderTopColor: "#fff",
+          }}
         />
-      ) : children}
+      ) : (
+        children
+      )}
     </motion.button>
   );
 }
@@ -182,12 +307,20 @@ function SubmitBtn({ loading, onClick, children, disabled }) {
 function ErrorMsg({ children }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
       style={{
-        padding: '9px 12px', borderRadius: 6, marginBottom: 14,
-        background: 'rgba(229,9,20,0.08)', border: '1px solid rgba(229,9,20,0.2)',
-        fontFamily: "'Nunito', sans-serif", fontSize: 12.5, color: '#ff6b6b',
-        display: 'flex', alignItems: 'flex-start', gap: 8,
+        padding: "9px 12px",
+        borderRadius: 6,
+        marginBottom: 14,
+        background: "rgba(229,9,20,0.08)",
+        border: "1px solid rgba(229,9,20,0.2)",
+        fontFamily: "'Nunito', sans-serif",
+        fontSize: 12.5,
+        color: "#ff6b6b",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
       }}
     >
       <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -199,24 +332,46 @@ function ErrorMsg({ children }) {
 function SuccessMsg({ children }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
       style={{
-        padding: '9px 12px', borderRadius: 6, marginBottom: 14,
-        background: 'rgba(70,211,105,0.08)', border: '1px solid rgba(70,211,105,0.2)',
-        fontFamily: "'Nunito', sans-serif", fontSize: 12.5, color: C.green,
-        display: 'flex', alignItems: 'center', gap: 7,
+        padding: "9px 12px",
+        borderRadius: 6,
+        marginBottom: 14,
+        background: "rgba(70,211,105,0.08)",
+        border: "1px solid rgba(70,211,105,0.2)",
+        fontFamily: "'Nunito', sans-serif",
+        fontSize: 12.5,
+        color: C.green,
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
       }}
     >
-      <Check size={13}/> {children}
+      <Check size={13} /> {children}
     </motion.div>
   );
 }
 
 function Divider({ text }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        margin: "18px 0",
+      }}
+    >
       <div style={{ flex: 1, height: 1, background: C.border }} />
-      <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 11, color: C.sub, whiteSpace: 'nowrap' }}>
+      <span
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 11,
+          color: C.sub,
+          whiteSpace: "nowrap",
+        }}
+      >
         {text}
       </span>
       <div style={{ flex: 1, height: 1, background: C.border }} />
@@ -228,26 +383,41 @@ function Divider({ text }) {
 
 // ── Login ────────────────────────────────────────────────────────────────────
 function LoginView({ onSwitch, onOtp, navigate }) {
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [touched,  setTouched]  = useState({});
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [banned, setBanned] = useState(null); // { reason } | null
+  const [touched, setTouched] = useState({});
 
   const errors = {
-    email:    validateEmail(email),
-    password: password ? '' : 'Mật khẩu không được để trống',
+    email: validateEmail(email),
+    password: password ? "" : "Mật khẩu không được để trống",
   };
 
-  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
+  const touch = (field) => setTouched((t) => ({ ...t, [field]: true }));
   const touchAll = () => setTouched({ email: true, password: true });
 
   const hasFieldErrors = Object.values(errors).some(Boolean);
 
+  // Keywords BE có thể trả về khi tài khoản bị khóa/ban
+  const isBannedError = (msg = "") => {
+    const lower = msg.toLowerCase();
+    return (
+      lower.includes("khóa") ||
+      lower.includes("ban") ||
+      lower.includes("bị khóa") ||
+      lower.includes("locked") ||
+      lower.includes("suspended")
+    );
+  };
+
   const submit = async () => {
     touchAll();
     if (hasFieldErrors) return;
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
+    setBanned(null);
     try {
       const data = await authService.login({ email: email.trim(), password });
 
@@ -257,10 +427,17 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       }
 
       authService.saveSession(data);
-      navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
+      navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Email hoặc mật khẩu không đúng');
+      const data = e.response?.data;
+      const msg = data?.message || e.message || "";
+
+      if (isBannedError(msg)) {
+        // ✅ Đọc banReason riêng, không dùng msg chung làm lý do
+        setBanned({ reason: data?.banReason || null });
+      } else {
+        setError(msg || "Email hoặc mật khẩu không đúng");
+      }
     } finally {
       setLoading(false);
     }
@@ -268,46 +445,108 @@ function LoginView({ onSwitch, onOtp, navigate }) {
 
   return (
     <>
-      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Chào mừng trở lại</p>
-      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24 }}>
+      <p
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: C.text,
+          marginBottom: 4,
+        }}
+      >
+        Chào mừng trở lại
+      </p>
+      <p
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+          color: C.sub,
+          marginBottom: 24,
+        }}
+      >
         Đăng nhập để tiếp tục xem phim
       </p>
 
-      <InputField label="Email" type="email" value={email} onChange={v => { setEmail(v); touch('email'); }}
-        onBlur={() => touch('email')} onEnter={submit}
-        placeholder="email@example.com" autoFocus
-        error={errors.email} touched={touched.email} />
-      <InputField label="Mật khẩu" type="password" value={password} onChange={v => { setPassword(v); touch('password'); }}
-        onBlur={() => touch('password')} onEnter={submit}
+      <InputField
+        label="Email"
+        type="email"
+        value={email}
+        onChange={(v) => {
+          setEmail(v);
+          touch("email");
+        }}
+        onBlur={() => touch("email")}
+        onEnter={submit}
+        placeholder="email@example.com"
+        autoFocus
+        error={errors.email}
+        touched={touched.email}
+      />
+      <InputField
+        label="Mật khẩu"
+        type="password"
+        value={password}
+        onChange={(v) => {
+          setPassword(v);
+          touch("password");
+        }}
+        onBlur={() => touch("password")}
+        onEnter={submit}
         placeholder="••••••••"
-        error={errors.password} touched={touched.password} />
+        error={errors.password}
+        touched={touched.password}
+      />
 
-      <div style={{ textAlign: 'right', marginTop: 4, marginBottom: 14 }}>
-        <button onClick={() => onSwitch('forgot')} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontFamily: "'Nunito',sans-serif", fontSize: 12, color: C.sub,
-          textDecoration: 'underline', textDecorationColor: C.dim, padding: 0,
-        }}>
+      <div style={{ textAlign: "right", marginTop: 4, marginBottom: 14 }}>
+        <button
+          onClick={() => onSwitch("forgot")}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "'Nunito',sans-serif",
+            fontSize: 12,
+            color: C.sub,
+            textDecoration: "underline",
+            textDecorationColor: C.dim,
+            padding: 0,
+          }}
+        >
           Quên mật khẩu?
         </button>
       </div>
 
+      {banned && <BannedMsg reason={banned.reason} />}
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
-      <SubmitBtn loading={loading} onClick={submit}>
-        <Play size={14} fill="#fff"/> Đăng nhập
+      <SubmitBtn loading={loading} onClick={submit} disabled={!!banned}>
+        <Play size={14} fill="#fff" /> Đăng nhập
       </SubmitBtn>
 
       <Divider text="Chưa có tài khoản?" />
 
-      <button onClick={() => onSwitch('register')} style={{
-        width: '100%', padding: '11px', borderRadius: 6, cursor: 'pointer',
-        background: 'none', border: `1px solid ${C.border}`,
-        color: C.sub, fontFamily: "'Be Vietnam Pro',sans-serif",
-        fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
-      }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; e.currentTarget.style.color = C.text; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.sub; }}
+      <button
+        onClick={() => onSwitch("register")}
+        style={{
+          width: "100%",
+          padding: "11px",
+          borderRadius: 6,
+          cursor: "pointer",
+          background: "none",
+          border: `1px solid ${C.border}`,
+          color: C.sub,
+          fontFamily: "'Be Vietnam Pro',sans-serif",
+          fontSize: 13,
+          fontWeight: 600,
+          transition: "all 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
+          e.currentTarget.style.color = C.text;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = C.border;
+          e.currentTarget.style.color = C.sub;
+        }}
       >
         Tạo tài khoản mới
       </button>
@@ -316,97 +555,167 @@ function LoginView({ onSwitch, onOtp, navigate }) {
 }
 
 // ── Register ─────────────────────────────────────────────────────────────────
-function RegisterView({ onSwitch }) {
-  const [username, setUsername] = useState('');
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm,  setConfirm]  = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [success,  setSuccess]  = useState(false);
-  const [touched,  setTouched]  = useState({});
+function RegisterView({ onSwitch, onRegisterOtp }) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [touched, setTouched] = useState({});
 
   const errors = {
     username: validateUsername(username),
-    email:    validateEmail(email),
+    email: validateEmail(email),
     password: validatePassword(password),
-    confirm:  validateConfirm(password, confirm),
+    confirm: validateConfirm(password, confirm),
   };
 
-  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
-  const touchAll = () => setTouched({ username: true, email: true, password: true, confirm: true });
+  const touch = (field) => setTouched((t) => ({ ...t, [field]: true }));
+  const touchAll = () =>
+    setTouched({ username: true, email: true, password: true, confirm: true });
 
   const hasFieldErrors = Object.values(errors).some(Boolean);
 
   const submit = async () => {
     touchAll();
     if (hasFieldErrors) return;
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
-      await authService.register({ email: email.trim(), username: username.trim(), password, confirmPassword: confirm });
-      setSuccess(true);
-      setTimeout(() => onSwitch('login'), 1800);
+      await authService.register({
+        email: email.trim(),
+        username: username.trim(),
+        password,
+        confirmPassword: confirm,
+      });
+      // BE gửi OTP về email → chuyển sang bước xác nhận OTP đăng ký
+      onRegisterOtp({ email: email.trim() });
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Đăng ký thất bại, vui lòng thử lại');
+      console.error(
+        "[Auth Error]",
+        e.message,
+        e.response?.status,
+        e.response?.data,
+      );
+      setError(
+        e.response?.data?.message ||
+          e.response?.data?.data?.message ||
+          e.message ||
+          "Đăng ký thất bại, vui lòng thử lại",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (success) return (
-    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-      style={{ textAlign: 'center', padding: '28px 0' }}>
-      <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px',
-        background: 'rgba(70,211,105,0.12)', border: '1px solid rgba(70,211,105,0.25)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Check size={24} style={{ color: C.green }}/>
-      </div>
-      <p style={{ fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 6 }}>Đăng ký thành công!</p>
-      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub }}>Đang chuyển sang đăng nhập...</p>
-    </motion.div>
-  );
-
   return (
     <>
-      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Tạo tài khoản</p>
-      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 22 }}>
+      <p
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: C.text,
+          marginBottom: 4,
+        }}
+      >
+        Tạo tài khoản
+      </p>
+      <p
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+          color: C.sub,
+          marginBottom: 22,
+        }}
+      >
         Miễn phí — bắt đầu xem phim ngay
       </p>
 
-      <InputField label="Tên hiển thị" value={username} onChange={v => { setUsername(v); touch('username'); }}
-        onBlur={() => touch('username')}
-        placeholder="Chỉ chữ, số, dấu _ (3–50 ký tự)" autoFocus
-        error={errors.username} touched={touched.username} />
-      <InputField label="Email" type="email" value={email} onChange={v => { setEmail(v); touch('email'); }}
-        onBlur={() => touch('email')}
+      <InputField
+        label="Tên hiển thị"
+        value={username}
+        onChange={(v) => {
+          setUsername(v);
+          touch("username");
+        }}
+        onBlur={() => touch("username")}
+        placeholder="Chỉ chữ, số, dấu _ (3–50 ký tự)"
+        autoFocus
+        error={errors.username}
+        touched={touched.username}
+      />
+      <InputField
+        label="Email"
+        type="email"
+        value={email}
+        onChange={(v) => {
+          setEmail(v);
+          touch("email");
+        }}
+        onBlur={() => touch("email")}
         placeholder="email@example.com"
-        error={errors.email} touched={touched.email} />
-      <InputField label="Mật khẩu" type="password" value={password} onChange={v => { setPassword(v); touch('password'); if (touched.confirm) touch('confirm'); }}
-        onBlur={() => touch('password')}
+        error={errors.email}
+        touched={touched.email}
+      />
+      <InputField
+        label="Mật khẩu"
+        type="password"
+        value={password}
+        onChange={(v) => {
+          setPassword(v);
+          touch("password");
+          if (touched.confirm) touch("confirm");
+        }}
+        onBlur={() => touch("password")}
         placeholder="8+ ký tự, hoa, thường, số, ký tự đặc biệt"
-        error={errors.password} touched={touched.password} />
-      <InputField label="Xác nhận mật khẩu" type="password" value={confirm} onChange={v => { setConfirm(v); touch('confirm'); }}
-        onBlur={() => touch('confirm')}
+        error={errors.password}
+        touched={touched.password}
+      />
+      <InputField
+        label="Xác nhận mật khẩu"
+        type="password"
+        value={confirm}
+        onChange={(v) => {
+          setConfirm(v);
+          touch("confirm");
+        }}
+        onBlur={() => touch("confirm")}
         placeholder="Nhập lại mật khẩu"
-        error={errors.confirm} touched={touched.confirm} />
+        error={errors.confirm}
+        touched={touched.confirm}
+      />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
       <SubmitBtn loading={loading} onClick={submit}>
-        <Check size={14}/> Tạo tài khoản
+        <Check size={14} /> Tạo tài khoản
       </SubmitBtn>
 
       <Divider text="Đã có tài khoản?" />
 
-      <button onClick={() => onSwitch('login')} style={{
-        width: '100%', padding: '11px', borderRadius: 6, cursor: 'pointer',
-        background: 'none', border: `1px solid ${C.border}`,
-        color: C.sub, fontFamily: "'Be Vietnam Pro',sans-serif",
-        fontSize: 13, fontWeight: 600,
-      }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; e.currentTarget.style.color = C.text; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.sub; }}
+      <button
+        onClick={() => onSwitch("login")}
+        style={{
+          width: "100%",
+          padding: "11px",
+          borderRadius: 6,
+          cursor: "pointer",
+          background: "none",
+          border: `1px solid ${C.border}`,
+          color: C.sub,
+          fontFamily: "'Be Vietnam Pro',sans-serif",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
+          e.currentTarget.style.color = C.text;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = C.border;
+          e.currentTarget.style.color = C.sub;
+        }}
       >
         Đăng nhập
       </button>
@@ -414,37 +723,79 @@ function RegisterView({ onSwitch }) {
   );
 }
 
-// ── OTP (2FA) ─────────────────────────────────────────────────────────────────
-function OtpView({ userId, email, navigate, onBack }) {
-  const [code,      setCode]     = useState('');
-  const [loading,   setLoading]  = useState(false);
-  const [resending, setResending]= useState(false);
-  const [error,     setError]    = useState('');
-  const [sent,      setSent]     = useState(false);
+// ── OTP (2FA login hoặc xác nhận đăng ký) ────────────────────────────────────
+function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSuccess }) {
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+
+  const isRegister = mode === "register";
 
   const submit = async () => {
-    if (code.length !== 6) { setError('Mã OTP gồm 6 chữ số'); return; }
-    setLoading(true); setError('');
+    if (code.length !== 6) {
+      setError("Mã OTP gồm 6 chữ số");
+      return;
+    }
+    setLoading(true);
+    setError("");
     try {
-      const data = await authService.verifyOtp({ userId, code });
-      authService.saveSession(data);
-      navigate(data.user?.role?.toLowerCase() === 'admin' ? '/admin' : '/');
+      if (isRegister) {
+        // Bước 2 đăng ký: xác nhận OTP → tạo user trong DB
+        await authService.verifyRegisterOtp({ email, code });
+        onRegisterSuccess && onRegisterSuccess();
+      } else {
+        // 2FA login
+        const data = await authService.verifyOtp({ userId, code });
+        authService.saveSession(data);
+        navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
+      }
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Mã OTP không đúng hoặc đã hết hạn');
+      console.error(
+        "[Auth Error]",
+        e.message,
+        e.response?.status,
+        e.response?.data,
+      );
+      setError(
+        e.response?.data?.message ||
+          e.response?.data?.data?.message ||
+          e.message ||
+          "Mã OTP không đúng hoặc đã hết hạn",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const resend = async () => {
-    setResending(true); setSent(false); setError('');
+    setResending(true);
+    setSent(false);
+    setError("");
     try {
-      await authService.sendOtp(userId);
-      setSent(true);
+      if (isRegister) {
+        // Đăng ký dùng /auth/forgot-password không đúng — BE không có resend cho register
+        // Gọi lại /register/verify-otp sẽ fail nếu OTP hết hạn,
+        // cách đơn giản nhất: quay lại form đăng ký để user submit lại
+        setError("OTP hết hạn. Vui lòng quay lại và đăng ký lại để nhận mã mới.");
+      } else {
+        await authService.sendOtp(userId);
+        setSent(true);
+      }
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Không thể gửi lại OTP');
+      console.error(
+        "[Auth Error]",
+        e.message,
+        e.response?.status,
+        e.response?.data,
+      );
+      setError(
+        e.response?.data?.message ||
+          e.response?.data?.data?.message ||
+          e.message ||
+          "Không thể gửi lại OTP",
+      );
     } finally {
       setResending(false);
     }
@@ -452,46 +803,92 @@ function OtpView({ userId, email, navigate, onBack }) {
 
   return (
     <>
-      <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none',
-        border:'none', cursor:'pointer', color:C.sub, padding:'0 0 20px',
-        fontFamily:"'Nunito',sans-serif", fontSize:13 }}>
-        <ArrowLeft size={14}/> Quay lại
+      <button
+        onClick={onBack}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: C.sub,
+          padding: "0 0 20px",
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+        }}
+      >
+        <ArrowLeft size={14} /> Quay lại
       </button>
 
-      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 6 }}>Xác thực 2 bước</p>
-      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
-        Mã OTP đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br/>
-        Nhập mã 6 chữ số để tiếp tục.
+      <p
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: C.text,
+          marginBottom: 6,
+        }}
+      >
+        {isRegister ? "Xác nhận email" : "Xác thực 2 bước"}
+      </p>
+      <p
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+          color: C.sub,
+          marginBottom: 24,
+          lineHeight: 1.6,
+        }}
+      >
+        {isRegister
+          ? <>Mã xác nhận đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />Nhập mã 6 chữ số để hoàn tất đăng ký.</>
+          : <>Mã OTP đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />Nhập mã 6 chữ số để tiếp tục.</>
+        }
       </p>
 
       {/* OTP input — 6 ô */}
-      <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:20 }}>
-        {Array.from({length:6}).map((_, i) => (
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          justifyContent: "center",
+          marginBottom: 20,
+        }}
+      >
+        {Array.from({ length: 6 }).map((_, i) => (
           <input
             key={i}
             id={`otp-${i}`}
             type="text"
             inputMode="numeric"
             maxLength={1}
-            value={code[i] || ''}
-            onChange={e => {
-              const val = e.target.value.replace(/\D/,'');
-              const arr = code.split('');
+            value={code[i] || ""}
+            onChange={(e) => {
+              const val = e.target.value.replace(/\D/, "");
+              const arr = code.split("");
               arr[i] = val;
-              const next = arr.join('').slice(0,6);
+              const next = arr.join("").slice(0, 6);
               setCode(next);
-              if (val && i < 5) document.getElementById(`otp-${i+1}`)?.focus();
+              if (val && i < 5)
+                document.getElementById(`otp-${i + 1}`)?.focus();
             }}
-            onKeyDown={e => {
-              if (e.key === 'Backspace' && !code[i] && i > 0)
-                document.getElementById(`otp-${i-1}`)?.focus();
+            onKeyDown={(e) => {
+              if (e.key === "Backspace" && !code[i] && i > 0)
+                document.getElementById(`otp-${i - 1}`)?.focus();
             }}
             style={{
-              width: 44, height: 52, textAlign:'center',
-              background: C.input, border:`1px solid ${code[i] ? C.borderF : C.border}`,
-              borderRadius: 8, color: C.text, outline:'none',
-              fontFamily:"'Be Vietnam Pro',sans-serif", fontSize:20, fontWeight:800,
-              transition:'border-color 0.15s',
+              width: 44,
+              height: 52,
+              textAlign: "center",
+              background: C.input,
+              border: `1px solid ${code[i] ? C.borderF : C.border}`,
+              borderRadius: 8,
+              color: C.text,
+              outline: "none",
+              fontFamily: "'Be Vietnam Pro',sans-serif",
+              fontSize: 20,
+              fontWeight: 800,
+              transition: "border-color 0.15s",
             }}
           />
         ))}
@@ -500,17 +897,30 @@ function OtpView({ userId, email, navigate, onBack }) {
       {sent && <SuccessMsg>Đã gửi lại OTP</SuccessMsg>}
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
-      <SubmitBtn loading={loading} onClick={submit} disabled={code.length !== 6}>
+      <SubmitBtn
+        loading={loading}
+        onClick={submit}
+        disabled={code.length !== 6}
+      >
         Xác nhận
       </SubmitBtn>
 
-      <div style={{ textAlign:'center', marginTop:16 }}>
-        <button onClick={resend} disabled={resending} style={{
-          background:'none', border:'none', cursor:'pointer',
-          fontFamily:"'Nunito',sans-serif", fontSize:12.5, color:C.sub,
-          textDecoration:'underline', textDecorationColor:C.dim,
-        }}>
-          {resending ? 'Đang gửi...' : 'Gửi lại mã OTP'}
+      <div style={{ textAlign: "center", marginTop: 16 }}>
+        <button
+          onClick={resend}
+          disabled={resending}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "'Nunito',sans-serif",
+            fontSize: 12.5,
+            color: C.sub,
+            textDecoration: "underline",
+            textDecorationColor: C.dim,
+          }}
+        >
+          {resending ? "Đang gửi..." : "Gửi lại mã OTP"}
         </button>
       </div>
     </>
@@ -519,10 +929,10 @@ function OtpView({ userId, email, navigate, onBack }) {
 
 // ── Forgot Password ───────────────────────────────────────────────────────────
 function ForgotView({ onSwitch }) {
-  const [email,   setEmail]   = useState('');
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-  const [sent,    setSent]    = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
   const [touched, setTouched] = useState({});
 
   const emailError = validateEmail(email);
@@ -531,53 +941,124 @@ function ForgotView({ onSwitch }) {
   const submit = async () => {
     touch();
     if (emailError) return;
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       await authService.forgotPassword(email.trim());
       setSent(true);
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      console.error(
+        "[Auth Error]",
+        e.message,
+        e.response?.status,
+        e.response?.data,
+      );
+      setError(
+        e.response?.data?.message ||
+          e.response?.data?.data?.message ||
+          e.message ||
+          "Có lỗi xảy ra, vui lòng thử lại",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (sent) return (
-    <>
-      <button onClick={() => onSwitch('reset', email)} style={{ display:'flex', alignItems:'center', gap:6, background:'none',
-        border:'none', cursor:'pointer', color:C.sub, padding:'0 0 20px',
-        fontFamily:"'Nunito',sans-serif", fontSize:13 }}>
-        <ArrowLeft size={14}/> Quay lại
-      </button>
-      <SuccessMsg>Nếu email tồn tại, mã OTP đã được gửi</SuccessMsg>
-      <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.sub, marginBottom:20, lineHeight:1.65 }}>
-        Kiểm tra hộp thư <strong style={{color:C.text}}>{email}</strong> và nhập mã OTP để đặt lại mật khẩu.
-      </p>
-      <SubmitBtn loading={false} onClick={() => onSwitch('reset', email)}>
-        Nhập mã OTP
-      </SubmitBtn>
-    </>
-  );
+  if (sent)
+    return (
+      <>
+        <button
+          onClick={() => onSwitch("reset", email)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: C.sub,
+            padding: "0 0 20px",
+            fontFamily: "'Nunito',sans-serif",
+            fontSize: 13,
+          }}
+        >
+          <ArrowLeft size={14} /> Quay lại
+        </button>
+        <SuccessMsg>Nếu email tồn tại, mã OTP đã được gửi</SuccessMsg>
+        <p
+          style={{
+            fontFamily: "'Nunito',sans-serif",
+            fontSize: 13,
+            color: C.sub,
+            marginBottom: 20,
+            lineHeight: 1.65,
+          }}
+        >
+          Kiểm tra hộp thư <strong style={{ color: C.text }}>{email}</strong> và
+          nhập mã OTP để đặt lại mật khẩu.
+        </p>
+        <SubmitBtn loading={false} onClick={() => onSwitch("reset", email)}>
+          Nhập mã OTP
+        </SubmitBtn>
+      </>
+    );
 
   return (
     <>
-      <button onClick={() => onSwitch('login')} style={{ display:'flex', alignItems:'center', gap:6, background:'none',
-        border:'none', cursor:'pointer', color:C.sub, padding:'0 0 20px',
-        fontFamily:"'Nunito',sans-serif", fontSize:13 }}>
-        <ArrowLeft size={14}/> Quay lại đăng nhập
+      <button
+        onClick={() => onSwitch("login")}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: C.sub,
+          padding: "0 0 20px",
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+        }}
+      >
+        <ArrowLeft size={14} /> Quay lại đăng nhập
       </button>
 
-      <p style={{ fontSize:20, fontWeight:800, color:C.text, marginBottom:6 }}>Quên mật khẩu?</p>
-      <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.sub, marginBottom:24, lineHeight:1.65 }}>
+      <p
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: C.text,
+          marginBottom: 6,
+        }}
+      >
+        Quên mật khẩu?
+      </p>
+      <p
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+          color: C.sub,
+          marginBottom: 24,
+          lineHeight: 1.65,
+        }}
+      >
         Nhập email đăng ký, chúng tôi sẽ gửi mã OTP để đặt lại mật khẩu.
       </p>
 
-      <InputField label="Email" type="email" value={email}
-        onChange={v => { setEmail(v); setTouched({ email: true }); }}
+      <InputField
+        label="Email"
+        type="email"
+        value={email}
+        onChange={(v) => {
+          setEmail(v);
+          setTouched({ email: true });
+        }}
         onBlur={touch}
-        placeholder="email@example.com" autoFocus
-        error={emailError} touched={touched.email} />
+        placeholder="email@example.com"
+        autoFocus
+        error={emailError}
+        touched={touched.email}
+      />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
@@ -590,127 +1071,261 @@ function ForgotView({ onSwitch }) {
 
 // ── Reset Password ────────────────────────────────────────────────────────────
 function ResetView({ email: initEmail, onSwitch }) {
-  const [email,    setEmail]    = useState(initEmail || '');
-  const [code,     setCode]     = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm,  setConfirm]  = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [done,     setDone]     = useState(false);
-  const [touched,  setTouched]  = useState({});
+  const [email, setEmail] = useState(initEmail || "");
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [touched, setTouched] = useState({});
 
   const errors = {
-    email:    !initEmail ? validateEmail(email) : '',
-    code:     !code.trim() ? 'Vui lòng nhập mã OTP' : code.replace(/\D/g,'').length !== 6 ? 'Mã OTP gồm 6 chữ số' : '',
+    email: !initEmail ? validateEmail(email) : "",
+    code: !code.trim()
+      ? "Vui lòng nhập mã OTP"
+      : code.replace(/\D/g, "").length !== 6
+        ? "Mã OTP gồm 6 chữ số"
+        : "",
     password: validatePassword(password),
-    confirm:  validateConfirm(password, confirm),
+    confirm: validateConfirm(password, confirm),
   };
 
-  const touch = (field) => setTouched(t => ({ ...t, [field]: true }));
-  const touchAll = () => setTouched({ email: true, code: true, password: true, confirm: true });
+  const touch = (field) => setTouched((t) => ({ ...t, [field]: true }));
+  const touchAll = () =>
+    setTouched({ email: true, code: true, password: true, confirm: true });
 
   const hasFieldErrors = Object.values(errors).some(Boolean);
 
   const submit = async () => {
     touchAll();
     if (hasFieldErrors) return;
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
-      await authService.resetPassword({ email: email.trim(), code, newPassword: password, confirmPassword: confirm });
+      await authService.resetPassword({
+        email: email.trim(),
+        code,
+        newPassword: password,
+        confirmPassword: confirm,
+      });
       setDone(true);
-      setTimeout(() => onSwitch('login'), 2000);
+      setTimeout(() => onSwitch("login"), 2000);
     } catch (e) {
-      console.error('[Auth Error]', e.message, e.response?.status, e.response?.data);
-      setError(e.response?.data?.message || e.response?.data?.data?.message || e.message || 'Mã OTP không đúng hoặc đã hết hạn');
+      console.error(
+        "[Auth Error]",
+        e.message,
+        e.response?.status,
+        e.response?.data,
+      );
+      setError(
+        e.response?.data?.message ||
+          e.response?.data?.data?.message ||
+          e.message ||
+          "Mã OTP không đúng hoặc đã hết hạn",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (done) return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} style={{textAlign:'center', padding:'28px 0'}}>
-      <div style={{ width:56, height:56, borderRadius:'50%', margin:'0 auto 16px',
-        background:'rgba(70,211,105,0.12)', border:'1px solid rgba(70,211,105,0.25)',
-        display:'flex', alignItems:'center', justifyContent:'center' }}>
-        <Check size={24} style={{color:C.green}}/>
-      </div>
-      <p style={{ fontSize:17, fontWeight:800, color:C.text, marginBottom:6 }}>Đặt lại mật khẩu thành công!</p>
-      <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.sub }}>Đang chuyển về đăng nhập...</p>
-    </motion.div>
-  );
+  if (done)
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        style={{ textAlign: "center", padding: "28px 0" }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            margin: "0 auto 16px",
+            background: "rgba(70,211,105,0.12)",
+            border: "1px solid rgba(70,211,105,0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Check size={24} style={{ color: C.green }} />
+        </div>
+        <p
+          style={{
+            fontSize: 17,
+            fontWeight: 800,
+            color: C.text,
+            marginBottom: 6,
+          }}
+        >
+          Đặt lại mật khẩu thành công!
+        </p>
+        <p
+          style={{
+            fontFamily: "'Nunito',sans-serif",
+            fontSize: 13,
+            color: C.sub,
+          }}
+        >
+          Đang chuyển về đăng nhập...
+        </p>
+      </motion.div>
+    );
 
   return (
     <>
-      <button onClick={() => onSwitch('forgot')} style={{ display:'flex', alignItems:'center', gap:6, background:'none',
-        border:'none', cursor:'pointer', color:C.sub, padding:'0 0 20px',
-        fontFamily:"'Nunito',sans-serif", fontSize:13 }}>
-        <ArrowLeft size={14}/> Quay lại
+      <button
+        onClick={() => onSwitch("forgot")}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: C.sub,
+          padding: "0 0 20px",
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+        }}
+      >
+        <ArrowLeft size={14} /> Quay lại
       </button>
-      <p style={{ fontSize:20, fontWeight:800, color:C.text, marginBottom:4 }}>Đặt lại mật khẩu</p>
-      <p style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, color:C.sub, marginBottom:22 }}>
+      <p
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: C.text,
+          marginBottom: 4,
+        }}
+      >
+        Đặt lại mật khẩu
+      </p>
+      <p
+        style={{
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 13,
+          color: C.sub,
+          marginBottom: 22,
+        }}
+      >
         Nhập mã OTP và mật khẩu mới của bạn.
       </p>
 
       {!initEmail && (
-        <InputField label="Email" type="email" value={email}
-          onChange={v => { setEmail(v); touch('email'); }}
-          onBlur={() => touch('email')}
+        <InputField
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(v) => {
+            setEmail(v);
+            touch("email");
+          }}
+          onBlur={() => touch("email")}
           placeholder="email@example.com"
-          error={errors.email} touched={touched.email} />
+          error={errors.email}
+          touched={touched.email}
+        />
       )}
-      <InputField label="Mã OTP" value={code}
-        onChange={v => { setCode(v.replace(/\D/,'')); touch('code'); }}
-        onBlur={() => touch('code')}
-        placeholder="6 chữ số" autoFocus={!!initEmail}
-        error={errors.code} touched={touched.code} />
-      <InputField label="Mật khẩu mới" type="password" value={password}
-        onChange={v => { setPassword(v); touch('password'); if (touched.confirm) touch('confirm'); }}
-        onBlur={() => touch('password')}
+      <InputField
+        label="Mã OTP"
+        value={code}
+        onChange={(v) => {
+          setCode(v.replace(/\D/, ""));
+          touch("code");
+        }}
+        onBlur={() => touch("code")}
+        placeholder="6 chữ số"
+        autoFocus={!!initEmail}
+        error={errors.code}
+        touched={touched.code}
+      />
+      <InputField
+        label="Mật khẩu mới"
+        type="password"
+        value={password}
+        onChange={(v) => {
+          setPassword(v);
+          touch("password");
+          if (touched.confirm) touch("confirm");
+        }}
+        onBlur={() => touch("password")}
         placeholder="8+ ký tự, hoa, thường, số, ký tự đặc biệt"
-        error={errors.password} touched={touched.password} />
-      <InputField label="Xác nhận mật khẩu" type="password" value={confirm}
-        onChange={v => { setConfirm(v); touch('confirm'); }}
-        onBlur={() => touch('confirm')}
+        error={errors.password}
+        touched={touched.password}
+      />
+      <InputField
+        label="Xác nhận mật khẩu"
+        type="password"
+        value={confirm}
+        onChange={(v) => {
+          setConfirm(v);
+          touch("confirm");
+        }}
+        onBlur={() => touch("confirm")}
         placeholder="Nhập lại mật khẩu"
-        error={errors.confirm} touched={touched.confirm} />
+        error={errors.confirm}
+        touched={touched.confirm}
+      />
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
-      <SubmitBtn loading={loading} onClick={submit}>Đặt lại mật khẩu</SubmitBtn>
+      <SubmitBtn loading={loading} onClick={submit}>
+        Đặt lại mật khẩu
+      </SubmitBtn>
     </>
   );
 }
 
 // ─── MAIN PAGE ───────────────────────────────────────────────────────────────
 const FEATURES = [
-  { icon: Film,   label: 'Kho phim khổng lồ'  },
-  { icon: Zap,    label: 'Chất lượng Full HD'   },
-  { icon: Star,   label: 'Đánh giá cộng đồng'  },
-  { icon: Shield, label: 'Không quảng cáo'      },
+  { icon: Film, label: "Kho phim khổng lồ" },
+  { icon: Zap, label: "Chất lượng Full HD" },
+  { icon: Star, label: "Đánh giá cộng đồng" },
+  { icon: Shield, label: "Không quảng cáo" },
 ];
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const [view,       setView]       = useState('login');
-  const [otpData,    setOtpData]    = useState(null);
-  const [resetEmail, setResetEmail] = useState('');
+  const [view, setView] = useState("login");
+  const [otpData, setOtpData] = useState(null);           // login 2FA
+  const [registerOtpData, setRegisterOtpData] = useState(null); // register OTP
+  const [resetEmail, setResetEmail] = useState("");
 
   const handleSwitch = (next, data) => {
-    if (next === 'reset') setResetEmail(data || '');
+    if (next === "reset") setResetEmail(data || "");
     setView(next);
   };
 
   const handleOtp = ({ userId, email }) => {
     setOtpData({ userId, email });
-    setView('otp');
+    setView("otp");
+  };
+
+  // Register bước 1 thành công → chuyển sang màn OTP xác nhận đăng ký
+  const handleRegisterOtp = ({ email }) => {
+    setRegisterOtpData({ email });
+    setView("register-otp");
+  };
+
+  // Xác nhận OTP đăng ký thành công → chuyển về login
+  const handleRegisterSuccess = () => {
+    setView("register-success");
+    setTimeout(() => setView("login"), 2000);
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', background: C.bg, color: C.text,
-      display: 'flex', flexDirection: 'column',
-      fontFamily: "'Be Vietnam Pro', sans-serif",
-    }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: C.bg,
+        color: C.text,
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "'Be Vietnam Pro', sans-serif",
+      }}
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900&family=Nunito:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -719,42 +1334,77 @@ export default function LandingPage() {
       `}</style>
 
       {/* NAVBAR */}
-      <nav style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: isMobile ? '0 16px' : '0 40px', height: 60, flexShrink: 0,
-        borderBottom: `1px solid ${C.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 22, fontWeight: 900, color: C.accent, letterSpacing: '-0.02em' }}>UIA</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '0.06em' }}>MOVIE</span>
+      <nav
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: isMobile ? "0 16px" : "0 40px",
+          height: 60,
+          flexShrink: 0,
+          borderBottom: `1px solid ${C.border}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 900,
+              color: C.accent,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            UIA
+          </span>
+          <span
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: C.text,
+              letterSpacing: "0.06em",
+            }}
+          >
+            MOVIE
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['login','register'].map(t => (
-            <button key={t} onClick={() => setView(t)} style={{
-              padding: isMobile ? '6px 12px' : '7px 18px', borderRadius: 4, cursor: 'pointer',
-              background: view === t ? C.accent : 'none',
-              border: view === t ? 'none' : `1px solid ${C.border}`,
-              color: view === t ? '#fff' : C.sub,
-              fontFamily: "'Be Vietnam Pro', sans-serif",
-              fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
-            }}>
-              {t === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+        <div style={{ display: "flex", gap: 4 }}>
+          {["login", "register"].map((t) => (
+            <button
+              key={t}
+              onClick={() => setView(t)}
+              style={{
+                padding: isMobile ? "6px 12px" : "7px 18px",
+                borderRadius: 4,
+                cursor: "pointer",
+                background: view === t ? C.accent : "none",
+                border: view === t ? "none" : `1px solid ${C.border}`,
+                color: view === t ? "#fff" : C.sub,
+                fontFamily: "'Be Vietnam Pro', sans-serif",
+                fontSize: 13,
+                fontWeight: 600,
+                transition: "all 0.15s",
+              }}
+            >
+              {t === "login" ? "Đăng nhập" : "Đăng ký"}
             </button>
           ))}
         </div>
       </nav>
 
       {/* MAIN */}
-      <div style={{
-        flex: 1, display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 420px',
-        maxWidth: isMobile ? '100%' : 1060,
-        width: '100%',
-        margin: '0 auto',
-        padding: isMobile ? '24px 16px' : '0 40px',
-        alignItems: 'center', gap: 0,
-      }}>
-
+      <div
+        style={{
+          flex: 1,
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 420px",
+          maxWidth: isMobile ? "100%" : 1060,
+          width: "100%",
+          margin: "0 auto",
+          padding: isMobile ? "24px 16px" : "0 40px",
+          alignItems: "center",
+          gap: 0,
+        }}
+      >
         {/* LEFT — ẩn trên mobile */}
         {!isMobile && (
           <motion.div
@@ -763,46 +1413,99 @@ export default function LandingPage() {
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             style={{ paddingRight: 64 }}
           >
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '5px 14px', borderRadius: 40, marginBottom: 28,
-              background: C.accentL, border: '1px solid rgba(229,9,20,0.22)',
-            }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                padding: "5px 14px",
+                borderRadius: 40,
+                marginBottom: 28,
+                background: C.accentL,
+                border: "1px solid rgba(229,9,20,0.22)",
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: C.accent,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: C.accent,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}
+              >
                 Xem phim không giới hạn
               </span>
             </div>
 
-            <h1 style={{
-              fontSize: 'clamp(40px, 4.5vw, 62px)', fontWeight: 900,
-              lineHeight: 1.06, letterSpacing: '-0.03em',
-              color: C.text, marginBottom: 20,
-            }}>
-              Trải nghiệm<br />
-              phim ảnh<br />
+            <h1
+              style={{
+                fontSize: "clamp(40px, 4.5vw, 62px)",
+                fontWeight: 900,
+                lineHeight: 1.06,
+                letterSpacing: "-0.03em",
+                color: C.text,
+                marginBottom: 20,
+              }}
+            >
+              Trải nghiệm
+              <br />
+              phim ảnh
+              <br />
               <span style={{ color: C.accent }}>đỉnh cao.</span>
             </h1>
 
-            <p style={{
-              fontFamily: "'Nunito', sans-serif",
-              fontSize: 15, color: C.sub, lineHeight: 1.75,
-              marginBottom: 36, maxWidth: 380,
-            }}>
-              Kho phim khổng lồ, chất lượng HD,<br />cộng đồng đánh giá sôi động.
+            <p
+              style={{
+                fontFamily: "'Nunito', sans-serif",
+                fontSize: 15,
+                color: C.sub,
+                lineHeight: 1.75,
+                marginBottom: 36,
+                maxWidth: 380,
+              }}
+            >
+              Kho phim khổng lồ, chất lượng HD,
+              <br />
+              cộng đồng đánh giá sôi động.
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
               {FEATURES.map(({ icon: Icon, label }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                    background: C.accentL, border: '1px solid rgba(229,9,20,0.18)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
+                <div
+                  key={label}
+                  style={{ display: "flex", alignItems: "center", gap: 10 }}
+                >
+                  <div
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      background: C.accentL,
+                      border: "1px solid rgba(229,9,20,0.18)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
                     <Icon size={14} style={{ color: C.accent }} />
                   </div>
-                  <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#999' }}>
+                  <span
+                    style={{
+                      fontFamily: "'Nunito',sans-serif",
+                      fontSize: 13,
+                      color: "#999",
+                    }}
+                  >
                     {label}
                   </span>
                 </div>
@@ -817,11 +1520,12 @@ export default function LandingPage() {
           animate={{ opacity: 1, x: 0, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           style={{
-            background: C.card, borderRadius: 16,
+            background: C.card,
+            borderRadius: 16,
             border: `1px solid ${C.border}`,
-            padding: isMobile ? '28px 20px' : '36px 32px',
-            boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
-            width: '100%',
+            padding: isMobile ? "28px 20px" : "36px 32px",
+            boxShadow: "0 40px 80px rgba(0,0,0,0.5)",
+            width: "100%",
           }}
         >
           <AnimatePresence mode="wait">
@@ -832,22 +1536,86 @@ export default function LandingPage() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.18 }}
             >
-              {view === 'login'    && <LoginView    onSwitch={handleSwitch} onOtp={handleOtp} navigate={navigate} />}
-              {view === 'register' && <RegisterView onSwitch={handleSwitch} />}
-              {view === 'otp'      && <OtpView      userId={otpData?.userId} email={otpData?.email} navigate={navigate} onBack={() => setView('login')} />}
-              {view === 'forgot'   && <ForgotView   onSwitch={handleSwitch} />}
-              {view === 'reset'    && <ResetView    email={resetEmail} onSwitch={handleSwitch} />}
+              {view === "login" && (
+                <LoginView
+                  onSwitch={handleSwitch}
+                  onOtp={handleOtp}
+                  navigate={navigate}
+                />
+              )}
+              {view === "register" && (
+                <RegisterView
+                  onSwitch={handleSwitch}
+                  onRegisterOtp={handleRegisterOtp}
+                />
+              )}
+              {view === "otp" && (
+                <OtpView
+                  userId={otpData?.userId}
+                  email={otpData?.email}
+                  navigate={navigate}
+                  onBack={() => setView("login")}
+                  mode="login"
+                />
+              )}
+              {view === "register-otp" && (
+                <OtpView
+                  email={registerOtpData?.email}
+                  navigate={navigate}
+                  onBack={() => setView("register")}
+                  mode="register"
+                  onRegisterSuccess={handleRegisterSuccess}
+                />
+              )}
+              {view === "register-success" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{ textAlign: "center", padding: "28px 0" }}
+                >
+                  <div
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: "50%",
+                      margin: "0 auto 16px",
+                      background: "rgba(70,211,105,0.12)",
+                      border: "1px solid rgba(70,211,105,0.25)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Check size={24} style={{ color: C.green }} />
+                  </div>
+                  <p style={{ fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 6 }}>
+                    Đăng ký thành công!
+                  </p>
+                  <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub }}>
+                    Đang chuyển sang đăng nhập...
+                  </p>
+                </motion.div>
+              )}
+              {view === "forgot" && <ForgotView onSwitch={handleSwitch} />}
+              {view === "reset" && (
+                <ResetView email={resetEmail} onSwitch={handleSwitch} />
+              )}
             </motion.div>
           </AnimatePresence>
         </motion.div>
       </div>
 
       {/* FOOTER */}
-      <div style={{
-        textAlign: 'center', padding: '16px',
-        borderTop: `1px solid ${C.border}`,
-        fontFamily: "'Nunito',sans-serif", fontSize: 11, color: C.dim,
-      }}>
+      <div
+        style={{
+          textAlign: "center",
+          padding: "16px",
+          borderTop: `1px solid ${C.border}`,
+          fontFamily: "'Nunito',sans-serif",
+          fontSize: 11,
+          color: C.dim,
+        }}
+      >
         © 2025 UIA Movie — All rights reserved
       </div>
     </div>

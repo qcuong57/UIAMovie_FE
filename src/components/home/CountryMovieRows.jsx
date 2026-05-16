@@ -59,6 +59,7 @@ const normalizeMovie = (m) => ({
   genres: m.genres ?? [],
   description: m.description ?? "",
   duration: m.duration ?? null,
+  isPremium: m.isPremium ?? false,
   isTvShow: false,
 });
 
@@ -72,6 +73,7 @@ const normalizeTvShow = (s) => ({
   backdropUrl: s.backdropUrl ?? null,
   genres: s.genres ?? [],
   description: s.description ?? s.overview ?? "",
+  isPremium: s.isPremium ?? false,
   isTvShow: true,
 });
 

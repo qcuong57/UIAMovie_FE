@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Film, Tag, Star, LogOut,
   ChevronLeft, ChevronRight, Clapperboard, Users, User,
-  Bell, Search, Tv,
+  Bell, Search, Tv, DollarSign,
 } from 'lucide-react';
 import authService from '../../services/authService';
 
@@ -13,6 +13,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../cont
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
+  { key: 'revenue',   label: 'Doanh thu',       icon: DollarSign      },
   { key: 'movies',    label: 'Phim',            icon: Film            },
   { key: 'tvshows',   label: 'TV Shows',        icon: Tv              },
   { key: 'genres',    label: 'Thể loại',        icon: Tag             },
@@ -77,6 +78,7 @@ const TopBar = ({ activeTab, user }) => {
   const TAB_LABELS = {
     dashboard: 'Dashboard', movies: 'Quản lý Phim', tvshows: 'Quản lý TV Shows',
     genres: 'Thể loại', reviews: 'Đánh giá', users: 'Người dùng', persons: 'Diễn viên & Đạo diễn',
+    revenue: 'Doanh thu & Thanh toán',
   };
   const initials = user?.name?.[0]?.toUpperCase() ?? user?.username?.[0]?.toUpperCase() ?? 'A';
 

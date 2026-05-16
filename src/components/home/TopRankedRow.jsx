@@ -3,6 +3,7 @@
 // ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
 
 import React, { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,6 +17,7 @@ import {
   Star,
   Loader,
   Tv,
+  Crown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,6 +27,22 @@ import {
   FONT_BODY,
 } from "../../context/homeTokens";
 import movieService from "../../services/movieService";
+import PremiumGateModal from "../movie/ui/PremiumGateModal";
+
+// ── Premium helpers ──────────────────────────────────────────────
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem("currentUser") || "null"); }
+  catch { return null; }
+}
+function userHasPremium(user) {
+  if (!user) return false;
+  return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
+}
+
+// FIX: Portal để modal thoát khỏi stacking context của motion.div (transform+zIndex)
+function ModalPortal({ children }) {
+  return createPortal(children, document.body);
+}
 
 const PER_PAGE = 5;
 
@@ -60,8 +78,10 @@ const RankCard = ({
   const [localFav, setLocalFav] = useState(
     typeof isFavorited === "function" ? isFavorited(item.id) : isFavorited,
   );
+  const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
   const matchPct = item.rating ? Math.round(item.rating * 10) : null;
+  const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
 
   // Sync khi parent cập nhật favorites
   useEffect(() => {
@@ -183,7 +203,10 @@ const RankCard = ({
             scale: hovered ? 1.07 : 1,
           }}
           transition={{ duration: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
-          onClick={() => navigate(getRoute(item))}
+          onClick={() => {
+            if (isPremiumLocked) { setShowGate(true); return; }
+            navigate(getRoute(item));
+          }}
           style={{
             position: "relative",
             zIndex: hovered ? 20 : 1,
@@ -266,6 +289,30 @@ const RankCard = ({
                 }}
               >
                 {item.rating.toFixed(1)}
+              </span>
+            </div>
+          )}
+
+          {/* Premium badge */}
+          {item.isPremium && (
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                left: 14,
+                zIndex: 5,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                padding: "3px 8px",
+                borderRadius: 99,
+                background: "linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))",
+                backdropFilter: "blur(6px)",
+              }}
+            >
+              <Crown size={9} fill="#1c1400" color="#1c1400" />
+              <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, color: "#1c1400", letterSpacing: "0.04em" }}>
+                PREMIUM
               </span>
             </div>
           )}
@@ -359,6 +406,7 @@ const RankCard = ({
                     whileTap={{ scale: 0.9 }}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (isPremiumLocked) { setShowGate(true); return; }
                       navigate(getRoute(item));
                     }}
                     style={{
@@ -366,7 +414,7 @@ const RankCard = ({
                       height: 36,
                       borderRadius: "50%",
                       border: "none",
-                      background: "#fff",
+                      background: isPremiumLocked ? "rgba(250,204,21,0.9)" : "#fff",
                       cursor: "pointer",
                       flexShrink: 0,
                       display: "flex",
@@ -374,13 +422,12 @@ const RankCard = ({
                       justifyContent: "center",
                       boxShadow: "0 2px 14px rgba(0,0,0,0.55)",
                     }}
+                    title={isPremiumLocked ? "Nội dung Premium" : "Phát"}
                   >
-                    <Play
-                      size={14}
-                      fill="#000"
-                      color="#000"
-                      style={{ marginLeft: 2 }}
-                    />
+                    {isPremiumLocked
+                      ? <Crown size={14} fill="#1c1400" color="#1c1400" />
+                      : <Play size={14} fill="#000" color="#000" style={{ marginLeft: 2 }} />
+                    }
                   </motion.button>
 
                   {/* Favorite */}
@@ -549,6 +596,15 @@ const RankCard = ({
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Premium Gate Modal — Portal để thoát stacking context */}
+      <ModalPortal>
+        <PremiumGateModal
+          open={showGate}
+          onClose={() => setShowGate(false)}
+          movieTitle={item.title}
+        />
+      </ModalPortal>
     </div>
   );
 };
