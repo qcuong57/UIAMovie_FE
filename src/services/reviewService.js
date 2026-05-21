@@ -40,6 +40,15 @@ const reviewService = {
     return response;
   },
 
+  /**
+   * DELETE /api/ratingreview/admin/{reviewId} — Admin xóa review vi phạm.
+   * Dùng endpoint riêng để bypass kiểm tra ownership.
+   */
+  adminDeleteReview: async (reviewId) => {
+    const response = await axiosInstance.delete(`${BASE}/admin/${reviewId}`);
+    return response;
+  },
+
   // ═══════════════════════════════════════════════════════════════════
   // PUBLIC — Lấy danh sách reviews
   // ═══════════════════════════════════════════════════════════════════

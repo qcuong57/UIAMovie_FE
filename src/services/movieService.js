@@ -22,17 +22,17 @@ const movieService = {
    * @param {boolean}  [filter.sortDesc=true]
    */
   getMovies: async ({
-    page           = 1,
-    pageSize       = 20,
-    search         = '',
-    genreIds       = [],
+    page            = 1,
+    pageSize        = 20,
+    search          = '',
+    genreIds        = [],
     minRating,
     maxRating,
-    originCountry  = '',
+    originCountry   = '',
     fromReleaseDate = '',
     toReleaseDate   = '',
-    sortBy         = 'rating',
-    sortDesc       = true,
+    sortBy          = 'rating',
+    sortDesc        = true,
   } = {}) => {
     try {
       const params = new URLSearchParams();
@@ -40,12 +40,12 @@ const movieService = {
       params.append('pageSize', pageSize);
       params.append('sortBy', sortBy);
       params.append('sortDesc', sortDesc);
-      if (search)          params.append('search', search);
+      if (search)            params.append('search', search);
       if (minRating != null) params.append('minRating', minRating);
       if (maxRating != null) params.append('maxRating', maxRating);
-      if (originCountry)   params.append('originCountry', originCountry);
-      if (fromReleaseDate) params.append('fromReleaseDate', fromReleaseDate);
-      if (toReleaseDate)   params.append('toReleaseDate', toReleaseDate);
+      if (originCountry)     params.append('originCountry', originCountry);
+      if (fromReleaseDate)   params.append('fromReleaseDate', fromReleaseDate);
+      if (toReleaseDate)     params.append('toReleaseDate', toReleaseDate);
       // genreIds là mảng → append nhiều lần để backend nhận List<Guid>
       (genreIds ?? []).forEach((id) => params.append('genreIds', id));
 
@@ -106,9 +106,7 @@ const movieService = {
    */
   searchMovies: async (query) => {
     try {
-      if (!query?.trim()) {
-        return [];
-      }
+      if (!query?.trim()) return [];
       const response = await axiosInstance.get('/movies/search', {
         params: { query },
       });
@@ -165,11 +163,25 @@ const movieService = {
   },
 
   /**
+   * [Admin] Xóa phim
+   * DELETE /api/movies/{id}
+   * @param {string} movieId - Movie ID
+   */
+  deleteMovie: async (movieId) => {
+    try {
+      const response = await axiosInstance.delete(`/movies/${movieId}`);
+      return response.data;
+    } catch (error) {
+      console.error('[movieService] Error deleting movie:', error);
+      throw error;
+    }
+  },
+
+  /**
    * [Admin] Bật / tắt Premium cho phim.
-   * Gọi PATCH /api/movies/{id}/premium
+   * PATCH /api/movies/{id}/premium
    * @param {string}  movieId   - Movie ID
    * @param {boolean} isPremium - true = Premium, false = Free
-   * @returns {Promise<{ message: string }>}
    */
   setPremium: async (movieId, isPremium) => {
     try {
@@ -177,6 +189,73 @@ const movieService = {
       return response.data;
     } catch (error) {
       console.error('[movieService] Error setting premium:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Upload video cho phim
+   * POST /api/movies/{id}/videos
+   * @param {string}   movieId
+   * @param {File}     videoFile  - File video (mp4, mkv, ...)
+   * @param {string}   videoType  - "main" | "trailer" | "clip" | "behind"
+   * @param {string}   quality    - "1080p" | "720p" | "480p" | "360p"
+   * @param {Function} onProgress - callback(percent: number)
+   */
+  uploadVideo: async (movieId, videoFile, videoType, quality, onProgress) => {
+    try {
+      // ✅ Field name viết hoa chữ đầu để khớp với C# DTO
+      const formData = new FormData();
+      formData.append('VideoFile', videoFile);
+      formData.append('VideoType', videoType);
+      formData.append('Quality', quality);
+
+      const response = await axiosInstance.post(
+        `/movies/${movieId}/videos`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) {
+              onProgress(Math.round((e.loaded * 100) / e.total));
+            }
+          },
+          timeout: 10 * 60 * 1000, // 10 phút cho file lớn
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('[movieService] Error uploading video:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Xóa video
+   * DELETE /api/movies/videos/{videoId}
+   * @param {string} videoId
+   */
+  deleteVideo: async (videoId) => {
+    try {
+      const response = await axiosInstance.delete(`/movies/videos/${videoId}`);
+      return response.data;
+    } catch (error) {
+      console.error('[movieService] Error deleting video:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Lấy stream URL để phát phim (Premium gate)
+   * GET /api/movies/{id}/watch
+   * @param {string} movieId
+   */
+  watchMovie: async (movieId) => {
+    try {
+      const response = await axiosInstance.get(`/movies/${movieId}/watch`);
+      return response.data;
+    } catch (error) {
+      console.error('[movieService] Error watching movie:', error);
       throw error;
     }
   },
@@ -200,9 +279,7 @@ const movieService = {
    */
   addFavorite: async (movieId) => {
     try {
-      const response = await axiosInstance.post('/movies/favorites', {
-        movieId,
-      });
+      const response = await axiosInstance.post('/movies/favorites', { movieId });
       return response.data;
     } catch (error) {
       console.error('Error adding favorite:', error);
@@ -239,9 +316,9 @@ const movieService = {
 
   /**
    * Cập nhật tiến trình xem phim (cần đăng nhập)
-   * @param {string} movieId - Movie ID
-   * @param {number} progressMinutes - Tiến độ xem (phút)
-   * @param {boolean} isCompleted - Đã xem hết chưa
+   * @param {string}  movieId         - Movie ID
+   * @param {number}  progressMinutes - Tiến độ xem (phút)
+   * @param {boolean} isCompleted     - Đã xem hết chưa
    */
   updateWatchProgress: async (movieId, progressMinutes, isCompleted = false) => {
     try {

@@ -1,6 +1,9 @@
 // src/pages/WatchHistoryPage.jsx
-// Lịch sử xem — WatchHistoryDTO: { id, movieId, movieTitle, posterUrl,
-//                                   watchedAt, progressMinutes, isCompleted }
+// Lịch sử xem — MovieWatchHistoryDTO:  { id, movieId, movieTitle, posterUrl,
+//                                        watchedAt, progressMinutes, isCompleted }
+//              TvShowWatchHistoryDTO:   { id, tvShowId, tvShowTitle, posterUrl, episodeId,
+//                                        seasonNumber, episodeNumber, episodeName,
+//                                        episodeRuntime, watchedAt, progressSeconds, isCompleted }
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -41,7 +44,8 @@ const fmtDuration = (min) => {
 
 // Normalize 2 DTO shape về 1 shape chung để render cùng nhau
 // Movie:  { id, movieId, movieTitle, posterUrl, watchedAt, progressMinutes, isCompleted }
-// TvShow: { id, tvShowId, tvShowTitle, posterUrl, episodeId?, watchedAt, progressSeconds, isCompleted }
+// TvShow: { id, tvShowId, tvShowTitle, posterUrl, episodeId, seasonNumber, episodeNumber,
+//           episodeName, episodeRuntime, watchedAt, progressSeconds, isCompleted }
 const normalizeItem = (item, type) => {
   if (type === 'movie') {
     return {
@@ -55,11 +59,21 @@ const normalizeItem = (item, type) => {
   }
   return {
     ...item,
-    _type:          'tvshow',
-    _contentId:     item.tvShowId,
-    _title:         item.tvShowTitle,
-    _progressMins:  Math.floor((item.progressSeconds ?? 0) / 60),
-    _estimatedMins: 45,
+    _type:           'tvshow',
+    _contentId:      item.tvShowId,
+    _title:          item.tvShowTitle,
+    // FIX: Giữ nguyên progressSeconds gốc để tính progressPct chính xác
+    // Convert sang phút chỉ để hiển thị text "X phút đã xem"
+    _progressSecs:   item.progressSeconds ?? 0,
+    _progressMins:   Math.floor((item.progressSeconds ?? 0) / 60),
+    // episodeRuntime từ API là phút — dùng làm tổng thời lượng tập
+    // FIX: Không fallback 45p khi null — dùng null để biết "chưa có data"
+    _estimatedMins:  item.episodeRuntime ?? null,
+    _estimatedSecs:  item.episodeRuntime != null ? item.episodeRuntime * 60 : null,
+    // Metadata episode để hiển thị trên card
+    _seasonNumber:   item.seasonNumber  ?? null,
+    _episodeNumber:  item.episodeNumber ?? null,
+    _episodeName:    item.episodeName   ?? null,
   };
 };
 
@@ -118,14 +132,28 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
   const [imgErr, setImgErr] = useState(false);
   const navigate            = useNavigate();
 
-  const progressPct = item.isCompleted
-    ? 100
-    : Math.min(Math.round((item._progressMins / item._estimatedMins) * 100), 99);
+  // FIX: Tính progressPct dựa trên seconds (tvshow) hoặc minutes (movie) trực tiếp
+  // thay vì convert rồi tính — tránh mất độ chính xác
+  const progressPct = (() => {
+    if (item.isCompleted) return 100;
+    if (item._type === 'tvshow') {
+      // Dùng seconds nếu có estimatedSecs, fallback sang phút nếu không
+      if (item._estimatedSecs != null && item._estimatedSecs > 0) {
+        return Math.min(Math.round((item._progressSecs / item._estimatedSecs) * 100), 99);
+      }
+      // estimatedSecs null = không có episodeRuntime từ DB
+      // Dùng phút với fallback 45p nhưng cap ở 99 để không hiển thị sai "xong"
+      const estimatedMins = item._estimatedMins ?? 45;
+      return Math.min(Math.round((item._progressMins / estimatedMins) * 100), 99);
+    }
+    // Movie: dùng progressMinutes / estimatedMins
+    return Math.min(Math.round((item._progressMins / (item._estimatedMins || 90)) * 100), 99);
+  })();
 
   const remaining = item.isCompleted
     ? null
     : item._progressMins
-      ? `Còn ${fmtDuration(Math.max(item._estimatedMins - item._progressMins, 0))} nữa`
+      ? `Còn ${fmtDuration(Math.max((item._estimatedMins ?? 45) - item._progressMins, 0))} nữa`
       : null;
 
   const handleClick = () => {
@@ -195,11 +223,24 @@ const HistoryCard = ({ item, index, onDelete, onRewatch }) => {
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
           fontFamily: FONT_DISPLAY, fontSize: isMobile ? 13 : 15, fontWeight: 700,
-          color: C.text, marginBottom: 5,
+          color: C.text, marginBottom: item._type === 'tvshow' && item._episodeNumber ? 2 : 5,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {item._title || 'Không có tên'}
         </p>
+
+        {/* Episode label — chỉ hiện với TV show */}
+        {item._type === 'tvshow' && item._episodeNumber && (
+          <p style={{
+            fontFamily: FONT_BODY, fontSize: 11, fontWeight: 600,
+            color: 'rgba(255,255,255,0.45)',
+            marginBottom: 5,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {item._seasonNumber ? `S${item._seasonNumber} ` : ''}E{item._episodeNumber}
+            {item._episodeName ? ` · ${item._episodeName}` : ''}
+          </p>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.28)', display: 'flex', alignItems: 'center', gap: 4 }}>

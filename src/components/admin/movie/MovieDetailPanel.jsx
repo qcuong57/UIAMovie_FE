@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Clock, Calendar, Globe, Film, User, Video, Trash2, Play, Pencil } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { UploadZone } from './VideoUploadPanel';
+import SubtitlePanel from './SubtitlePanel';
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {
@@ -31,10 +32,11 @@ const TYPE_LABEL   = { main: 'Phim chính', trailer: 'Trailer', clip: 'Clip', be
 const TYPE_COLOR   = { main: T.accent, trailer: '#D97706', clip: '#2563EB', behind: '#7C3AED' };
 
 const TABS = [
-  { key: 'info',   label: 'Thông tin' },
-  { key: 'cast',   label: 'Diễn viên' },
-  { key: 'images', label: 'Hình ảnh'  },
-  { key: 'videos', label: 'Video'     },
+  { key: 'info',      label: 'Thông tin' },
+  { key: 'cast',      label: 'Diễn viên' },
+  { key: 'images',    label: 'Hình ảnh'  },
+  { key: 'videos',    label: 'Video'     },
+  { key: 'subtitles', label: 'Subtitles' },
 ];
 
 // ── MetaRow ───────────────────────────────────────────────────────────────────
@@ -397,6 +399,13 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
                     </p>
                     <VideoList videos={movie.videos} onDelete={handleVideoDeleted} />
                   </div>
+                </motion.div>
+              )}
+
+              {/* ── Subtitles ── */}
+              {tab === 'subtitles' && (
+                <motion.div key="subtitles" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <SubtitlePanel movieId={movieId} />
                 </motion.div>
               )}
 

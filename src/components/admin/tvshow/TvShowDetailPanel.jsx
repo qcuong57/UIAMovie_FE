@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import axiosInstance from "../../../config/axios";
 import { UploadZone } from "../movie/VideoUploadPanel";
+import EpisodeSubtitlePanel from "./EpisodeSubtitlePanel";
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {
@@ -607,6 +608,18 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
                       </div>
                       {/* Video upload zone — luôn hiển thị bên dưới info row */}
                       {ep.id && <EpisodeVideoZone episode={ep} onUpdated={handleEpisodeUpdated} />}
+                      {/* Subtitle panel — quản lý subtitle cho tập phim */}
+                      {ep.id && (
+                        <div style={{
+                          margin: "0 14px 12px",
+                          padding: "12px 14px",
+                          background: T.surfaceAlt,
+                          borderRadius: 10,
+                          border: `1px solid ${T.border}`,
+                        }}>
+                          <EpisodeSubtitlePanel episodeId={ep.id} />
+                        </div>
+                      )}
                     </div>
                   ))}
               </div>

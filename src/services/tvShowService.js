@@ -388,12 +388,13 @@ const tvShowService = {
   /**
    * POST /api/tvshows/history — cập nhật tiến trình xem.
    * Body: UpdateTvShowWatchProgressDTO { tvShowId, episodeId?, progressSeconds, isCompleted }
-   * @param {string}  tvShowId        - GUID
-   * @param {string|null} episodeId   - GUID hoặc null nếu track ở level show
-   * @param {number}  progressSeconds - số giây đã xem
-   * @param {boolean} isCompleted
+   * @param {Object}      dto
+   * @param {string}      dto.tvShowId        - GUID
+   * @param {string|null} dto.episodeId       - GUID hoặc null nếu track ở level show
+   * @param {number}      dto.progressSeconds - số giây đã xem
+   * @param {boolean}     dto.isCompleted
    */
-  updateWatchProgress: async (tvShowId, episodeId, progressSeconds, isCompleted) => {
+  updateWatchProgress: async ({ tvShowId, episodeId, progressSeconds, isCompleted }) => {
     try {
       const response = await axiosInstance.post('/tvshows/history', {
         tvShowId,
@@ -602,6 +603,40 @@ const tvShowService = {
       throw error;
     }
   },
+  /**
+   * Lấy toàn bộ episodes của 1 TV show — dùng cho AdminReviews episode dropdown.
+   * Không có endpoint "get all episodes" riêng, nên hàm này:
+   *   1. Gọi getTvShowById() để lấy danh sách seasons (chỉ metadata, không có episodes).
+   *   2. Gọi getSeason() song song cho mỗi season để lấy episodes.
+   *   3. Gộp + trả về mảng phẳng episodes, mỗi item có thêm seasonNumber.
+   * @param {string} tvShowId - GUID
+   * @returns {Promise<Array<{ id, title, seasonNumber, episodeNumber, ... }>>}
+   */
+  getEpisodesByTvShow: async (tvShowId) => {
+    try {
+      const show = await tvShowService.getTvShowById(tvShowId);
+      const seasons = show?.seasons ?? [];
+      if (!seasons.length) return [];
+
+      const seasonResults = await Promise.all(
+        seasons.map(s => tvShowService.getSeason(tvShowId, s.seasonNumber).catch(() => null))
+      );
+
+      return seasonResults
+        .filter(Boolean)
+        .flatMap(season => {
+          const eps = season?.episodes ?? season?.items ?? (Array.isArray(season) ? season : []);
+          return eps.map(ep => ({
+            ...ep,
+            seasonNumber: ep.seasonNumber ?? season?.seasonNumber,
+          }));
+        });
+    } catch (error) {
+      console.error('[tvShowService] Error fetching all episodes:', error);
+      throw error;
+    }
+  },
+
   /**
    * PATCH /api/tvshows/{id}/premium — bật/tắt Premium nhanh (Admin only).
    * Body: { isPremium: boolean }

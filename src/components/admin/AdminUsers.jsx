@@ -3,12 +3,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, AlertCircle, Shield, Eye, Pencil, Search, Ban, ShieldCheck, X, Check, Crown, CalendarClock } from 'lucide-react';
 import { usePagination } from '../../hooks/usePagination';
-import Pagination from '../common/Pagination';
+import AdminPagination from '../common/AdminPagination';
 import axiosInstance from '../../config/axios';
 import authService from '../../services/authService';
 import UserDetailPanel from './user/UserDetailPanel';
 import UserEditModal from './user/UserEditModal';
-import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
+import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 15;
 
@@ -189,7 +189,6 @@ const DeleteModal = ({ user, onClose, onConfirm, loading }) => (
             />
           </div>
         </ModalMotion>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </>
     )}
   </AnimatePresence>
@@ -301,7 +300,7 @@ const BanModal = ({ user, reason, onReasonChange, onClose, onConfirm, loading })
               />
             </div>
           </ModalMotion>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
         </>
       )}
     </AnimatePresence>
@@ -398,7 +397,7 @@ const UnbanModal = ({ user, onClose, onConfirm, loading }) => (
             />
           </div>
         </ModalMotion>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
       </>
     )}
   </AnimatePresence>
@@ -532,7 +531,7 @@ const ShieldModal = ({ user, newRole, onClose, onConfirm, loading }) => {
               />
             </div>
           </ModalMotion>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
         </>
       )}
     </AnimatePresence>
@@ -761,7 +760,7 @@ const PremiumModal = ({ user, onClose, onConfirm, loading }) => {
               )}
             </div>
           </ModalMotion>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
         </>
       )}
     </AnimatePresence>
@@ -939,78 +938,124 @@ export default function AdminUsers() {
 
   const COLS = ['Người dùng', 'Email', 'Role', 'Ngày tạo', 'Subscription', ''];
 
+  // ── Derived stats (current page; total from API) ──
+  const adminCount   = users.filter(u => u.role?.toLowerCase() === 'admin').length;
+  const bannedCount  = users.filter(u => u.isActive === false).length;
+  const premiumCount = users.filter(u => u.subscriptionType && u.subscriptionType !== 'none').length;
+
+  const selectStyle = (hasVal) => ({
+    height: 42, padding: '0 34px 0 14px', borderRadius: 11,
+    background: T.surface, border: `1px solid ${T.border}`,
+    color: hasVal ? T.text : T.textMuted,
+    fontFamily: FONT, fontSize: 13.5,
+    outline: 'none', cursor: 'pointer',
+    boxShadow: T.shadow, transition: 'border-color 0.15s',
+    appearance: 'none',
+  });
+
+  const ChevronSVG = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2"
+      style={{ position: 'absolute', right: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+
   return (
-    <div style={{ padding: '28px 32px 56px', maxWidth: 1200, fontFamily: FONT }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 3 }}>Quản lý</p>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
+    <div style={{ padding: '28px 32px 64px', maxWidth: 1200, fontFamily: FONT }}>
+      <style>{ADMIN_GOOGLE_FONTS}</style>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: 22 }}>
+        <p style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 3, fontFamily: FONT, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Quản lý</p>
+        <h2 style={{ fontFamily: FONT_TITLE, fontSize: 23, fontWeight: 700, color: T.text, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 8 }}>
           Người dùng
-          <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 500, color: T.textMuted, letterSpacing: 0 }}>
-            ({total})
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: T.textMuted, letterSpacing: 0, fontFamily: FONT }}>
+            · {total.toLocaleString('vi-VN')}
           </span>
         </h2>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <Search size={15} color={T.textMuted} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+      {/* ── Stat chips ── */}
+      {!loading && total > 0 && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { icon: Shield, label: 'Admin trên trang',    value: adminCount,   accent: T.accent },
+            { icon: Ban,    label: 'Đã khóa trên trang',  value: bannedCount,  accent: T.red    },
+            { icon: Crown,  label: 'Premium trên trang',  value: premiumCount, accent: T.gold   },
+          ].map(({ icon: Icon, label, value, accent }) => (
+            <div key={label} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 16px', borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+              boxShadow: T.shadow,
+            }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: accent + '15' }}>
+                <Icon size={14} color={accent} />
+              </div>
+              <div>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, marginBottom: 1 }}>{label}</p>
+                <p style={{ fontFamily: FONT_TITLE, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Filters ── */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+          <Search size={14} color={T.textMuted} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
           <input
-            placeholder="Tìm theo tên, email..."
+            placeholder="Tìm theo tên, email…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
-              width: '100%', height: 40, padding: '0 14px 0 38px',
-              borderRadius: 10, background: T.surface,
-              border: `1px solid ${T.border}`,
+              width: '100%', height: 42, padding: '0 14px 0 38px',
+              borderRadius: 11, background: T.surface, border: `1px solid ${T.border}`,
               fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none',
+              boxShadow: T.shadow, transition: 'border-color 0.15s',
             }}
+            onFocus={e => e.target.style.borderColor = T.accent + '80'}
+            onBlur={e  => e.target.style.borderColor = T.border}
           />
         </div>
-        <select
-          value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}
-          style={{
-            height: 40, padding: '0 14px', borderRadius: 10,
-            background: T.surface, border: `1px solid ${T.border}`,
-            color: roleFilter ? T.text : T.textMuted,
-            fontFamily: FONT, fontSize: 13.5,
-            outline: 'none', cursor: 'pointer', minWidth: 140,
-          }}
-        >
-          <option value="">Tất cả role</option>
-          <option value="Admin">Admin</option>
-          <option value="User">User</option>
-        </select>
-        <select
-          value={subFilter}
-          onChange={e => setSubFilter(e.target.value)}
-          style={{
-            height: 40, padding: '0 14px', borderRadius: 10,
-            background: T.surface, border: `1px solid ${T.border}`,
-            color: subFilter ? T.text : T.textMuted,
-            fontFamily: FONT, fontSize: 13.5,
-            outline: 'none', cursor: 'pointer', minWidth: 160,
-          }}
-        >
-          <option value="">Tất cả subscription</option>
-          <option value="monthly_premium">Premium Tháng</option>
-          <option value="yearly_premium">Premium Năm</option>
-          <option value="none">Không có gói</option>
-        </select>
+        <div style={{ position: 'relative' }}>
+          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
+            style={{ ...selectStyle(roleFilter), minWidth: 140 }}
+            onFocus={e => e.target.style.borderColor = T.accent + '80'}
+            onBlur={e  => e.target.style.borderColor = T.border}
+          >
+            <option value="">Tất cả role</option>
+            <option value="Admin">Admin</option>
+            <option value="User">User</option>
+          </select>
+          <ChevronSVG />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <select value={subFilter} onChange={e => setSubFilter(e.target.value)}
+            style={{ ...selectStyle(subFilter), minWidth: 170 }}
+            onFocus={e => e.target.style.borderColor = T.accent + '80'}
+            onBlur={e  => e.target.style.borderColor = T.border}
+          >
+            <option value="">Tất cả subscription</option>
+            <option value="monthly_premium">Premium Tháng</option>
+            <option value="yearly_premium">Premium Năm</option>
+            <option value="none">Không có gói</option>
+          </select>
+          <ChevronSVG />
+        </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       <div style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: T.surfaceAlt }}>
               {COLS.map(h => (
                 <th key={h} style={{
-                  padding: '11px 18px', textAlign: 'left',
-                  fontFamily: FONT, fontSize: 11.5, fontWeight: 600,
-                  color: T.textMuted, letterSpacing: '0.04em',
+                  padding: '12px 18px', textAlign: 'left',
+                  fontFamily: FONT, fontSize: 11, fontWeight: 600,
+                  color: T.textMuted, letterSpacing: '0.06em',
                   textTransform: 'uppercase', borderBottom: `1px solid ${T.border}`,
                 }}>{h}</th>
               ))}
@@ -1018,17 +1063,27 @@ export default function AdminUsers() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding: '56px 0', textAlign: 'center' }}>
-                <div style={{
-                  width: 26, height: 26, borderRadius: '50%',
-                  border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent,
-                  animation: 'spin 0.75s linear infinite', margin: '0 auto',
-                }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </td></tr>
+              Array.from({ length: 8 }).map((_, idx) => (
+                <tr key={idx} style={{ borderBottom: `1px solid ${T.border}` }}>
+                  {[200, 180, 80, 90, 130, 90].map((w, j) => (
+                    <td key={j} style={{ padding: '15px 18px' }}>
+                      <div style={{
+                        height: 13, width: w, borderRadius: 6,
+                        background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+                        backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite',
+                      }} />
+                      {j === 0 && <div style={{ height: 11, width: 120, borderRadius: 6, marginTop: 6,
+                        background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+                        backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite 0.1s',
+                      }} />}
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : users.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '56px 0', textAlign: 'center', fontFamily: FONT, fontSize: 13.5, color: T.textMuted }}>
-                Không tìm thấy user
+              <tr><td colSpan={6} style={{ padding: '64px 0', textAlign: 'center' }}>
+                <Search size={22} color={T.textMuted} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+                <p style={{ fontFamily: FONT, fontSize: 13.5, color: T.textMuted }}>Không tìm thấy user nào</p>
               </td></tr>
             ) : users.map((u, i) => {
               const initials = u.username?.[0]?.toUpperCase() ?? 'U';
@@ -1111,7 +1166,7 @@ export default function AdminUsers() {
         </table>
       </div>
 
-      <Pagination {...pagination.props} itemLabel="user" />
+      <AdminPagination {...pagination.props} itemLabel="người dùng" />
 
       {/* ── Custom Modals ─────────────────────────────────────────────────────── */}
       <DeleteModal

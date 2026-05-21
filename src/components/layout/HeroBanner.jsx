@@ -3,10 +3,24 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Info, Star, ChevronLeft, ChevronRight, Tv, Film } from 'lucide-react';
+import { Play, Info, Star, ChevronLeft, ChevronRight, Tv, Film, Crown, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import tvShowService from '../../services/tvShowService';
+import { createPortal } from 'react-dom';
+import PremiumGateModal from '../movie/ui/PremiumGateModal';
+
+// ── Premium helpers ────────────────────────────────────────────────
+function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem('currentUser');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function userHasPremium(user) {
+  if (!user) return false;
+  return user.isPremium === true || user.plan === 'premium' || user.subscription?.active === true;
+}
 
 const AUTO_PLAY_INTERVAL = 6000;
 
@@ -24,6 +38,7 @@ const normalizeMovie = (m) => ({
   genres: m.genres ?? [],
   description: m.description ?? '',
   duration: m.duration ?? null,
+  isPremium: m.isPremium ?? false,
   isTvShow: false,
 });
 
@@ -41,6 +56,7 @@ const normalizeTvShow = (s) => ({
   genres: s.genres ?? [],
   description: s.description ?? s.overview ?? '',
   duration: null,
+  isPremium: s.isPremium ?? false,
   isTvShow: true,
 });
 
@@ -115,6 +131,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
 
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState(1);
+  const [showPremiumGate, setShowPremiumGate] = useState(false);
 
   useEffect(() => { setCurrent(0); }, [slides.length]);
 
@@ -144,7 +161,18 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
   const detailPath = activeItem.isTvShow ? `/tvshow/${activeItem.id}`      : `/movie/${activeItem.id}`;
   const infoPath   = activeItem.isTvShow ? `/tvshow/${activeItem.id}/info` : `/movie/${activeItem.id}/info`;
 
+  const isPremiumLocked = activeItem.isPremium && !userHasPremium(getCurrentUser());
+
+  const handlePlay = () => {
+    if (isPremiumLocked) {
+      setShowPremiumGate(true);
+      return;
+    }
+    navigate(detailPath);
+  };
+
   return (
+    <>
     <div
       className="relative bg-cover bg-center flex items-end overflow-hidden"
       style={{ height: isMobile ? '75vw' : '100vh', minHeight: isMobile ? 320 : 500 }}
@@ -185,7 +213,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
           }}
         >
           {/* Type badge */}
-          <div style={{ marginBottom: isMobile ? 6 : 10 }}>
+          <div style={{ marginBottom: isMobile ? 6 : 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '4px 10px', borderRadius: 99,
@@ -198,6 +226,27 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               {activeItem.isTvShow ? <Tv size={11} strokeWidth={2.5} /> : <Film size={11} strokeWidth={2.5} />}
               {activeItem.isTvShow ? 'TV Series' : 'Movies'}
             </span>
+
+            {/* Premium badge */}
+            {activeItem.isPremium && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 99,
+                  fontSize: isMobile ? 10 : 11, fontWeight: 800,
+                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: 'linear-gradient(135deg, rgba(250,204,21,0.22), rgba(245,158,11,0.22))',
+                  border: '1px solid rgba(250,204,21,0.5)',
+                  color: '#fbbf24',
+                  boxShadow: '0 0 12px rgba(250,204,21,0.18)',
+                }}
+              >
+                <Crown size={10} fill="#fbbf24" color="#fbbf24" />
+                Premium
+              </motion.span>
+            )}
           </div>
 
           {/* Meta pills */}
@@ -270,12 +319,24 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
           <div className="flex gap-4 flex-wrap">
             <motion.button
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(detailPath)}
-              className="bg-white text-black font-bold rounded-lg hover:bg-gray-200 flex items-center gap-2"
-              style={{ padding: isMobile ? '8px 16px' : '12px 32px', fontSize: isMobile ? 13 : 16 }}
+              onClick={handlePlay}
+              className="font-bold rounded-lg flex items-center gap-2"
+              style={{
+                padding: isMobile ? '8px 16px' : '12px 32px',
+                fontSize: isMobile ? 13 : 16,
+                background: isPremiumLocked
+                  ? 'linear-gradient(135deg, #fbbf24, #f59e0b)'
+                  : '#ffffff',
+                color: isPremiumLocked ? '#1c1400' : '#000000',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: isPremiumLocked ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
+              }}
             >
-              <Play size={20} fill="currentColor" />
-              Phát
+              {isPremiumLocked
+                ? <><Crown size={18} fill="#1c1400" color="#1c1400" /> Mở khoá Premium</>
+                : <><Play size={20} fill="currentColor" /> Phát</>
+              }
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -336,6 +397,17 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
         </div>
       )}
     </div>
+
+    {/* Premium Gate Modal — portal ra ngoài stacking context của banner */}
+    {createPortal(
+      <PremiumGateModal
+        open={showPremiumGate}
+        onClose={() => setShowPremiumGate(false)}
+        movieTitle={activeItem?.title}
+      />,
+      document.body
+    )}
+    </>
   );
 };
 

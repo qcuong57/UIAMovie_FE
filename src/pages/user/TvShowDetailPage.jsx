@@ -39,13 +39,21 @@ export default function TvShowDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("episodes");
 
-  // Episode / season selection — pre-fill from InfoPage if navigated with state
-  const [selectedSeason, setSelectedSeason] = useState(
-    location.state?.selectedSeason ?? null,
-  );
-  const [selectedEpisode, setSelectedEpisode] = useState(
-    location.state?.selectedEpisode ?? null,
-  );
+  // Episode / season selection — pre-fill từ navigation state hoặc sessionStorage (để giữ khi reload)
+  const [selectedSeason, setSelectedSeason] = useState(() => {
+    if (location.state?.selectedSeason) return location.state.selectedSeason;
+    try {
+      const saved = sessionStorage.getItem(`tvshow_${id}_season`);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const [selectedEpisode, setSelectedEpisode] = useState(() => {
+    if (location.state?.selectedEpisode) return location.state.selectedEpisode;
+    try {
+      const saved = sessionStorage.getItem(`tvshow_${id}_episode`);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [episodeDetail, setEpisodeDetail] = useState(null);
   const [loadingEpisode, setLoadingEpisode] = useState(false);
   // Cache episodes theo season để tránh gọi API nhiều lần
@@ -70,8 +78,9 @@ export default function TvShowDetailPage() {
         setLoading(true);
         setActors([]);
         setSeasonEpisodesCache({});
-        if (!location.state?.selectedSeason) setSelectedSeason(null);
-        if (!location.state?.selectedEpisode) setSelectedEpisode(null);
+        // Chỉ reset season/episode khi navigate sang show khác (không phải reload)
+        if (!location.state?.selectedSeason && !sessionStorage.getItem(`tvshow_${id}_season`)) setSelectedSeason(null);
+        if (!location.state?.selectedEpisode && !sessionStorage.getItem(`tvshow_${id}_episode`)) setSelectedEpisode(null);
         setEpisodeDetail(null);
 
         const [tvRes, trendingRes] = await Promise.all([
@@ -212,6 +221,11 @@ export default function TvShowDetailPage() {
   const handleSelectEpisode = async (season, episode) => {
     setSelectedSeason(season);
     setSelectedEpisode(episode);
+    // Lưu lại để giữ trạng thái khi reload
+    try {
+      sessionStorage.setItem(`tvshow_${id}_season`, JSON.stringify(season));
+      sessionStorage.setItem(`tvshow_${id}_episode`, JSON.stringify(episode));
+    } catch {}
     if (isMobile) window.scrollTo({ top: 0, behavior: "smooth" });
     // Gọi getEpisode để lấy full detail kèm videoUrl (getSeason chỉ trả partial)
     try {
@@ -230,6 +244,35 @@ export default function TvShowDetailPage() {
       setLoadingEpisode(false);
     }
   };
+
+  // ── Tính nextEpisode để truyền vào player ─────────────────────
+  // (phải đặt TRƯỚC early return để không vi phạm Rules of Hooks)
+  const currentEp = episodeDetail ?? selectedEpisode;
+
+  const nextEpisode = React.useMemo(() => {
+    if (!selectedSeason || !currentEp) return null;
+    const sn = selectedSeason.seasonNumber;
+    const episodes = seasonEpisodesCache[sn] ?? [];
+    const currentNum = currentEp.episodeNumber ?? currentEp.number;
+    const next = episodes.find(
+      (e) => (e.episodeNumber ?? e.number) === currentNum + 1,
+    );
+    if (!next) return null;
+    return {
+      id:            next.id,
+      episodeNumber: next.episodeNumber ?? next.number,
+      name:          next.title ?? next.name ?? null,
+      stillUrl:      next.stillUrl ?? next.still_path ?? null,
+    };
+  }, [selectedSeason, currentEp?.id, seasonEpisodesCache]);
+
+  const handleNextEpisode = React.useCallback(() => {
+    if (!nextEpisode || !selectedSeason) return;
+    const sn = selectedSeason.seasonNumber;
+    const episodes = seasonEpisodesCache[sn] ?? [];
+    const ep = episodes.find((e) => e.id === nextEpisode.id);
+    if (ep) handleSelectEpisode(selectedSeason, ep);
+  }, [nextEpisode, selectedSeason, seasonEpisodesCache]);
 
   if (loading)
     return (
@@ -268,8 +311,6 @@ export default function TvShowDetailPage() {
     { key: "reviews", label: "Đánh giá" },
     { key: "more", label: "Thêm thông tin" },
   ];
-
-  const currentEp = episodeDetail ?? selectedEpisode;
 
   return (
     <div
@@ -359,7 +400,12 @@ export default function TvShowDetailPage() {
                   />
                 </div>
               ) : (
-                <EpisodeVideoPlayer episode={currentEp} tvShow={tvShow} />
+                <EpisodeVideoPlayer
+                  episode={currentEp}
+                  tvShow={tvShow}
+                  nextEpisode={nextEpisode}
+                  onNextEpisode={nextEpisode ? handleNextEpisode : null}
+                />
               )}
             </motion.div>
 

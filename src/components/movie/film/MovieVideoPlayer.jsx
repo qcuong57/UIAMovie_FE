@@ -13,10 +13,49 @@ import {
   Maximize,
   SkipForward,
   SkipBack,
+  Subtitles,
+  ChevronDown,
+  Gauge,
+  FastForward,
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import movieService from "../../../services/movieService";
+import movieSubtitleService from "../../../services/movieSubtitleService";
 import { C } from "../ui/movieConstants";
+
+// ── VTT / SRT parser → cue list [{start, end, text}] ────────────
+function parseCues(raw) {
+  if (!raw) return [];
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  const cues = [];
+  let i = 0;
+  const timeToSec = (t) => {
+    const cleaned = t.replace(",", ".");
+    const parts = cleaned.split(":").map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
+  };
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line.includes("-->")) {
+      const [startRaw, endRaw] = line.split("-->").map((s) => s.trim().split(" ")[0]);
+      const start = timeToSec(startRaw);
+      const end   = timeToSec(endRaw);
+      i++;
+      const textLines = [];
+      while (i < lines.length && lines[i].trim() !== "") {
+        textLines.push(lines[i].trim());
+        i++;
+      }
+      const text = textLines.join("\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/\{[^}]+\}/g, "");
+      if (text) cues.push({ start, end, text });
+    } else { i++; }
+  }
+  return cues;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────
 const fmtSecs = (s) => {
@@ -46,18 +85,128 @@ export default function MovieVideoPlayer({ movie }) {
   const [duration, setDuration] = useState(0);
   const [show, setShow] = useState(true);
   const [vol, setVol] = useState(80);
-  const [selSrc, setSelSrc] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // ── Playback speed ──────────────────────────────────────────
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const speedMenuRef = useRef(null);
+  const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+  // ── Skip Intro / Recap ──────────────────────────────────────
+  // movie prop có thể có: introStart, introEnd, recapStart, recapEnd (giây)
+  const [showSkipIntro, setShowSkipIntro]   = useState(false);
+  const [showSkipRecap, setShowSkipRecap]   = useState(false);
+
+  // ── Keyboard hint toast ─────────────────────────────────────
+  const [kbHint, setKbHint] = useState(null); // { icon, label }
+  const kbHintTimer = useRef(null);
+  const showKbHint = useCallback((label) => {
+    setKbHint(label);
+    clearTimeout(kbHintTimer.current);
+    kbHintTimer.current = setTimeout(() => setKbHint(null), 900);
+  }, []);
+
+  // ── Center icon flash (play/pause) ──────────────────────────
+  const [centerIcon, setCenterIcon] = useState(null); // "play" | "pause"
+  const centerIconTimer = useRef(null);
+  const flashCenterIcon = useCallback((type) => {
+    setCenterIcon(type);
+    clearTimeout(centerIconTimer.current);
+    centerIconTimer.current = setTimeout(() => setCenterIcon(null), 700);
+  }, []);
+
+
+  // ── Subtitle state ──────────────────────────────────────────
+  const [subtitles,    setSubtitles]    = useState([]);   // SubtitleInfoDTO[]
+  const [selSubId,     setSelSubId]     = useState(null); // null = tắt
+  const [cues,         setCues]         = useState([]);   // parsed cues
+  const [activeCue,    setActiveCue]    = useState(null); // cue hiện tại
+  const [subLoading,   setSubLoading]   = useState(false);
+  const [showSubMenu,  setShowSubMenu]  = useState(false);
+  const subMenuRef = useRef(null);
+  const currentTimeRef = useRef(0);
 
   const resumeMinutes = location.state?.resumeMinutes ?? 0;
 
-  const videoSources = React.useMemo(() => {
-    if (!movie?.videos?.length) return [];
-    const main = movie.videos.filter((v) => v.videoType === "main");
-    const other = movie.videos.filter((v) => v.videoType !== "main");
-    return [...main, ...other];
-  }, [movie?.videos]);
+  // ── Fetch subtitle list khi movie thay đổi ───────────────────
+  useEffect(() => {
+    if (!movie?.id) return;
+    movieSubtitleService.getSubtitles(movie.id)
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        // Chỉ hiện subtitle đã Ready (status === 0)
+        const ready = list.filter((s) => s.status === 0);
+        setSubtitles(ready);
+        // Auto-select subtitle mặc định nếu có
+        const def = ready.find((s) => s.isDefault);
+        if (def) setSelSubId(def.id);
+      })
+      .catch(() => {});
+  }, [movie?.id]);
 
-  const videoUrl = videoSources[selSrc]?.videoUrl ?? null;
+  // ── Load content của subtitle được chọn ─────────────────────
+  useEffect(() => {
+    if (!selSubId || !movie?.id) { setCues([]); setActiveCue(null); return; }
+    setSubLoading(true);
+    movieSubtitleService.getSubtitleContent(movie.id, selSubId)
+      .then((dto) => { setCues(parseCues(dto?.content ?? "")); })
+      .catch(() => setCues([]))
+      .finally(() => setSubLoading(false));
+  }, [selSubId, movie?.id]);
+
+  // ── Tìm cue active theo currentTime ─────────────────────────
+  // ── Tìm cue active theo currentTime ─────────────────────────
+  useEffect(() => {
+    if (!cues.length) { setActiveCue(null); return; }
+    const v = videoRef.current;
+    if (!v) return;
+    // Tính ngay activeCue từ currentTime hiện tại khi cues mới được load
+    const t0 = v.currentTime;
+    const initial = cues.find((c) => t0 >= c.start && t0 < c.end) ?? null;
+    setActiveCue(initial);
+    const onTime = () => {
+      const t = v.currentTime;
+      currentTimeRef.current = t;
+      const found = cues.find((c) => t >= c.start && t < c.end) ?? null;
+      setActiveCue((prev) => {
+        if (prev === found) return prev;
+        if (!prev && !found) return prev;
+        if (prev?.start === found?.start && prev?.end === found?.end) return prev;
+        return found;
+      });
+    };
+    v.addEventListener("timeupdate", onTime);
+    return () => v.removeEventListener("timeupdate", onTime);
+  }, [cues]);
+
+  // ── Đóng sub menu khi click ngoài ───────────────────────────
+  useEffect(() => {
+    if (!showSubMenu) return;
+    const handler = (e) => {
+      if (subMenuRef.current && !subMenuRef.current.contains(e.target))
+        setShowSubMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSubMenu]);
+
+  // ── Đóng speed menu khi click ngoài ─────────────────────────
+  useEffect(() => {
+    if (!showSpeedMenu) return;
+    const handler = (e) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target))
+        setShowSpeedMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSpeedMenu]);
+
+  const videoUrl = React.useMemo(() => {
+    if (!movie?.videos?.length) return null;
+    const main = movie.videos.find((v) => v.videoType === "main");
+    return (main ?? movie.videos[0])?.videoUrl ?? null;
+  }, [movie?.videos]);
   const totalSec = duration || (movie?.duration ? movie.duration * 60 : 0);
 
   // Reset khi đổi nguồn
@@ -93,7 +242,10 @@ export default function MovieVideoPlayer({ movie }) {
       saveProgress(100, true);
     };
     const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      saveProgress(progressRef.current);
+    };
     const onCanPlay = () => {
       if (hasResumedRef.current) return;
       if (resumeMinutes > 0) v.currentTime = resumeMinutes * 60;
@@ -127,6 +279,24 @@ export default function MovieVideoPlayer({ movie }) {
     v.muted = muted;
   }, [vol, muted]);
 
+  // Playback rate
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.playbackRate = playbackRate;
+  }, [playbackRate]);
+
+  // Track fullscreen state
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange);
+    };
+  }, []);
+
   // Auto-hide controls
   const resetTimer = useCallback(() => {
     setShow(true);
@@ -140,14 +310,14 @@ export default function MovieVideoPlayer({ movie }) {
   const saveProgress = useCallback(
     (pct, forceComplete = false) => {
       if (!movie?.id || pct < 1) return;
-      const mins = Math.floor(
-        ((pct / 100) * (videoRef.current?.duration ?? totalSec)) / 60,
-      );
+      const dur = videoRef.current?.duration ?? (movie?.duration ? movie.duration * 60 : 0);
+      const mins = Math.floor(((pct / 100) * dur) / 60);
+      if (mins < 1) return; // bỏ qua nếu duration chưa load
       movieService
         .updateWatchProgress(movie.id, mins, forceComplete || pct >= 95)
         .catch((e) => console.warn("[MovieVideoPlayer] saveProgress:", e));
     },
-    [movie?.id, totalSec],
+    [movie?.id, movie?.duration],
   );
 
   // Lưu định kỳ 30s khi đang phát
@@ -156,22 +326,27 @@ export default function MovieVideoPlayer({ movie }) {
       clearInterval(saveTimerRef.current);
       return;
     }
-    saveTimerRef.current = setInterval(() => saveProgress(progressRef.current), 30_000);
+    saveTimerRef.current = setInterval(() => saveProgress(progressRef.current), 15_000);
     return () => clearInterval(saveTimerRef.current);
   }, [playing, saveProgress]);
 
-  // Lưu khi unmount
+  // Lưu khi unmount — dùng videoRef.current.duration trực tiếp
   useEffect(
     () => () => {
-      if (progressRef.current > 1 && movie?.id)
+      const v = videoRef.current;
+      if (progressRef.current > 1 && movie?.id) {
+        const dur = v?.duration || (movie?.duration ? movie.duration * 60 : 0);
+        if (dur < 1) return;
         movieService
           .updateWatchProgress(
             movie.id,
-            Math.floor(((progressRef.current / 100) * totalSec) / 60),
+            Math.floor(((progressRef.current / 100) * dur) / 60),
             progressRef.current >= 95,
           )
           .catch(() => {});
+      }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [movie?.id],
   );
 
@@ -179,7 +354,13 @@ export default function MovieVideoPlayer({ movie }) {
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    v.paused ? v.play() : v.pause();
+    if (v.paused) {
+      v.play();
+      flashCenterIcon("play");
+    } else {
+      v.pause();
+      flashCenterIcon("pause");
+    }
   };
 
   const seek = (e) => {
@@ -199,6 +380,84 @@ export default function MovieVideoPlayer({ movie }) {
     const el = wrapRef.current;
     if (!el) return;
     document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.();
+  };
+
+  // ── Keyboard shortcuts ───────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e) => {
+      // Không trigger khi focus vào input/textarea
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
+      const v = videoRef.current;
+      if (!v) return;
+      switch (e.code) {
+        case "Space":
+        case "KeyK":
+          e.preventDefault();
+          if (v.paused) {
+            v.play();
+            flashCenterIcon("play");
+          } else {
+            v.pause();
+            flashCenterIcon("pause");
+          }
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          v.currentTime = Math.max(0, v.currentTime - 10);
+          showKbHint("⏪ −10s");
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          v.currentTime = Math.min(v.duration, v.currentTime + 10);
+          showKbHint("⏩ +10s");
+          break;
+        case "KeyF":
+          e.preventDefault();
+          toggleFullscreen();
+          showKbHint("⛶ Fullscreen");
+          break;
+        case "KeyM":
+          e.preventDefault();
+          setMuted((m) => !m);
+          break;
+        case "KeyC":
+          e.preventDefault();
+          setShowSubMenu((p) => !p);
+          showKbHint("💬 Subtitles");
+          break;
+        default: break;
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showKbHint, flashCenterIcon]);
+
+  // ── Skip Intro / Recap visibility ────────────────────────────
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTime = () => {
+      const t = v.currentTime;
+      const { introStart, introEnd, recapStart, recapEnd } = movie ?? {};
+      setShowSkipIntro(!!(introStart != null && introEnd != null && t >= introStart && t < introEnd));
+      setShowSkipRecap(!!(recapStart != null && recapEnd != null && t >= recapStart && t < recapEnd));
+    };
+    v.addEventListener("timeupdate", onTime);
+    return () => v.removeEventListener("timeupdate", onTime);
+  }, [movie]);
+
+  const skipIntro = () => {
+    const v = videoRef.current;
+    if (!v || movie?.introEnd == null) return;
+    v.currentTime = movie.introEnd;
+    setShowSkipIntro(false);
+  };
+
+  const skipRecap = () => {
+    const v = videoRef.current;
+    if (!v || movie?.recapEnd == null) return;
+    v.currentTime = movie.recapEnd;
+    setShowSkipRecap(false);
   };
 
   const curSec = Math.floor((progress / 100) * totalSec);
@@ -234,6 +493,14 @@ export default function MovieVideoPlayer({ movie }) {
 
   // ── Player ───────────────────────────────────────────────────
   return (
+    <>
+    <style>{`
+      :fullscreen .subtitle-overlay,
+      :-webkit-full-screen .subtitle-overlay,
+      :-moz-full-screen .subtitle-overlay {
+        bottom: 96px !important;
+      }
+    `}</style>
     <div
       ref={wrapRef}
       style={{
@@ -280,43 +547,204 @@ export default function MovieVideoPlayer({ movie }) {
         />
       )}
 
-      {/* Nút play trung tâm */}
+      {/* ── Keyboard hint toast ── */}
       <AnimatePresence>
-        {!playing && (
+        {kbHint && (
+          <motion.div
+            key={kbHint}
+            initial={{ opacity: 0, scale: 0.88 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.88 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              background: "rgba(0,0,0,0.72)",
+              backdropFilter: "blur(6px)",
+              borderRadius: 10,
+              padding: "10px 20px",
+              color: "#fff",
+              fontFamily: "'Nunito',sans-serif",
+              fontWeight: 800,
+              fontSize: 15,
+              pointerEvents: "none",
+              zIndex: 30,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {kbHint}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Subtitle cue overlay ── */}
+      <AnimatePresence>
+        {activeCue && selSubId && (
+          <motion.div
+            key={activeCue.start}
+            className="subtitle-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            style={{
+              position: "absolute",
+              bottom: show ? 78 : 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "90%",
+              maxWidth: "90%",
+              textAlign: "center",
+              pointerEvents: "none",
+              transition: "bottom 0.25s ease",
+              zIndex: 10,
+            }}
+          >
+            {activeCue.text.split("\n").map((line, idx) => (
+              <div
+                key={idx}
+                className="subtitle-line"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  color: "#fff",
+                  fontFamily: "'Nunito', sans-serif",
+                  fontSize: isFullscreen ? "clamp(20px, 2.4vw, 48px)" : (isMobile ? 13 : 16),
+                  fontWeight: 700,
+                  lineHeight: 1.5,
+                  textShadow:
+                    "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 2px 8px rgba(0,0,0,0.85)",
+                  letterSpacing: "0.01em",
+                  WebkitFontSmoothing: "antialiased",
+                }}
+              >
+                {line}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
+
+      {/* ── Skip Intro button ── */}
+      <AnimatePresence>
+        {showSkipIntro && (
+          <motion.button
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            onClick={skipIntro}
+            style={{
+              position: "absolute",
+              bottom: show ? 80 : 20,
+              right: 20,
+              background: "rgba(20,20,20,0.88)",
+              backdropFilter: "blur(10px)",
+              border: "1.5px solid rgba(255,255,255,0.22)",
+              borderRadius: 8,
+              color: "#fff",
+              fontFamily: "'Nunito',sans-serif",
+              fontWeight: 800,
+              fontSize: 13,
+              padding: "8px 18px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              zIndex: 20,
+              transition: "bottom 0.25s ease",
+              letterSpacing: "0.02em",
+            }}
+          >
+            <FastForward size={14} /> Bỏ qua intro
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* ── Skip Recap button ── */}
+      <AnimatePresence>
+        {showSkipRecap && (
+          <motion.button
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            onClick={skipRecap}
+            style={{
+              position: "absolute",
+              bottom: show ? 80 : 20,
+              right: 20,
+              background: "rgba(20,20,20,0.88)",
+              backdropFilter: "blur(10px)",
+              border: "1.5px solid rgba(255,255,255,0.22)",
+              borderRadius: 8,
+              color: "#fff",
+              fontFamily: "'Nunito',sans-serif",
+              fontWeight: 800,
+              fontSize: 13,
+              padding: "8px 18px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              zIndex: 20,
+              transition: "bottom 0.25s ease",
+              letterSpacing: "0.02em",
+            }}
+          >
+            <FastForward size={14} /> Bỏ qua recap
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* ── Center play/pause button — hiện khi pause, hoặc khi flash icon ── */}
+      <AnimatePresence>
+        {(!playing || centerIcon) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
             style={{
               position: "absolute",
               inset: 0,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "rgba(0,0,0,0.28)",
+              background: !playing ? "rgba(0,0,0,0.28)" : "transparent",
               pointerEvents: "none",
             }}
           >
-            <motion.button
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.94 }}
-              onClick={togglePlay}
+            <motion.div
+              key={centerIcon ?? (playing ? "play" : "pause")}
+              initial={{ scale: 0.75, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.15, opacity: 0 }}
+              transition={{ duration: 0.18 }}
               style={{
-                width: 68,
-                height: 68,
+                width: 64,
+                height: 64,
                 borderRadius: "50%",
-                background: "rgba(255,255,255,0.95)",
-                border: "none",
-                cursor: "pointer",
+                background: "rgba(255,255,255,0.92)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-                pointerEvents: "all",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)",
+                pointerEvents: centerIcon ? "none" : "all",
+                backdropFilter: "blur(4px)",
+                cursor: centerIcon ? "default" : "pointer",
               }}
+              onClick={centerIcon ? undefined : togglePlay}
             >
-              <Play size={28} fill="#000" color="#000" style={{ marginLeft: 3 }} />
-            </motion.button>
+              {(centerIcon === "pause" || (!centerIcon && !playing))
+                ? <Pause size={26} fill="#000" color="#000" />
+                : <Play size={26} fill="#000" color="#000" style={{ marginLeft: 3 }} />
+              }
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -334,8 +762,8 @@ export default function MovieVideoPlayer({ movie }) {
               bottom: 0,
               left: 0,
               right: 0,
-              padding: "0 20px 16px",
-              background: "linear-gradient(transparent, rgba(0,0,0,0.9) 60%)",
+              padding: "0 20px 18px",
+              background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)",
             }}
           >
             {/* Seek bar */}
@@ -349,11 +777,15 @@ export default function MovieVideoPlayer({ movie }) {
                 paddingBottom: 8,
                 marginTop: -8,
                 boxSizing: "content-box",
+                transition: "height 0.15s ease",
               }}
               onClick={seek}
+              onMouseEnter={(e) => { const bar = e.currentTarget.querySelector('.movie-track-bg'); if (bar) bar.style.height = '6px'; }}
+              onMouseLeave={(e) => { const bar = e.currentTarget.querySelector('.movie-track-bg'); if (bar) bar.style.height = '3px'; }}
             >
               {/* Track bg */}
               <div
+                className="movie-track-bg"
                 style={{
                   position: "absolute",
                   top: "50%",
@@ -361,8 +793,9 @@ export default function MovieVideoPlayer({ movie }) {
                   right: 0,
                   height: 3,
                   marginTop: -1.5,
-                  borderRadius: 2,
-                  background: "rgba(255,255,255,0.15)",
+                  borderRadius: 3,
+                  background: "rgba(255,255,255,0.18)",
+                  transition: "height 0.15s ease",
                 }}
               />
               {/* Buffered */}
@@ -374,8 +807,8 @@ export default function MovieVideoPlayer({ movie }) {
                   height: 3,
                   marginTop: -1.5,
                   width: `${buffered}%`,
-                  borderRadius: 2,
-                  background: "rgba(255,255,255,0.3)",
+                  borderRadius: 3,
+                  background: "rgba(255,255,255,0.28)",
                 }}
               />
               {/* Progress */}
@@ -387,7 +820,7 @@ export default function MovieVideoPlayer({ movie }) {
                   height: 3,
                   marginTop: -1.5,
                   width: `${progress}%`,
-                  borderRadius: 2,
+                  borderRadius: 3,
                   background: C.accent,
                 }}
               />
@@ -398,10 +831,11 @@ export default function MovieVideoPlayer({ movie }) {
                   top: "50%",
                   left: `${progress}%`,
                   transform: "translate(-50%,-50%)",
-                  width: 12,
-                  height: 12,
+                  width: 13,
+                  height: 13,
                   borderRadius: "50%",
                   background: "white",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
                 }}
               />
             </div>
@@ -520,30 +954,196 @@ export default function MovieVideoPlayer({ movie }) {
                 </span>
               </div>
 
-              {/* Right: quality + fullscreen */}
+              {/* Right: speed + subtitle + quality + fullscreen */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {videoSources.length > 1 && (
-                  <select
-                    value={selSrc}
-                    onChange={(e) => setSelSrc(+e.target.value)}
+
+                {/* ── Speed button + dropdown ── */}
+                <div ref={speedMenuRef} style={{ position: "relative" }}>
+                  <button
+                    onClick={() => { setShowSpeedMenu((p) => !p); setShowSubMenu(false); }}
+                    title="Tốc độ phát"
                     style={{
-                      background: "rgba(0,0,0,0.6)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      color: "white",
+                      background: playbackRate !== 1 ? "rgba(255,255,255,0.18)" : "none",
+                      border: playbackRate !== 1 ? "1px solid rgba(255,255,255,0.3)" : "none",
                       borderRadius: 4,
+                      cursor: "pointer",
+                      color: playbackRate !== 1 ? "#fff" : "rgba(255,255,255,0.65)",
+                      padding: "2px 6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
                       fontFamily: "'Nunito',sans-serif",
                       fontSize: 11,
-                      padding: "3px 6px",
-                      cursor: "pointer",
-                      outline: "none",
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      transition: "all 0.15s",
                     }}
                   >
-                    {videoSources.map((s, i) => (
-                      <option key={i} value={i}>
-                        {s.quality ?? s.videoType ?? `Nguồn ${i + 1}`}
-                      </option>
-                    ))}
-                  </select>
+                    <Gauge size={15} />
+                    {playbackRate !== 1 && <span>{playbackRate}x</span>}
+                  </button>
+
+                  <AnimatePresence>
+                    {showSpeedMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        style={{
+                          position: "absolute",
+                          bottom: "calc(100% + 10px)",
+                          right: 0,
+                          background: "rgba(18,18,18,0.97)",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: 10,
+                          overflow: "hidden",
+                          minWidth: 120,
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                          zIndex: 50,
+                        }}
+                      >
+                        <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                          <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Tốc độ phát
+                          </p>
+                        </div>
+                        {SPEED_OPTIONS.map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => { setPlaybackRate(rate); setShowSpeedMenu(false); }}
+                            style={{
+                              display: "flex", alignItems: "center", justifyContent: "space-between",
+                              width: "100%", padding: "9px 12px",
+                              background: playbackRate === rate ? "rgba(255,255,255,0.07)" : "none",
+                              border: "none", cursor: "pointer",
+                              fontFamily: "'Nunito',sans-serif", fontSize: 13,
+                              fontWeight: playbackRate === rate ? 700 : 500,
+                              color: playbackRate === rate ? "#fff" : "rgba(255,255,255,0.65)",
+                              textAlign: "left", transition: "background 0.12s",
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = playbackRate === rate ? "rgba(255,255,255,0.07)" : "none"}
+                          >
+                            {rate === 1 ? "Bình thường" : `${rate}x`}
+                            {playbackRate === rate && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* ── CC button + dropdown ── */}
+                {subtitles.length > 0 && (
+                  <div ref={subMenuRef} style={{ position: "relative" }}>
+                    <button
+                      onClick={() => setShowSubMenu((p) => !p)}
+                      title="Phụ đề"
+                      style={{
+                        background: selSubId ? "rgba(255,255,255,0.18)" : "none",
+                        border: selSubId ? "1px solid rgba(255,255,255,0.3)" : "none",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                        color: selSubId ? "#fff" : "rgba(255,255,255,0.65)",
+                        padding: selSubId ? "2px 6px" : 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <Subtitles size={18} />
+                      {subLoading && (
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)" }}>…</span>
+                      )}
+                    </button>
+
+                    {/* Dropdown menu */}
+                    <AnimatePresence>
+                      {showSubMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                          transition={{ duration: 0.15 }}
+                          style={{
+                            position: "absolute",
+                            bottom: "calc(100% + 10px)",
+                            right: 0,
+                            background: "rgba(18,18,18,0.97)",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: 10,
+                            overflow: "hidden",
+                            minWidth: 168,
+                            boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                            zIndex: 50,
+                          }}
+                        >
+                          {/* Header */}
+                          <div style={{
+                            padding: "8px 12px 6px",
+                            borderBottom: "1px solid rgba(255,255,255,0.08)",
+                          }}>
+                            <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Phụ đề
+                            </p>
+                          </div>
+
+                          {/* Tắt phụ đề */}
+                          <button
+                            onClick={() => { setSelSubId(null); setCues([]); setActiveCue(null); setShowSubMenu(false); }}
+                            style={{
+                              display: "flex", alignItems: "center", justifyContent: "space-between",
+                              width: "100%", padding: "9px 12px",
+                              background: !selSubId ? "rgba(255,255,255,0.07)" : "none",
+                              border: "none", cursor: "pointer",
+                              fontFamily: "'Nunito',sans-serif", fontSize: 13, fontWeight: !selSubId ? 700 : 500,
+                              color: !selSubId ? "#fff" : "rgba(255,255,255,0.6)",
+                              textAlign: "left", transition: "background 0.12s",
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = !selSubId ? "rgba(255,255,255,0.07)" : "none"}
+                          >
+                            Tắt phụ đề
+                            {!selSubId && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
+                          </button>
+
+                          {/* Danh sách ngôn ngữ */}
+                          {subtitles.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => { setSelSubId(s.id); setShowSubMenu(false); }}
+                              style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                width: "100%", padding: "9px 12px",
+                                background: selSubId === s.id ? "rgba(255,255,255,0.07)" : "none",
+                                border: "none", cursor: "pointer",
+                                fontFamily: "'Nunito',sans-serif", fontSize: 13,
+                                fontWeight: selSubId === s.id ? 700 : 500,
+                                color: selSubId === s.id ? "#fff" : "rgba(255,255,255,0.65)",
+                                textAlign: "left", gap: 8, transition: "background 0.12s",
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+                              onMouseLeave={(e) => e.currentTarget.style.background = selSubId === s.id ? "rgba(255,255,255,0.07)" : "none"}
+                            >
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 800, padding: "1px 5px",
+                                  borderRadius: 4, background: "rgba(255,255,255,0.1)",
+                                  color: "rgba(255,255,255,0.5)", letterSpacing: "0.04em",
+                                }}>
+                                  {(s.languageCode ?? "??").toUpperCase()}
+                                </span>
+                                {s.languageName || s.languageCode}
+                              </span>
+                              {selSubId === s.id && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 )}
 
                 <button
@@ -565,5 +1165,6 @@ export default function MovieVideoPlayer({ movie }) {
         )}
       </AnimatePresence>
     </div>
+    </>
   );
 }

@@ -6,11 +6,12 @@ import {
   AlertCircle, Search, Tv, Eye, Pencil, Crown,
 } from 'lucide-react';
 import tvShowService from '../../services/tvShowService';
-import { Button, Modal } from '../ui';
 import AdminTmdbSearch from './AdminTmdbSearch';
 import TvShowDetailPanel from './tvshow/TvShowDetailPanel';
 import TvShowEditModal   from './tvshow/TvShowEditModal';
+import TvShowDeleteModal from './tvshow/TvShowDeleteModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
+import AdminPagination from '../common/AdminPagination';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -131,35 +132,6 @@ const GhostBtn = ({ onClick, children, active, accent }) => {
   );
 };
 
-// ── Pagination controls ───────────────────────────────────────────────────────
-const PaginationBar = ({ page, totalPages, total, onPage }) => {
-  if (totalPages <= 1) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, fontFamily: FONT }}>
-      <span style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>{total.toLocaleString()} TV show</span>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <button onClick={() => onPage(page - 1)} disabled={page <= 1}
-          style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: page <= 1 ? 'not-allowed' : 'pointer', fontSize: 13, color: page <= 1 ? T.textMuted : T.text, opacity: page <= 1 ? 0.5 : 1 }}>
-          ←
-        </button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-          const p = totalPages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= totalPages - 3 ? totalPages - 6 + i : page - 3 + i;
-          return (
-            <button key={p} onClick={() => onPage(p)}
-              style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${p === page ? T.accent : T.border}`, background: p === page ? T.accentLight : T.surface, cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 700 : 400, color: p === page ? T.accentText : T.text }}>
-              {p}
-            </button>
-          );
-        })}
-        <button onClick={() => onPage(page + 1)} disabled={page >= totalPages}
-          style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: page >= totalPages ? 'not-allowed' : 'pointer', fontSize: 13, color: page >= totalPages ? T.textMuted : T.text, opacity: page >= totalPages ? 0.5 : 1 }}>
-          →
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
@@ -171,8 +143,7 @@ export default function AdminTvShows() {
   const [search,     setSearch]     = useState('');
   const [sortBy,     setSortBy]     = useState('firstairdate');
   const [sortDir,    setSortDir]    = useState('desc');
-  const [deleteId,   setDeleteId]   = useState(null);
-  const [deleting,   setDeleting]   = useState(false);
+  const [deleteShow,  setDeleteShow]  = useState(null);
   const [showPanel,  setShowPanel]  = useState(false);
   const [detailId,   setDetailId]   = useState(null);
   const [editShow,   setEditShow]   = useState(null);
@@ -225,17 +196,6 @@ export default function AdminTvShows() {
   };
 
   const handlePage = (p) => fetchShows(p, search, sortBy, sortDir);
-
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    setDeleting(true);
-    try {
-      await tvShowService.deleteTvShow(deleteId);
-      setDeleteId(null);
-      fetchShows(page, search, sortBy, sortDir);
-    } catch (e) { console.error(e); }
-    finally { setDeleting(false); }
-  };
 
   /**
    * Toggle Premium cho 1 TV show.
@@ -432,7 +392,7 @@ export default function AdminTvShows() {
                       <ActionBtn color={T.blue} bg="rgba(37,99,235,0.07)" border="rgba(37,99,235,0.2)" title="Chỉnh sửa" onClick={() => setEditShow(s)}>
                         <Pencil size={13}/>
                       </ActionBtn>
-                      <ActionBtn color={T.red} bg="#FEF2F2" border="rgba(220,38,38,0.2)" title="Xóa" onClick={() => setDeleteId(s.id)}>
+                      <ActionBtn color={T.red} bg="#FEF2F2" border="rgba(220,38,38,0.2)" title="Xóa" onClick={() => setDeleteShow(s)}>
                         <Trash2 size={13}/>
                       </ActionBtn>
                     </div>
@@ -444,28 +404,21 @@ export default function AdminTvShows() {
         </div>
       </div>
 
-      <PaginationBar page={page} totalPages={totalPages} total={total} onPage={handlePage} />
+      <AdminPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageSize={PAGE_SIZE}
+        onPageChange={handlePage}
+        itemLabel="TV show"
+      />
 
       {/* Delete modal */}
-      <Modal
-        isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Xác nhận xóa TV show"
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setDeleteId(null)}>Hủy</Button>
-            <Button variant="danger" size="sm" loading={deleting} onClick={handleDelete}>Xóa</Button>
-          </>
-        }
-      >
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <AlertCircle size={18} color={T.red} style={{ flexShrink: 0, marginTop: 1 }}/>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.6 }}>
-            Bạn chắc chắn muốn xóa TV show này? Hành động này không thể hoàn tác.
-          </p>
-        </div>
-      </Modal>
+      <TvShowDeleteModal
+        show={deleteShow}
+        onClose={() => setDeleteShow(null)}
+        onDeleted={() => fetchShows(page, search, sortBy, sortDir)}
+      />
 
       {/* Backdrop */}
       <AnimatePresence>

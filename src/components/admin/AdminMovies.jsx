@@ -6,12 +6,12 @@ import {
   AlertCircle, Search, Eye, Pencil, Video, Crown,
 } from 'lucide-react';
 import movieService from '../../services/movieService';
-import { Button, Input, Modal, Spinner } from '../ui';
+import { Input } from '../ui';
 import { usePagination } from '../../hooks/usePagination';
-import Pagination from '../common/Pagination';
-import axiosInstance from '../../config/axios';
+import AdminPagination from '../common/AdminPagination';
 import MovieDetailPanel  from './movie/MovieDetailPanel';
 import MovieEditModal    from './movie/MovieEditModal';
+import MovieDeleteModal  from './movie/MovieDeleteModal';
 import VideoUploadPanel  from './movie/VideoUploadPanel';
 import AdminTmdbSearch   from './AdminTmdbSearch';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
@@ -62,7 +62,7 @@ const Th = ({ children, sortKey, sortBy, sortDir, onSort, width }) => {
   );
 };
 
-// ── Ghost Button — đồng bộ AdminRevenue ──────────────────────────────────────
+// ── Ghost Button ──────────────────────────────────────────────────────────────
 const GhostBtn = ({ onClick, children, accent }) => {
   const [hov, setHov] = useState(false);
   return (
@@ -101,8 +101,7 @@ function PremiumToggle({ isPremium, loading, onClick }) {
           ? 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)'
           : 'rgba(0,0,0,0.04)',
         cursor: loading ? 'wait' : 'pointer',
-        fontFamily: FONT,
-        fontSize: 11.5, fontWeight: 700,
+        fontFamily: FONT, fontSize: 11.5, fontWeight: 700,
         color: isPremium ? '#92400E' : '#71717A',
         transition: 'all 0.18s',
         opacity: loading ? 0.6 : 1,
@@ -138,19 +137,18 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminMovies() {
-  const [allMovies,    setAllMovies]    = useState([]);
-  const [filtered,     setFiltered]     = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [search,       setSearch]       = useState('');
-  const [sortBy,       setSortBy]       = useState('releaseDate');
-  const [sortDir,      setSortDir]      = useState('desc');
-  const [deleteId,     setDeleteId]     = useState(null);
-  const [deleting,     setDeleting]     = useState(false);
-  const [showPanel,    setShowPanel]    = useState(false);
-  const [detailId,     setDetailId]     = useState(null);
-  const [editMovie,    setEditMovie]    = useState(null);
-  const [uploadMovie,  setUploadMovie]  = useState(null);
-  const [togglingId,   setTogglingId]   = useState(null);
+  const [allMovies,   setAllMovies]   = useState([]);
+  const [filtered,    setFiltered]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [sortBy,      setSortBy]      = useState('releaseDate');
+  const [sortDir,     setSortDir]     = useState('desc');
+  const [deleteMovie, setDeleteMovie] = useState(null);
+  const [showPanel,   setShowPanel]   = useState(false);
+  const [detailId,    setDetailId]    = useState(null);
+  const [editMovie,   setEditMovie]   = useState(null);
+  const [uploadMovie, setUploadMovie] = useState(null);
+  const [togglingId,  setTogglingId]  = useState(null);
 
   const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
   const pageMovies = pagination.paginate(filtered);
@@ -184,17 +182,6 @@ export default function AdminMovies() {
     else { setSortBy(key); setSortDir('desc'); }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    setDeleting(true);
-    try {
-      await axiosInstance.delete(`/movies/${deleteId}`);
-      setAllMovies(prev => prev.filter(m => m.id !== deleteId));
-      setDeleteId(null);
-    } catch (e) { console.error(e); }
-    finally { setDeleting(false); }
-  };
-
   /**
    * Toggle Premium cho 1 phim.
    * Optimistic update ngay lập tức → rollback nếu API lỗi.
@@ -208,6 +195,7 @@ export default function AdminMovies() {
       await movieService.setPremium(movie.id, next);
     } catch (e) {
       console.error('[AdminMovies] togglePremium failed:', e);
+      // Rollback
       setAllMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isPremium: !next } : m));
     } finally {
       setTogglingId(null);
@@ -217,7 +205,7 @@ export default function AdminMovies() {
   return (
     <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
 
-      {/* ── Header — đồng bộ AdminRevenue ── */}
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
         <div>
           <p style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -245,7 +233,7 @@ export default function AdminMovies() {
         </div>
       </div>
 
-      {/* ── Search bar — đồng bộ AdminRevenue ── */}
+      {/* ── Search bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 7,
         background: T.surface, border: `1px solid ${T.border}`,
@@ -274,7 +262,7 @@ export default function AdminMovies() {
         )}
       </div>
 
-      {/* ── Table — đồng bộ AdminRevenue card style ── */}
+      {/* ── Table ── */}
       <div style={{
         background: T.surface, border: `1px solid ${T.border}`,
         borderRadius: 16, overflow: 'hidden',
@@ -381,7 +369,7 @@ export default function AdminMovies() {
                       <ActionBtn color={T.blue} bg="rgba(37,99,235,0.07)" border="rgba(37,99,235,0.2)" title="Chỉnh sửa" onClick={() => setEditMovie(m)}>
                         <Pencil size={13}/>
                       </ActionBtn>
-                      <ActionBtn color={T.red} bg="#FEF2F2" border="rgba(220,38,38,0.2)" title="Xóa phim" onClick={() => setDeleteId(m.id)}>
+                      <ActionBtn color={T.red} bg="#FEF2F2" border="rgba(220,38,38,0.2)" title="Xóa phim" onClick={() => setDeleteMovie(m)}>
                         <Trash2 size={13}/>
                       </ActionBtn>
                     </div>
@@ -393,30 +381,16 @@ export default function AdminMovies() {
         </div>
       </div>
 
-      <Pagination {...pagination.props} itemLabel="phim" />
+      <AdminPagination {...pagination.props} itemLabel="phim" />
 
-      {/* Delete modal */}
-      <Modal
-        isOpen={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Xác nhận xóa phim"
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setDeleteId(null)}>Hủy</Button>
-            <Button variant="danger" size="sm" loading={deleting} onClick={handleDelete}>Xóa phim</Button>
-          </>
-        }
-      >
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <AlertCircle size={18} color={T.red} style={{ flexShrink: 0, marginTop: 1 }}/>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.6 }}>
-            Bạn chắc chắn muốn xóa phim này? Hành động này không thể hoàn tác.
-          </p>
-        </div>
-      </Modal>
+      {/* ── Delete modal ── */}
+      <MovieDeleteModal
+        movie={deleteMovie}
+        onClose={() => setDeleteMovie(null)}
+        onDeleted={(id) => setAllMovies(prev => prev.filter(m => m.id !== id))}
+      />
 
-      {/* Backdrop when panel open */}
+      {/* ── Backdrop ── */}
       <AnimatePresence>
         {(showPanel || uploadMovie) && (
           <motion.div
@@ -427,7 +401,7 @@ export default function AdminMovies() {
         )}
       </AnimatePresence>
 
-      {/* Import panel */}
+      {/* ── Import panel ── */}
       <AnimatePresence>
         {showPanel && (
           <AdminTmdbSearch
@@ -439,7 +413,7 @@ export default function AdminMovies() {
         )}
       </AnimatePresence>
 
-      {/* Video upload panel */}
+      {/* ── Video upload panel ── */}
       <AnimatePresence>
         {uploadMovie && (
           <VideoUploadPanel
@@ -451,7 +425,7 @@ export default function AdminMovies() {
         )}
       </AnimatePresence>
 
-      {/* Detail panel */}
+      {/* ── Detail panel ── */}
       <AnimatePresence>
         {detailId && (
           <MovieDetailPanel
@@ -462,7 +436,7 @@ export default function AdminMovies() {
         )}
       </AnimatePresence>
 
-      {/* Edit modal */}
+      {/* ── Edit modal ── */}
       <MovieEditModal
         movie={editMovie}
         onClose={() => setEditMovie(null)}

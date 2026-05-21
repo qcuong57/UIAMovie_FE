@@ -1,27 +1,11 @@
 // src/components/admin/AdminPersons.jsx
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, User, Calendar, MapPin, Film, Tv } from 'lucide-react';
-import { Modal } from '../ui';
+import { Search, User, Calendar, MapPin, Film, Tv, Clapperboard, X } from 'lucide-react';
 import { usePagination } from '../../hooks/usePagination';
-import Pagination from '../common/Pagination';
+import AdminPagination from '../common/AdminPagination';
 import axiosInstance from '../../config/axios';
-
-const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
-const T = {
-  bg:          '#F4F3EF',
-  surface:     '#FFFFFF',
-  surfaceAlt:  '#FAFAF8',
-  surfaceHov:  '#F6F6F3',
-  accent:      '#1C5F3A',
-  accentLight: '#EAF5EF',
-  accentText:  '#155230',
-  text:        '#18181B',
-  textSub:     '#71717A',
-  textMuted:   '#A1A1AA',
-  border:      'rgba(0,0,0,0.08)',
-  shadow:      '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)',
-};
+import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 20;
 const BATCH = 10;
@@ -44,111 +28,88 @@ const fetchDetailsBatch = async (items, endpoint) => {
   return details;
 };
 
-// ── Fetch persons from movies ─────────────────────────────────────────────────
 const fetchPersonsFromMovies = async () => {
   const listRes = await axiosInstance.get('/movies?pageSize=500');
   const movies  = Array.isArray(listRes) ? listRes
     : listRes?.items ?? listRes?.movies ?? listRes?.data?.items ?? listRes?.data ?? [];
-
   if (movies.length === 0) return new Map();
 
   const details   = await fetchDetailsBatch(movies, 'movies');
   const personMap = new Map();
-
   const upsert = (key, data, type, movie) => {
     if (!personMap.has(key)) personMap.set(key, { ...data, movies: [], tvShows: [], type });
     const entry = personMap.get(key);
     entry.movies.push({ id: movie.id, title: movie.title, posterUrl: movie.posterUrl });
     if (type === 'director') entry.type = 'director';
   };
-
   for (const m of details) {
-    if (Array.isArray(m.cast)) {
-      for (const c of m.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', m);
-    }
-    if (m.directorDetail) {
-      const d = m.directorDetail;
-      upsert(d.tmdbPersonId ?? d.name, d, 'director', m);
-    } else if (m.director) {
-      upsert(m.director, { name: m.director, profileUrl: null }, 'director', m);
-    }
+    if (Array.isArray(m.cast)) for (const c of m.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', m);
+    if (m.directorDetail) { const d = m.directorDetail; upsert(d.tmdbPersonId ?? d.name, d, 'director', m); }
+    else if (m.director)  upsert(m.director, { name: m.director, profileUrl: null }, 'director', m);
   }
-
   return personMap;
 };
 
-// ── Fetch persons from TV shows ───────────────────────────────────────────────
 const fetchPersonsFromTvShows = async () => {
   const listRes = await axiosInstance.get('/tvshows?pageSize=500');
   const shows   = Array.isArray(listRes) ? listRes
     : listRes?.items ?? listRes?.tvShows ?? listRes?.data?.items ?? listRes?.data ?? [];
-
   if (shows.length === 0) return new Map();
 
   const details   = await fetchDetailsBatch(shows, 'tvshows');
   const personMap = new Map();
-
   const upsert = (key, data, type, show) => {
     if (!personMap.has(key)) personMap.set(key, { ...data, movies: [], tvShows: [], type });
     const entry = personMap.get(key);
     entry.tvShows.push({ id: show.id, title: show.title, posterUrl: show.posterUrl });
     if (type === 'director') entry.type = 'director';
   };
-
   for (const s of details) {
-    if (Array.isArray(s.cast)) {
-      for (const c of s.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', s);
-    }
-    // TV shows thường dùng creators thay vì director
-    if (Array.isArray(s.creators)) {
-      for (const cr of s.creators) upsert(cr.tmdbPersonId ?? cr.name, cr, 'director', s);
-    } else if (s.directorDetail) {
-      const d = s.directorDetail;
-      upsert(d.tmdbPersonId ?? d.name, d, 'director', s);
-    }
+    if (Array.isArray(s.cast)) for (const c of s.cast) upsert(c.tmdbPersonId ?? c.name, c, 'cast', s);
+    if (Array.isArray(s.creators)) for (const cr of s.creators) upsert(cr.tmdbPersonId ?? cr.name, cr, 'director', s);
+    else if (s.directorDetail) { const d = s.directorDetail; upsert(d.tmdbPersonId ?? d.name, d, 'director', s); }
   }
-
   return personMap;
 };
 
-// ── Merge hai Map persons lại với nhau ───────────────────────────────────────
 const mergePersonMaps = (mapA, mapB) => {
   const merged = new Map(mapA);
-
   for (const [key, personB] of mapB) {
     if (!merged.has(key)) {
       merged.set(key, { ...personB });
     } else {
       const existing = merged.get(key);
-      existing.movies   = [...(existing.movies   ?? []), ...(personB.movies   ?? [])];
-      existing.tvShows  = [...(existing.tvShows  ?? []), ...(personB.tvShows  ?? [])];
+      existing.movies  = [...(existing.movies  ?? []), ...(personB.movies  ?? [])];
+      existing.tvShows = [...(existing.tvShows ?? []), ...(personB.tvShows ?? [])];
       if (personB.type === 'director') existing.type = 'director';
-      // Ưu tiên giữ thông tin phong phú hơn (có profileUrl, biography...)
-      if (!existing.profileUrl && personB.profileUrl) existing.profileUrl = personB.profileUrl;
-      if (!existing.biography  && personB.biography)  existing.biography  = personB.biography;
-      if (!existing.birthday   && personB.birthday)   existing.birthday   = personB.birthday;
+      if (!existing.profileUrl  && personB.profileUrl)  existing.profileUrl  = personB.profileUrl;
+      if (!existing.biography   && personB.biography)   existing.biography   = personB.biography;
+      if (!existing.birthday    && personB.birthday)     existing.birthday    = personB.birthday;
       if (!existing.placeOfBirth && personB.placeOfBirth) existing.placeOfBirth = personB.placeOfBirth;
     }
   }
-
   return merged;
 };
 
 // ── PersonCard ────────────────────────────────────────────────────────────────
 const PersonCard = ({ person, index, onClick }) => {
   const [imgErr, setImgErr] = useState(false);
-  const isDirector  = person.type === 'director';
-  const totalWorks  = (person.movies?.length ?? 0) + (person.tvShows?.length ?? 0);
+  const isDirector = person.type === 'director';
+  const totalWorks = (person.movies?.length ?? 0) + (person.tvShows?.length ?? 0);
 
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: index * 0.02 }}
+      transition={{ delay: index * 0.018 }}
       onClick={() => onClick(person)}
-      style={{ background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.1)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = T.shadow}
+      style={{
+        background: T.surface, borderRadius: 14,
+        border: `1px solid ${T.border}`, boxShadow: T.shadow,
+        overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s, transform 0.15s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = T.shadowMd; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = T.shadow;   e.currentTarget.style.transform = 'translateY(0)'; }}
     >
       {/* Photo */}
       <div style={{ aspectRatio: '2/3', background: T.bg, overflow: 'hidden', position: 'relative' }}>
@@ -157,15 +118,16 @@ const PersonCard = ({ person, index, onClick }) => {
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
             onError={() => setImgErr(true)} />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <User size={36} color={T.textMuted} strokeWidth={1.2} />
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDirector ? T.accentLight : T.surfaceAlt }}>
+            <User size={34} color={isDirector ? T.accent : T.textMuted} strokeWidth={1.2} />
           </div>
         )}
         {/* Role badge */}
         <div style={{
           position: 'absolute', top: 8, left: 8,
-          padding: '3px 8px', borderRadius: 5,
-          background: isDirector ? T.accent : T.surface,
+          padding: '3px 8px', borderRadius: 6,
+          background: isDirector ? T.accent : 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(4px)',
           boxShadow: T.shadow,
           fontFamily: FONT, fontSize: 9.5, fontWeight: 700,
           color: isDirector ? 'white' : T.textSub,
@@ -176,32 +138,77 @@ const PersonCard = ({ person, index, onClick }) => {
       </div>
 
       {/* Info */}
-      <div style={{ padding: '12px 12px 14px' }}>
-        <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ padding: '11px 12px 13px' }}>
+        <p style={{
+          fontFamily: FONT_TITLE, fontSize: 13, fontWeight: 700,
+          color: T.text, marginBottom: 3,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {person.name}
         </p>
-        <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>
-          {totalWorks} tác phẩm
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {person.movies?.length > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
+              <Film size={9} /> {person.movies.length}
+            </span>
+          )}
+          {person.tvShows?.length > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
+              <Tv size={9} /> {person.tvShows.length}
+            </span>
+          )}
+          {totalWorks === 0 && (
+            <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>0 tác phẩm</span>
+          )}
+        </div>
       </div>
     </motion.div>
   );
 };
 
-// ── WorksSection (dùng chung cho movies & tvshows) ───────────────────────────
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+const SkeletonCard = () => (
+  <div style={{ background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+    <div style={{
+      aspectRatio: '2/3',
+      background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+      backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite',
+    }} />
+    <div style={{ padding: '11px 12px 13px' }}>
+      <div style={{ height: 13, width: '75%', borderRadius: 5, marginBottom: 7,
+        background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+        backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite',
+      }} />
+      <div style={{ height: 11, width: '45%', borderRadius: 5,
+        background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+        backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite 0.1s',
+      }} />
+    </div>
+  </div>
+);
+
+// ── WorksSection ──────────────────────────────────────────────────────────────
 const WorksSection = ({ items, icon: Icon, label, color }) => {
   if (!items?.length) return null;
   return (
     <div style={{ marginBottom: 16 }}>
-      <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <p style={{
+        fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted,
+        textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
+        display: 'flex', alignItems: 'center', gap: 5,
+      }}>
         <Icon size={11} color={color ?? T.textMuted} />
         {items.length} {label}
       </p>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
         {items.slice(0, 8).map(item => (
-          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, background: T.surfaceAlt, border: `1px solid ${T.border}` }}>
+          <div key={item.id} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 10px', borderRadius: 8,
+            background: T.surfaceAlt, border: `1px solid ${T.border}`,
+          }}>
             {item.posterUrl && (
-              <img src={item.posterUrl} alt="" style={{ width: 18, height: 25, borderRadius: 3, objectFit: 'cover' }} />
+              <img src={item.posterUrl} alt="" style={{ width: 18, height: 25, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }} />
             )}
             <span style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {item.title}
@@ -209,7 +216,7 @@ const WorksSection = ({ items, icon: Icon, label, color }) => {
           </div>
         ))}
         {items.length > 8 && (
-          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, alignSelf: 'center' }}>
+          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, alignSelf: 'center', padding: '5px 8px' }}>
             +{items.length - 8} khác
           </span>
         )}
@@ -218,7 +225,7 @@ const WorksSection = ({ items, icon: Icon, label, color }) => {
   );
 };
 
-// ── PersonDetail ──────────────────────────────────────────────────────────────
+// ── PersonDetail (modal body) ─────────────────────────────────────────────────
 const PersonDetail = ({ person }) => {
   const [imgErr, setImgErr] = useState(false);
   if (!person) return null;
@@ -227,14 +234,17 @@ const PersonDetail = ({ person }) => {
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', fontFamily: FONT }}>
       {/* Photo */}
-      <div style={{ width: 160, flexShrink: 0, borderRadius: 12, overflow: 'hidden', background: T.bg, border: `1px solid ${T.border}` }}>
+      <div style={{
+        width: 160, flexShrink: 0, borderRadius: 12,
+        overflow: 'hidden', background: T.bg, border: `1px solid ${T.border}`,
+      }}>
         {person.profileUrl && !imgErr ? (
           <img src={person.profileUrl} alt={person.name}
             style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', objectPosition: 'center 15%', display: 'block' }}
             onError={() => setImgErr(true)} />
         ) : (
-          <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <User size={48} color={T.textMuted} strokeWidth={1} />
+          <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDirector ? T.accentLight : T.surfaceAlt }}>
+            <User size={48} color={isDirector ? T.accent : T.textMuted} strokeWidth={1} />
           </div>
         )}
       </div>
@@ -242,14 +252,15 @@ const PersonDetail = ({ person }) => {
       {/* Details */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Name & role */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <h2 style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.02em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 22, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.02em' }}>
             {person.name}
           </h2>
           <span style={{
-            fontFamily: FONT, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
+            fontFamily: FONT, fontSize: 11, fontWeight: 600,
+            padding: '3px 10px', borderRadius: 99,
             background: isDirector ? T.accentLight : T.bg,
-            border: `1px solid ${isDirector ? `${T.accent}30` : T.border}`,
+            border: `1px solid ${isDirector ? T.accent + '30' : T.border}`,
             color: isDirector ? T.accentText : T.textSub,
           }}>
             {isDirector ? 'Đạo diễn' : 'Diễn viên'}
@@ -287,21 +298,8 @@ const PersonDetail = ({ person }) => {
           </div>
         )}
 
-        {/* Movies */}
-        <WorksSection
-          items={person.movies}
-          icon={Film}
-          label="phim điện ảnh"
-          color={T.accent}
-        />
-
-        {/* TV Shows */}
-        <WorksSection
-          items={person.tvShows}
-          icon={Tv}
-          label="TV show"
-          color="#2563EB"
-        />
+        <WorksSection items={person.movies}   icon={Film} label="phim điện ảnh" color={T.accent}  />
+        <WorksSection items={person.tvShows}  icon={Tv}   label="TV show"       color="#7C3AED"   />
       </div>
     </div>
   );
@@ -318,7 +316,7 @@ export default function AdminPersons() {
   useEffect(() => {
     Promise.all([fetchPersonsFromMovies(), fetchPersonsFromTvShows()])
       .then(([movieMap, tvMap]) => {
-        const merged = mergePersonMaps(movieMap, tvMap);
+        const merged  = mergePersonMaps(movieMap, tvMap);
         const persons = Array.from(merged.values())
           .filter(p => p.name)
           .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'vi'));
@@ -336,50 +334,110 @@ export default function AdminPersons() {
   const pagination  = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
   const pagePersons = pagination.paginate(filtered);
 
+  const directorCount = allPersons.filter(p => p.type === 'director').length;
+  const castCount     = allPersons.filter(p => p.type !== 'director').length;
+
   return (
-    <div style={{ padding: '28px 32px 56px', maxWidth: 1200, fontFamily: FONT }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 3 }}>Quản lý</p>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
+    <div style={{ padding: '28px 32px 64px', maxWidth: 1200, fontFamily: FONT }}>
+      <style>{ADMIN_GOOGLE_FONTS}</style>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: 22 }}>
+        <p style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 3, fontFamily: FONT, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Quản lý</p>
+        <h2 style={{ fontFamily: FONT_TITLE, fontSize: 23, fontWeight: 700, color: T.text, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 8 }}>
           Diễn viên & Đạo diễn
-          <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 500, color: T.textMuted, letterSpacing: 0 }}>({filtered.length})</span>
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: T.textMuted, letterSpacing: 0, fontFamily: FONT }}>
+            · {filtered.length.toLocaleString('vi-VN')}
+          </span>
         </h2>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <Search size={15} color={T.textMuted} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+      {/* ── Stat chips ── */}
+      {!loading && allPersons.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { icon: User,         label: 'Tổng',       value: allPersons.length, accent: T.accent  },
+            { icon: User,         label: 'Diễn viên',  value: castCount,         accent: '#0891B2' },
+            { icon: Clapperboard, label: 'Đạo diễn',   value: directorCount,     accent: '#7C3AED' },
+          ].map(({ icon: Icon, label, value, accent }) => (
+            <div key={label} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 16px', borderRadius: 12,
+              background: T.surface, border: `1px solid ${T.border}`,
+              boxShadow: T.shadow,
+            }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: accent + '15' }}>
+                <Icon size={14} color={accent} />
+              </div>
+              <div>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, marginBottom: 1 }}>{label}</p>
+                <p style={{ fontFamily: FONT_TITLE, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Filters ── */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+          <Search size={14} color={T.textMuted} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
           <input
-            placeholder="Tìm theo tên..."
+            placeholder="Tìm theo tên…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', height: 40, padding: '0 14px 0 38px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none' }}
+            style={{
+              width: '100%', height: 42, padding: '0 14px 0 38px',
+              borderRadius: 11, background: T.surface, border: `1px solid ${T.border}`,
+              fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none',
+              boxShadow: T.shadow, transition: 'border-color 0.15s',
+            }}
+            onFocus={e => e.target.style.borderColor = T.accent + '80'}
+            onBlur={e  => e.target.style.borderColor = T.border}
           />
         </div>
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          style={{ height: 40, padding: '0 14px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, color: typeFilter ? T.text : T.textMuted, fontFamily: FONT, fontSize: 13.5, outline: 'none', cursor: 'pointer', minWidth: 140 }}
-        >
-          <option value="">Tất cả</option>
-          <option value="cast">Diễn viên</option>
-          <option value="director">Đạo diễn</option>
-        </select>
+        <div style={{ position: 'relative' }}>
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            style={{
+              height: 42, padding: '0 34px 0 14px', borderRadius: 11,
+              background: T.surface, border: `1px solid ${T.border}`,
+              color: typeFilter ? T.text : T.textMuted,
+              fontFamily: FONT, fontSize: 13.5, outline: 'none', cursor: 'pointer',
+              minWidth: 150, boxShadow: T.shadow,
+              transition: 'border-color 0.15s', appearance: 'none',
+            }}
+            onFocus={e => e.target.style.borderColor = T.accent + '80'}
+            onBlur={e  => e.target.style.borderColor = T.border}
+          >
+            <option value="">Tất cả</option>
+            <option value="cast">Diễn viên</option>
+            <option value="director">Đạo diễn</option>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2"
+            style={{ position: 'absolute', right: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
       </div>
 
-      {/* Grid */}
+      {/* ── Grid ── */}
       {loading ? (
-        <div style={{ padding: '80px 0', textAlign: 'center' }}>
-          <div style={{ width: 28, height: 28, borderRadius: '50%', border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: 'spin 0.75s linear infinite', margin: '0 auto 12px' }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Đang tải dữ liệu…</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
+          {Array.from({ length: 20 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: '80px 0', textAlign: 'center' }}>
-          <User size={32} color={T.textMuted} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy kết quả</p>
+        <div style={{ padding: '96px 0', textAlign: 'center' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 20, background: T.surfaceAlt,
+            border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', margin: '0 auto 16px',
+          }}>
+            <User size={28} color={T.textMuted} strokeWidth={1.2} />
+          </div>
+          <p style={{ fontFamily: FONT_TITLE, fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>Không tìm thấy kết quả</p>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Thử thay đổi từ khoá hoặc bộ lọc</p>
         </div>
       ) : (
         <>
@@ -390,14 +448,74 @@ export default function AdminPersons() {
               ))}
             </AnimatePresence>
           </div>
-          <Pagination {...pagination.props} itemLabel="người" />
+          <AdminPagination {...pagination.props} itemLabel="người" />
         </>
       )}
 
       {/* Detail modal */}
-      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết" size="xl" showCloseBtn>
-        <PersonDetail person={selected} />
-      </Modal>
+      <AnimatePresence>
+        {!!selected && (
+          <>
+            <motion.div
+              key="person-backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setSelected(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
+            />
+            <motion.div
+              key="person-modal"
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1,    y: 0 }}
+              exit={{   opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+              style={{
+                position: 'fixed', inset: 0, margin: 'auto',
+                width: 660, height: 'fit-content', maxHeight: '88vh',
+                zIndex: 300,
+                background: T.surface,
+                borderRadius: 16,
+                border: `1px solid ${T.border}`,
+                boxShadow: T.shadowLg,
+                display: 'flex', flexDirection: 'column',
+                fontFamily: FONT, overflow: 'hidden',
+              }}
+            >
+              {/* Header */}
+              <div style={{ padding: '18px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <div>
+                  <p style={{ fontSize: 11, color: T.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 600, fontFamily: FONT }}>
+                    {selected?.type === 'director' ? 'Đạo diễn' : 'Diễn viên'}
+                  </p>
+                  <h2 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.01em', fontFamily: FONT_TITLE, maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selected?.name}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelected(null)}
+                  style={{ width: 32, height: 32, borderRadius: '50%', background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.textSub, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Scrollable body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                <PersonDetail person={selected} />
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                <button
+                  onClick={() => setSelected(null)}
+                  style={{ padding: '8px 20px', borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub }}
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

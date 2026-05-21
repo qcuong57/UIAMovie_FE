@@ -1,6 +1,6 @@
-// src/components/admin/movie/VideoUploadPanel.jsx  ← REDESIGNED light theme
+// src/components/admin/movie/VideoUploadPanel.jsx
 import React, { useState, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Upload, Check, AlertCircle, Film } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 
@@ -28,49 +28,66 @@ const VIDEO_TYPES = ['main', 'trailer', 'clip', 'behind'];
 const TYPE_LABEL  = { main: 'Phim chính', trailer: 'Trailer', clip: 'Clip', behind: 'Hậu trường' };
 const QUALITIES   = ['1080p', '720p', '480p', '360p'];
 
-// ── UploadZone (exported for use in MovieDetailPanel) ─────────────────────────
+// ── UploadZone ────────────────────────────────────────────────────────────────
 export function UploadZone({ movieId, onUploaded }) {
-  const [videoType,   setVideoType]   = useState('main');
-  const [quality,     setQuality]     = useState('1080p');
-  const [url,         setUrl]         = useState('');
-  const [file,        setFile]        = useState(null);
-  const [uploading,   setUploading]   = useState(false);
-  const [progress,    setProgress]    = useState(0);
-  const [result,      setResult]      = useState(null);
-  const [dragging,    setDragging]    = useState(false);
+  const [videoType, setVideoType] = useState('main');
+  const [quality,   setQuality]   = useState('1080p');
+  const [file,      setFile]      = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress,  setProgress]  = useState(0);
+  const [result,    setResult]    = useState(null);
+  const [dragging,  setDragging]  = useState(false);
   const fileRef = useRef();
 
   const handleDrop = useCallback(e => {
-    e.preventDefault(); setDragging(false);
+    e.preventDefault();
+    setDragging(false);
     const f = e.dataTransfer.files[0];
     if (f && f.type.startsWith('video/')) setFile(f);
   }, []);
 
   const handleUpload = async () => {
-    if (!url.trim() && !file) { setResult({ type: 'error', text: 'Vui lòng nhập URL hoặc chọn file' }); return; }
-    setUploading(true); setProgress(0); setResult(null);
+    if (!file) {
+      setResult({ type: 'error', text: 'Vui lòng chọn file video' });
+      return;
+    }
+    setUploading(true);
+    setProgress(0);
+    setResult(null);
 
     try {
-      let payload;
-      if (file) {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('videoType', videoType);
-        fd.append('quality', quality);
-        payload = await axiosInstance.post(`/movies/${movieId}/videos/upload`, fd, {
+      // ✅ Field names phải viết hoa chữ đầu để khớp với C# DTO (UploadMovieVideoDTO)
+      const fd = new FormData();
+      fd.append('VideoFile', file);       // ✅ khớp VideoFile
+      fd.append('VideoType', videoType);  // ✅ khớp VideoType
+      fd.append('Quality', quality);      // ✅ khớp Quality
+
+      // ✅ URL đúng: /movies/{id}/videos  (không có /upload)
+      const response = await axiosInstance.post(
+        `/movies/${movieId}/videos`,
+        fd,
+        {
           headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: e => setProgress(Math.round((e.loaded / e.total) * 100)),
-        });
-      } else {
-        payload = await axiosInstance.post(`/movies/${movieId}/videos`, { url: url.trim(), videoType, quality });
-      }
-      const video = payload?.data ?? payload;
+          onUploadProgress: e => {
+            if (e.total) setProgress(Math.round((e.loaded / e.total) * 100));
+          },
+          timeout: 10 * 60 * 1000, // 10 phút cho file lớn
+        }
+      );
+
+      const video = response?.data?.data ?? response?.data ?? response;
       setResult({ type: 'success', text: 'Upload thành công!' });
-      setUrl(''); setFile(null);
+      setFile(null);
+      setProgress(0);
       onUploaded?.(video);
     } catch (e) {
-      setResult({ type: 'error', text: e?.response?.data?.message ?? e?.message ?? 'Upload thất bại' });
-    } finally { setUploading(false); }
+      setResult({
+        type: 'error',
+        text: e?.response?.data?.message ?? e?.message ?? 'Upload thất bại',
+      });
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -97,54 +114,44 @@ export function UploadZone({ movieId, onUploaded }) {
         </div>
       </div>
 
-      {/* URL input */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
-        <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>URL video</label>
-        <input
-          placeholder="https://example.com/video.mp4"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          disabled={!!file}
-          style={{
-            height: 40, padding: '0 14px', borderRadius: 9,
-            background: file ? T.surfaceAlt : T.surface,
-            border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13,
-            color: T.text, outline: 'none', opacity: file ? 0.5 : 1,
-            transition: 'border-color 0.15s',
-          }}
-          onFocus={e => e.target.style.borderColor = T.borderFocus}
-          onBlur={e => e.target.style.borderColor = T.border}
-        />
-      </div>
-
-      {/* Divider */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <div style={{ flex: 1, height: 1, background: T.border }} />
-        <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>hoặc</span>
-        <div style={{ flex: 1, height: 1, background: T.border }} />
-      </div>
-
       {/* Drop zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        onClick={() => fileRef.current?.click()}
+        onClick={() => !uploading && fileRef.current?.click()}
         style={{
-          borderRadius: 10, border: `2px dashed ${dragging ? T.accent : file ? T.accent : T.border}`,
-          padding: '18px 14px', textAlign: 'center',
+          borderRadius: 10,
+          border: `2px dashed ${dragging ? T.accent : file ? T.accent : T.border}`,
+          padding: '22px 14px',
+          textAlign: 'center',
           background: dragging ? T.accentLight : file ? '#F0FDF4' : T.surfaceAlt,
-          cursor: 'pointer', transition: 'all 0.15s', marginBottom: 12,
+          cursor: uploading ? 'default' : 'pointer',
+          transition: 'all 0.15s',
+          marginBottom: 12,
         }}
       >
-        <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => setFile(e.target.files[0] || null)} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*"
+          style={{ display: 'none' }}
+          onChange={e => setFile(e.target.files[0] || null)}
+        />
         {file ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
             <Film size={15} color={T.accentText} />
-            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.accentText }}>{file.name}</p>
-            <button onClick={e => { e.stopPropagation(); setFile(null); }}
-              style={{ width: 20, height: 20, borderRadius: '50%', border: 'none', background: 'rgba(28,95,58,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accentText }}>
-              <X size={11}/>
+            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.accentText, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {file.name}
+            </p>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, flexShrink: 0 }}>
+              ({(file.size / 1024 / 1024).toFixed(1)} MB)
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); setFile(null); setResult(null); }}
+              disabled={uploading}
+              style={{ width: 20, height: 20, borderRadius: '50%', border: 'none', background: 'rgba(28,95,58,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accentText, flexShrink: 0 }}>
+              <X size={11} />
             </button>
           </div>
         ) : (
@@ -152,6 +159,9 @@ export function UploadZone({ movieId, onUploaded }) {
             <Upload size={18} color={dragging ? T.accentText : T.textMuted} style={{ margin: '0 auto 7px' }} />
             <p style={{ fontFamily: FONT, fontSize: 12.5, color: dragging ? T.accentText : T.textMuted }}>
               Kéo thả file video hoặc <span style={{ color: T.accentText, fontWeight: 600 }}>duyệt file</span>
+            </p>
+            <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, marginTop: 4 }}>
+              MP4, MKV, MOV — tối đa 500MB
             </p>
           </>
         )}
@@ -178,33 +188,39 @@ export function UploadZone({ movieId, onUploaded }) {
           border: `1px solid ${result.type === 'success' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          {result.type === 'success' ? <Check size={14} color="#16A34A"/> : <AlertCircle size={14} color={T.red}/>}
-          <p style={{ fontFamily: FONT, fontSize: 12.5, color: result.type === 'success' ? '#16A34A' : T.red }}>{result.text}</p>
+          {result.type === 'success'
+            ? <Check size={14} color="#16A34A" />
+            : <AlertCircle size={14} color={T.red} />}
+          <p style={{ fontFamily: FONT, fontSize: 12.5, color: result.type === 'success' ? '#16A34A' : T.red }}>
+            {result.text}
+          </p>
         </div>
       )}
 
       {/* Submit */}
       <button
         onClick={handleUpload}
-        disabled={uploading || (!url.trim() && !file)}
+        disabled={uploading || !file}
         style={{
           width: '100%', padding: '11px 0', borderRadius: 10, border: 'none',
-          background: T.accent, cursor: (!url.trim() && !file) ? 'default' : 'pointer',
+          background: T.accent,
+          cursor: (uploading || !file) ? 'default' : 'pointer',
           fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          opacity: uploading || (!url.trim() && !file) ? 0.5 : 1,
+          opacity: (uploading || !file) ? 0.5 : 1,
           transition: 'all 0.15s',
         }}
-        onMouseEnter={e => { if (!uploading && (url.trim() || file)) e.currentTarget.style.background = '#155230'; }}
+        onMouseEnter={e => { if (!uploading && file) e.currentTarget.style.background = '#155230'; }}
         onMouseLeave={e => e.currentTarget.style.background = T.accent}
       >
-        <Upload size={15}/> {uploading ? 'Đang upload…' : 'Upload video'}
+        <Upload size={15} />
+        {uploading ? `Đang upload… ${progress}%` : 'Upload video'}
       </button>
     </div>
   );
 }
 
-// ── Video List (shows existing videos + what's missing) ──────────────────────
+// ── VideoList ─────────────────────────────────────────────────────────────────
 export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
   const VIDEO_TYPES_ALL = ['main', 'trailer', 'clip', 'behind'];
   const TYPE_COLORS = {
@@ -215,10 +231,9 @@ export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
   };
   const TYPE_MISSING_COLOR = { bg: '#FAFAF8', border: 'rgba(0,0,0,0.08)', text: '#A1A1AA', dot: '#D4D4D8' };
 
-  const [videos, setVideos] = useState(initialVideos);
+  const [videos,   setVideos]   = useState(initialVideos);
   const [deleting, setDeleting] = useState(null);
 
-  // Group by videoType
   const grouped = VIDEO_TYPES_ALL.reduce((acc, t) => {
     acc[t] = videos.filter(v => (v.videoType ?? v.type ?? '').toLowerCase() === t);
     return acc;
@@ -228,13 +243,15 @@ export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
     if (!window.confirm('Xóa video này?')) return;
     setDeleting(videoId);
     try {
-      await axiosInstance.delete(`/movies/${movieId}/videos/${videoId}`);
+      // ✅ URL đúng: /movies/videos/{videoId}  (không có movieId)
+      await axiosInstance.delete(`/movies/videos/${videoId}`);
       setVideos(prev => prev.filter(v => v.id !== videoId));
       onDelete?.(videoId);
     } catch (e) {
       alert(e?.response?.data?.message ?? 'Xóa thất bại');
     } finally {
-      setDeleting(null); }
+      setDeleting(null);
+    }
   };
 
   return (
@@ -248,10 +265,7 @@ export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
           const hasAny = list.length > 0;
           const c = hasAny ? TYPE_COLORS[type] : TYPE_MISSING_COLOR;
           return (
-            <div key={type} style={{
-              borderRadius: 10, border: `1px solid ${c.border}`,
-              background: c.bg, overflow: 'hidden',
-            }}>
+            <div key={type} style={{ borderRadius: 10, border: `1px solid ${c.border}`, background: c.bg, overflow: 'hidden' }}>
               {/* Type header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -292,8 +306,7 @@ export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
                     </p>
                     <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                       {v.quality && (
-                        <span style={{ fontFamily: FONT, fontSize: 10, color: T.textMuted,
-                          padding: '0px 5px', borderRadius: 4, background: T.bg, border: `1px solid ${T.border}` }}>
+                        <span style={{ fontFamily: FONT, fontSize: 10, color: T.textMuted, padding: '0px 5px', borderRadius: 4, background: T.bg, border: `1px solid ${T.border}` }}>
                           {v.quality}
                         </span>
                       )}
@@ -326,12 +339,15 @@ export function VideoList({ movieId, videos: initialVideos = [], onDelete }) {
   );
 }
 
-
+// ── VideoUploadPanel (default export) ─────────────────────────────────────────
 export default function VideoUploadPanel({ movieId, movieTitle, videos: initialVideos = [], onClose, onUploaded }) {
   const [videoList, setVideoList] = useState(initialVideos);
 
   const handleUploaded = (v) => {
-    setVideoList(prev => [...prev, v]);
+    // Backend trả về { data: { videoUrl } } — thêm vào list nếu có object đầy đủ
+    if (v && typeof v === 'object') {
+      setVideoList(prev => [...prev, v]);
+    }
     onUploaded?.(v);
   };
 
@@ -359,23 +375,21 @@ export default function VideoUploadPanel({ movieId, movieTitle, videos: initialV
             {movieTitle ?? 'Phim'}
           </h2>
         </div>
-        <button onClick={onClose}
+        <button
+          onClick={onClose}
           style={{ width: 32, height: 32, borderRadius: '50%', background: T.bg, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.textSub, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <X size={15}/>
+          <X size={15} />
         </button>
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.bg }}>
-        {/* Video status list (show first) */}
         <VideoList
           movieId={movieId}
           videos={videoList}
-          onDelete={(id) => setVideoList(prev => prev.filter(v => v.id !== id))}
+          onDelete={id => setVideoList(prev => prev.filter(v => v.id !== id))}
         />
-        {/* Divider */}
         <div style={{ height: 1, background: T.border, marginBottom: 20 }} />
-        {/* Upload zone */}
         <UploadZone movieId={movieId} onUploaded={handleUploaded} />
       </div>
     </motion.div>
