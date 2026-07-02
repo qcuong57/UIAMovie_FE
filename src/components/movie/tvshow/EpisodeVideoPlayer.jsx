@@ -474,7 +474,7 @@ const EpisodeVideoPlayer = ({
           // togglePlay().
           if (isAd) break;
           if (v.paused) {
-            v.play();
+            v.play().catch((err) => console.warn("[EpisodeVideoPlayer] play() failed:", err));
             flashCenterIcon("play");
           } else {
             v.pause();
@@ -580,7 +580,10 @@ const EpisodeVideoPlayer = ({
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
-      v.play();
+      // Safari iOS có thể reject play() âm thầm nếu readyState chưa đủ
+      // (đặc biệt khi video chưa tải xong metadata) — bắt lỗi để không mất
+      // dấu vết và tránh trạng thái treo (center-icon đổi nhưng video vẫn pause).
+      v.play().catch((err) => console.warn("[EpisodeVideoPlayer] play() failed:", err));
       flashCenterIcon("play");
     } else {
       v.pause();
@@ -673,7 +676,9 @@ const EpisodeVideoPlayer = ({
         <video
           ref={videoRef}
           src={videoUrl} // ← luôn là contentUrl; hook swap src trực tiếp
-          preload="metadata"
+          preload="auto" // Safari iOS cần "auto" để chủ động tải metadata sớm;
+          // "metadata" trên WebKit thật thường trì hoãn/không fire durationchange,
+          // khiến duration fallback về runtime TMDB và play() bị treo do readyState thấp.
           playsInline
           style={{
             position: "absolute",
