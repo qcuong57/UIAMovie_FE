@@ -484,30 +484,34 @@ export default function AdminAds() {
                           gap: 12,
                         }}
                       >
-                        {/* Video thumbnail placeholder */}
+                        {/* Ảnh nhãn hiệu (fallback: icon video) */}
                         <div
+                          title={ad.brandImageUrl ? "Ảnh nhãn hiệu" : undefined}
                           style={{
                             width: 56,
                             height: 36,
                             borderRadius: 7,
                             overflow: "hidden",
                             flexShrink: 0,
-                            background: `linear-gradient(135deg, ${T.accentLight}, ${T.surfaceAlt})`,
+                            background: ad.brandImageUrl
+                              ? "#fff"
+                              : `linear-gradient(135deg, ${T.accentLight}, ${T.surfaceAlt})`,
                             border: `1px solid ${T.border}`,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            position: "relative",
                           }}
                         >
-                          {ad.thumbnailUrl ? (
+                          {ad.brandImageUrl ? (
                             <img
-                              src={ad.thumbnailUrl}
+                              src={ad.brandImageUrl}
                               alt=""
                               style={{
                                 width: "100%",
                                 height: "100%",
-                                objectFit: "cover",
+                                objectFit: "contain",
+                                padding: 4,
+                                boxSizing: "border-box",
                               }}
                             />
                           ) : (

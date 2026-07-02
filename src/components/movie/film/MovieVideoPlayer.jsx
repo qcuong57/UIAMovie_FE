@@ -408,6 +408,11 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
 
   // ── Controls ─────────────────────────────────────────────────
   const togglePlay = () => {
+    // Khoá play/pause qua control gốc trong lúc ad — video ad và video
+    // phim dùng chung videoRef (kiến trúc single-video), nên nếu không
+    // chặn ở đây, click lên <video> hoặc phím Space/K vẫn pause/play được
+    // chính video ad, để lộ center-icon gốc đè lên UI của AdOverlay.
+    if (isAd) return;
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
@@ -451,6 +456,10 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
         case "Space":
         case "KeyK":
           e.preventDefault();
+          // Khoá play/pause qua phím tắt trong lúc ad — xem giải thích ở
+          // togglePlay(). ArrowLeft/ArrowRight bên dưới đã có isAd guard,
+          // Space/K là chỗ bị bỏ sót.
+          if (isAd) break;
           if (v.paused) {
             v.play();
             flashCenterIcon("play");
@@ -493,7 +502,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showKbHint, flashCenterIcon]);
+  }, [showKbHint, flashCenterIcon, isAd]);
 
   // ── Skip Intro / Recap visibility ────────────────────────────
   useEffect(() => {
@@ -656,9 +665,9 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
           )}
         </AnimatePresence>
 
-        {/* ── Subtitle cue overlay ── */}
+        {/* ── Subtitle cue overlay — ẩn khi đang phát quảng cáo ── */}
         <AnimatePresence>
-          {activeCue && selSubId && (
+          {activeCue && selSubId && !isAd && (
             <motion.div
               key={activeCue.start}
               className="subtitle-overlay"
@@ -780,9 +789,11 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
           )}
         </AnimatePresence>
 
-        {/* ── Center play/pause button — hiện khi pause, hoặc khi flash icon ── */}
+        {/* ── Center play/pause button — hiện khi pause, hoặc khi flash icon.
+            Ẩn hoàn toàn khi đang phát ad: control gốc bị khoá lúc ad chạy,
+            chỉ AdOverlay được hiển thị UI. ── */}
         <AnimatePresence>
-          {(!playing || centerIcon) && (
+          {!isAd && (!playing || centerIcon) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

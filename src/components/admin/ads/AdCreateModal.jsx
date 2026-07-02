@@ -1,6 +1,6 @@
 // src/components/admin/ads/AdCreateModal.jsx
 import React, { useState, useRef } from 'react';
-import { X, Upload, Link, Check, MonitorPlay } from 'lucide-react';
+import { X, Upload, Link, Check, MonitorPlay, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
@@ -112,6 +112,64 @@ function VideoDropZone({ file, onFile }) {
   );
 }
 
+// ── Image drop zone (brand image) ─────────────────────────────────────────────
+function ImageDropZone({ file, previewUrl, onFile }) {
+  const [dragging, setDragging] = useState(false);
+  const ref = useRef();
+
+  const accept = (f) => {
+    if (f && f.type.startsWith('image/')) onFile(f);
+  };
+
+  const preview = file ? URL.createObjectURL(file) : previewUrl;
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={e => { e.preventDefault(); setDragging(false); accept(e.dataTransfer.files[0]); }}
+      onClick={() => ref.current?.click()}
+      style={{
+        border: `2px dashed ${dragging ? T.accent : file ? 'rgba(28,95,58,0.35)' : T.border}`,
+        borderRadius: 12, padding: '16px', textAlign: 'center',
+        background: dragging ? T.accentLight : file ? '#F0FDF4' : T.surfaceAlt,
+        cursor: 'pointer', transition: 'all 0.2s',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}
+    >
+      <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => accept(e.target.files[0])} />
+
+      <div style={{
+        width: 44, height: 44, borderRadius: 9, flexShrink: 0, overflow: 'hidden',
+        background: T.surface, border: `1px solid ${T.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {preview
+          ? <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <ImageIcon size={18} color={T.textMuted} style={{ opacity: 0.4 }} />
+        }
+      </div>
+
+      <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+        {file ? (
+          <>
+            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>
+              {(file.size / 1024).toFixed(0)} KB · bấm để đổi ảnh
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub }}>Kéo thả hoặc bấm để chọn ảnh nhãn hiệu</p>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>PNG, JPG, WebP</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Progress bar ─────────────────────────────────────────────────────────────
 function ProgressBar({ percent }) {
   return (
@@ -132,6 +190,9 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
   const [source,    setSource]    = useState('upload');
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl,  setVideoUrl]  = useState('');
+  const [brandSource,    setBrandSource]    = useState('upload');
+  const [brandImageFile, setBrandImageFile] = useState(null);
+  const [brandImageUrl,  setBrandImageUrl]  = useState('');
   const [saving,    setSaving]    = useState(false);
   const [progress,  setProgress]  = useState(0);
   const [errors,    setErrors]    = useState({});
@@ -148,6 +209,8 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
                                           e.skipAfterSeconds = 'Giá trị không hợp lệ';
     if (source === 'upload' && !videoFile) e.video = 'Chọn file video để upload';
     if (source === 'url'    && !videoUrl.trim()) e.video = 'Nhập URL video';
+    if (brandSource === 'upload' && !brandImageFile) e.brandImage = 'Chọn ảnh nhãn hiệu để upload';
+    if (brandSource === 'url'    && !brandImageUrl.trim()) e.brandImage = 'Nhập URL ảnh nhãn hiệu';
     return e;
   };
 
@@ -163,9 +226,13 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
         clickThroughUrl:   form.clickThroughUrl.trim() || null,
         videoFile:         source === 'upload' ? videoFile : null,
         videoUrl:          source === 'url'    ? videoUrl.trim() : null,
+        brandImageFile:    brandSource === 'upload' ? brandImageFile : null,
+        brandImageUrl:     brandSource === 'url'    ? brandImageUrl.trim() : null,
       }, (pct) => setProgress(pct));
       // reset
-      setForm(initForm()); setVideoFile(null); setVideoUrl(''); setErrors({});
+      setForm(initForm()); setVideoFile(null); setVideoUrl('');
+      setBrandSource('upload'); setBrandImageFile(null); setBrandImageUrl('');
+      setErrors({});
       onCreated?.();
     } catch (err) {
       setGlobalErr(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
@@ -174,7 +241,9 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
 
   const handleClose = () => {
     if (saving) return;
-    setForm(initForm()); setVideoFile(null); setVideoUrl(''); setErrors({}); setGlobalErr('');
+    setForm(initForm()); setVideoFile(null); setVideoUrl('');
+    setBrandSource('upload'); setBrandImageFile(null); setBrandImageUrl('');
+    setErrors({}); setGlobalErr('');
     onClose();
   };
 
@@ -249,6 +318,23 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
                 )}
                 {errors.video && source === 'upload' && (
                   <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red }}>{errors.video}</p>
+                )}
+              </div>
+
+              {/* Brand image */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                  Ảnh nhãn hiệu
+                </label>
+                <SourceToggle value={brandSource} onChange={(v) => { setBrandSource(v); setErrors(e => ({ ...e, brandImage: '' })); }} />
+
+                {brandSource === 'upload' ? (
+                  <ImageDropZone file={brandImageFile} onFile={f => { setBrandImageFile(f); setErrors(e => ({ ...e, brandImage: '' })); }} />
+                ) : (
+                  <LightInput value={brandImageUrl} onChange={v => { setBrandImageUrl(v); setErrors(e => ({ ...e, brandImage: '' })); }} placeholder="https://example.com/logo.png" error={errors.brandImage} />
+                )}
+                {errors.brandImage && brandSource === 'upload' && (
+                  <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red }}>{errors.brandImage}</p>
                 )}
               </div>
 

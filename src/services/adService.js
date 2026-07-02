@@ -75,6 +75,8 @@ const adService = {
    * @param {string}   [dto.clickThroughUrl]
    * @param {File}     [dto.videoFile]         - Upload lên Cloudinary
    * @param {string}   [dto.videoUrl]          - URL ngoài (nếu không upload)
+   * @param {File}     [dto.brandImageFile]    - Ảnh nhãn hiệu, upload lên Cloudinary (ưu tiên hơn brandImageUrl)
+   * @param {string}   [dto.brandImageUrl]     - URL ảnh nhãn hiệu ngoài (nếu không upload)
    * @param {Function} [onProgress]            - callback(percent: number)
    */
   createAd: async (dto, onProgress) => {
@@ -86,6 +88,8 @@ const adService = {
       if (dto.clickThroughUrl)          formData.append('ClickThroughUrl', dto.clickThroughUrl);
       if (dto.videoFile)                formData.append('VideoFile', dto.videoFile);
       if (dto.videoUrl)                 formData.append('VideoUrl', dto.videoUrl);
+      if (dto.brandImageFile)           formData.append('BrandImageFile', dto.brandImageFile);
+      if (dto.brandImageUrl)            formData.append('BrandImageUrl', dto.brandImageUrl);
 
       const response = await axiosInstance.post('/ads', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -116,6 +120,8 @@ const adService = {
    * @param {string}   [dto.clickThroughUrl]
    * @param {File}     [dto.videoFile]   - Upload video mới lên Cloudinary
    * @param {string}   [dto.videoUrl]   - Thay bằng external URL
+   * @param {File}     [dto.brandImageFile] - Upload ảnh nhãn hiệu mới lên Cloudinary
+   * @param {string}   [dto.brandImageUrl]  - Thay ảnh nhãn hiệu bằng external URL
    * @param {Function} [onProgress]     - callback(percent: number)
    */
   updateAd: async (adId, dto, onProgress) => {
@@ -128,6 +134,8 @@ const adService = {
       if (dto.clickThroughUrl  != null) formData.append('ClickThroughUrl', dto.clickThroughUrl);
       if (dto.videoFile)                formData.append('VideoFile', dto.videoFile);
       if (dto.videoUrl)                 formData.append('VideoUrl', dto.videoUrl);
+      if (dto.brandImageFile)           formData.append('BrandImageFile', dto.brandImageFile);
+      if (dto.brandImageUrl)            formData.append('BrandImageUrl', dto.brandImageUrl);
 
       const response = await axiosInstance.put(`/ads/${adId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },

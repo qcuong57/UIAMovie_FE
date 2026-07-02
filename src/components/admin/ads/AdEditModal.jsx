@@ -1,6 +1,6 @@
 // src/components/admin/ads/AdEditModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Link, Save, MonitorPlay, RotateCcw } from 'lucide-react';
+import { X, Upload, Link, Save, MonitorPlay, RotateCcw, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
@@ -133,6 +133,61 @@ function VideoDropZone({ file, onFile }) {
   );
 }
 
+function ImageDropZone({ file, onFile }) {
+  const [dragging, setDragging] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const ref = useRef();
+  const accept = (f) => { if (f && f.type.startsWith('image/')) onFile(f); };
+
+  useEffect(() => {
+    if (!file) { setPreview(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={e => { e.preventDefault(); setDragging(false); accept(e.dataTransfer.files[0]); }}
+      onClick={() => ref.current?.click()}
+      style={{
+        border: `2px dashed ${dragging ? T.accent : file ? 'rgba(28,95,58,0.35)' : T.border}`,
+        borderRadius: 12, padding: '14px 16px', textAlign: 'center',
+        background: dragging ? T.accentLight : file ? '#F0FDF4' : T.surfaceAlt,
+        cursor: 'pointer', transition: 'all 0.2s',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}
+    >
+      <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => accept(e.target.files[0])} />
+      <div style={{
+        width: 40, height: 40, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
+        background: T.surface, border: `1px solid ${T.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {preview
+          ? <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 3, boxSizing: 'border-box' }} />
+          : <ImageIcon size={16} color={T.textMuted} style={{ opacity: 0.4 }} />
+        }
+      </div>
+      <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+        {file ? (
+          <>
+            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>{(file.size / 1024).toFixed(0)} KB · bấm để đổi</p>
+          </>
+        ) : (
+          <>
+            <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub }}>Kéo thả hoặc bấm để chọn ảnh nhãn hiệu</p>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>PNG, JPG, WebP</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProgressBar({ percent }) {
   return (
     <div style={{ height: 5, borderRadius: 99, background: T.accentLight, overflow: 'hidden' }}>
@@ -150,6 +205,9 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
   const [videoSource, setVideoSource] = useState('keep');
   const [videoFile,   setVideoFile]   = useState(null);
   const [videoUrl,    setVideoUrl]    = useState('');
+  const [brandImageSource, setBrandImageSource] = useState('keep');
+  const [brandImageFile,   setBrandImageFile]   = useState(null);
+  const [brandImageUrl,    setBrandImageUrl]    = useState('');
   const [saving,      setSaving]      = useState(false);
   const [progress,    setProgress]    = useState(0);
   const [errors,      setErrors]      = useState({});
@@ -168,6 +226,9 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
     setVideoSource('keep');
     setVideoFile(null);
     setVideoUrl('');
+    setBrandImageSource('keep');
+    setBrandImageFile(null);
+    setBrandImageUrl('');
     setErrors({});
     setGlobalErr('');
   }, [ad]);
@@ -186,6 +247,10 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
       e.video = 'Chọn file video để upload';
     if (videoSource === 'url' && !videoUrl.trim())
       e.video = 'Nhập URL video';
+    if (brandImageSource === 'upload' && !brandImageFile)
+      e.brandImage = 'Chọn ảnh nhãn hiệu để upload';
+    if (brandImageSource === 'url' && !brandImageUrl.trim())
+      e.brandImage = 'Nhập URL ảnh nhãn hiệu';
     return e;
   };
 
@@ -203,9 +268,15 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
       };
       if (videoSource === 'upload') dto.videoFile = videoFile;
       if (videoSource === 'url')    dto.videoUrl  = videoUrl.trim();
+      if (brandImageSource === 'upload') dto.brandImageFile = brandImageFile;
+      if (brandImageSource === 'url')    dto.brandImageUrl  = brandImageUrl.trim();
 
       await adService.updateAd(ad.id, dto, (pct) => setProgress(pct));
-      onSaved?.({ ...ad, ...dto, videoUrl: videoSource === 'url' ? videoUrl.trim() : ad.videoUrl });
+      onSaved?.({
+        ...ad, ...dto,
+        videoUrl: videoSource === 'url' ? videoUrl.trim() : ad.videoUrl,
+        brandImageUrl: brandImageSource === 'url' ? brandImageUrl.trim() : ad.brandImageUrl,
+      });
     } catch (err) {
       setGlobalErr(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
     } finally { setSaving(false); }
@@ -312,6 +383,37 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
 
                 {errors.video && videoSource !== 'url' && (
                   <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red }}>{errors.video}</p>
+                )}
+              </div>
+
+              {/* Brand image */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                  Ảnh nhãn hiệu
+                </label>
+                <SourceToggle value={brandImageSource} onChange={(v) => { setBrandImageSource(v); setErrors(e => ({ ...e, brandImage: '' })); }} />
+
+                {brandImageSource === 'keep' && ad?.brandImageUrl && (
+                  <div style={{ padding: '8px 14px', borderRadius: 9, background: T.surfaceAlt, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 7, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.border}`, background: '#fff' }}>
+                      <img src={ad.brandImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2, boxSizing: 'border-box' }} />
+                    </div>
+                    <span style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ad.brandImageUrl}
+                    </span>
+                  </div>
+                )}
+
+                {brandImageSource === 'upload' && (
+                  <ImageDropZone file={brandImageFile} onFile={f => { setBrandImageFile(f); setErrors(e => ({ ...e, brandImage: '' })); }} />
+                )}
+
+                {brandImageSource === 'url' && (
+                  <LightInput value={brandImageUrl} onChange={v => { setBrandImageUrl(v); setErrors(e => ({ ...e, brandImage: '' })); }} placeholder="https://example.com/logo.png" error={errors.brandImage} />
+                )}
+
+                {errors.brandImage && brandImageSource !== 'url' && (
+                  <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red }}>{errors.brandImage}</p>
                 )}
               </div>
 

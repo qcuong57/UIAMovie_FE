@@ -470,6 +470,9 @@ const EpisodeVideoPlayer = ({
         case "Space":
         case "KeyK":
           e.preventDefault();
+          // Khoá play/pause qua phím tắt trong lúc ad — xem giải thích ở
+          // togglePlay().
+          if (isAd) break;
           if (v.paused) {
             v.play();
             flashCenterIcon("play");
@@ -480,11 +483,16 @@ const EpisodeVideoPlayer = ({
           break;
         case "ArrowLeft":
           e.preventDefault();
+          // Khoá tua lùi trong lúc ad — cùng lý do progress-bar bị khoá seek
+          // ở isAd (dòng seek trong JSX): video ad và video phim dùng chung
+          // videoRef, tua ở đây sẽ tua thẳng lên currentTime của ad.
+          if (isAd) break;
           v.currentTime = Math.max(0, v.currentTime - 10);
           showKbHint("⏪ −10s");
           break;
         case "ArrowRight":
           e.preventDefault();
+          if (isAd) break;
           v.currentTime = Math.min(v.duration, v.currentTime + 10);
           showKbHint("⏩ +10s");
           break;
@@ -508,7 +516,7 @@ const EpisodeVideoPlayer = ({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showKbHint, flashCenterIcon]);
+  }, [showKbHint, flashCenterIcon, isAd]);
 
   // ── Skip Intro / Recap visibility ────────────────────────────
   useEffect(() => {
@@ -561,6 +569,14 @@ const EpisodeVideoPlayer = ({
   }, []);
 
   const togglePlay = () => {
+    // Khi đang phát ad, control gốc của player bị khoá hoàn toàn — mọi
+    // pause/play trong lúc ad (nếu có) phải do AdOverlay/useAdManager tự
+    // quyết định, không đi qua nút play/pause, phím Space/K, hay click lên
+    // <video> của phim. Nếu không chặn ở đây, user vẫn pause được video ad
+    // (vì kiến trúc single-video dùng chung videoRef) và center-icon dù đã
+    // ẩn UI thì Space vẫn lọt qua, gây đúng hiện tượng "nút pause tròn nổi
+    // giữa ad" như trong ảnh.
+    if (isAd) return;
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
@@ -800,9 +816,9 @@ const EpisodeVideoPlayer = ({
           />
         )}
 
-        {/* ── Subtitle cue overlay ── */}
+        {/* ── Subtitle cue overlay — ẩn khi đang phát quảng cáo ── */}
         <AnimatePresence>
-          {activeCue && selSubId && (
+          {activeCue && selSubId && !isAd && (
             <motion.div
               key={activeCue.start}
               className="ep-subtitle-overlay"
@@ -851,9 +867,11 @@ const EpisodeVideoPlayer = ({
           )}
         </AnimatePresence>
 
-        {/* Center play/pause button — hiện khi pause, hoặc khi flash icon (Space/click) */}
+        {/* Center play/pause button — hiện khi pause, hoặc khi flash icon
+            (Space/click). Ẩn hoàn toàn khi đang phát ad: control gốc của
+            player bị khoá lúc ad chạy, chỉ AdOverlay được hiển thị UI. */}
         <AnimatePresence>
-          {(!playing || centerIcon) && (
+          {!isAd && (!playing || centerIcon) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

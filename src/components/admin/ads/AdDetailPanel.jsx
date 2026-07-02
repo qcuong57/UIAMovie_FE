@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   X, Pencil, Clock, Link, Play, MonitorPlay,
   CalendarRange, Layers, ChevronRight, Trash2,
-  RefreshCw, ToggleLeft, ToggleRight,
+  RefreshCw, ToggleLeft, ToggleRight, Image as ImageIcon,
 } from 'lucide-react';
 import adService from '../../../services/adService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
@@ -278,6 +278,24 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
                 : <span style={{ fontSize: 12, color: T.textMuted, marginLeft: 8 }}>· không cho skip</span>
               }
             </InfoRow>
+
+            {ad?.brandImageUrl ? (
+              <InfoRow icon={ImageIcon} label="Ảnh nhãn hiệu">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.border}`, background: '#fff' }}>
+                    <img src={ad.brandImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4, boxSizing: 'border-box' }} />
+                  </div>
+                  <a href={ad.brandImageUrl} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 12, color: T.textMuted, wordBreak: 'break-all', lineHeight: 1.5, textDecoration: 'none' }}>
+                    {ad.brandImageUrl}
+                  </a>
+                </div>
+              </InfoRow>
+            ) : (
+              <InfoRow icon={ImageIcon} label="Ảnh nhãn hiệu">
+                <span style={{ fontSize: 12.5, color: T.textMuted }}>Chưa có ảnh nhãn hiệu</span>
+              </InfoRow>
+            )}
 
             {ad?.clickThroughUrl && (
               <InfoRow icon={Link} label="Click-through URL">
