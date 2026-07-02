@@ -9,10 +9,7 @@ import PersonScrollRow from "../../components/movie/Personscrollrow";
 import ReviewSection from "../../components/movie/Reviewsection";
 import BackButton from "../../components/common/BackButton";
 
-import {
-  C,
-  GLOBAL_STYLES,
-} from "../../components/movie/ui/movieConstants";
+import { C, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
 import SectionTitle from "../../components/movie/ui/SectionTitle";
 import StarRating from "../../components/movie/ui/StarRating";
 
@@ -45,14 +42,18 @@ export default function TvShowDetailPage() {
     try {
       const saved = sessionStorage.getItem(`tvshow_${id}_season`);
       return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   });
   const [selectedEpisode, setSelectedEpisode] = useState(() => {
     if (location.state?.selectedEpisode) return location.state.selectedEpisode;
     try {
       const saved = sessionStorage.getItem(`tvshow_${id}_episode`);
       return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   });
   const [episodeDetail, setEpisodeDetail] = useState(null);
   const [loadingEpisode, setLoadingEpisode] = useState(false);
@@ -68,6 +69,8 @@ export default function TvShowDetailPage() {
     }
   });
 
+  const isFreeUser = currentUser ? !currentUser.isPremium : true;
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
@@ -79,8 +82,16 @@ export default function TvShowDetailPage() {
         setActors([]);
         setSeasonEpisodesCache({});
         // Chỉ reset season/episode khi navigate sang show khác (không phải reload)
-        if (!location.state?.selectedSeason && !sessionStorage.getItem(`tvshow_${id}_season`)) setSelectedSeason(null);
-        if (!location.state?.selectedEpisode && !sessionStorage.getItem(`tvshow_${id}_episode`)) setSelectedEpisode(null);
+        if (
+          !location.state?.selectedSeason &&
+          !sessionStorage.getItem(`tvshow_${id}_season`)
+        )
+          setSelectedSeason(null);
+        if (
+          !location.state?.selectedEpisode &&
+          !sessionStorage.getItem(`tvshow_${id}_episode`)
+        )
+          setSelectedEpisode(null);
         setEpisodeDetail(null);
 
         const [tvRes, trendingRes] = await Promise.all([
@@ -95,15 +106,14 @@ export default function TvShowDetailPage() {
         const tvData = tvEnvelope?.data ?? tvEnvelope;
 
         // BE không trả seasons array → generate từ numberOfSeasons
-        const patchedSeasons =
-          tvData?.seasons?.length
-            ? tvData.seasons
-            : Array.from({ length: tvData?.numberOfSeasons ?? 0 }, (_, i) => ({
-                seasonNumber: i + 1,
-                name: `Mùa ${i + 1}`,
-                episodeCount: null,
-                airDate: null,
-              }));
+        const patchedSeasons = tvData?.seasons?.length
+          ? tvData.seasons
+          : Array.from({ length: tvData?.numberOfSeasons ?? 0 }, (_, i) => ({
+              seasonNumber: i + 1,
+              name: `Mùa ${i + 1}`,
+              episodeCount: null,
+              airDate: null,
+            }));
         setTvShow({ ...tvData, seasons: patchedSeasons });
 
         // Cast
@@ -163,7 +173,9 @@ export default function TvShowDetailPage() {
       // Nếu có episode đang chọn, fill episodeDetail từ cache
       if (selectedEpisode) {
         const ep = seasonEpisodesCache[sn].find(
-          (e) => e.episodeNumber === (selectedEpisode.episodeNumber ?? selectedEpisode.number),
+          (e) =>
+            e.episodeNumber ===
+            (selectedEpisode.episodeNumber ?? selectedEpisode.number),
         );
         if (ep) setEpisodeDetail(ep);
       }
@@ -178,8 +190,12 @@ export default function TvShowDetailPage() {
         // Tự động chọn episode đang pending (nếu có) hoặc tập 1
         const targetEp = selectedEpisode
           ? (episodes.find(
-              (e) => e.episodeNumber === (selectedEpisode.episodeNumber ?? selectedEpisode.number),
-            ) ?? episodes[0] ?? null)
+              (e) =>
+                e.episodeNumber ===
+                (selectedEpisode.episodeNumber ?? selectedEpisode.number),
+            ) ??
+            episodes[0] ??
+            null)
           : (episodes[0] ?? null);
 
         if (targetEp) {
@@ -198,7 +214,7 @@ export default function TvShowDetailPage() {
           setEpisodeDetail(null);
         }
       } catch (e) {
-        console.error('[TvShowDetailPage] getSeason:', e);
+        console.error("[TvShowDetailPage] getSeason:", e);
         setEpisodeDetail(selectedEpisode ?? null);
       } finally {
         setLoadingEpisode(false);
@@ -213,7 +229,9 @@ export default function TvShowDetailPage() {
     const cached = seasonEpisodesCache[sn];
     if (!cached) return; // season effect sẽ handle
     const ep = cached.find(
-      (e) => e.episodeNumber === (selectedEpisode.episodeNumber ?? selectedEpisode.number),
+      (e) =>
+        e.episodeNumber ===
+        (selectedEpisode.episodeNumber ?? selectedEpisode.number),
     );
     if (ep) setEpisodeDetail(ep);
   }, [selectedEpisode?.episodeNumber]);
@@ -238,7 +256,7 @@ export default function TvShowDetailPage() {
       if (full) setEpisodeDetail(full);
       else setEpisodeDetail(episode);
     } catch (e) {
-      console.error('[TvShowDetailPage] getEpisode:', e);
+      console.error("[TvShowDetailPage] getEpisode:", e);
       setEpisodeDetail(episode);
     } finally {
       setLoadingEpisode(false);
@@ -259,10 +277,10 @@ export default function TvShowDetailPage() {
     );
     if (!next) return null;
     return {
-      id:            next.id,
+      id: next.id,
       episodeNumber: next.episodeNumber ?? next.number,
-      name:          next.title ?? next.name ?? null,
-      stillUrl:      next.stillUrl ?? next.still_path ?? null,
+      name: next.title ?? next.name ?? null,
+      stillUrl: next.stillUrl ?? next.still_path ?? null,
     };
   }, [selectedSeason, currentEp?.id, seasonEpisodesCache]);
 
@@ -396,7 +414,11 @@ export default function TvShowDetailPage() {
                       borderTopColor: "transparent",
                     }}
                     animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 0.8,
+                      ease: "linear",
+                    }}
                   />
                 </div>
               ) : (
@@ -405,6 +427,7 @@ export default function TvShowDetailPage() {
                   tvShow={tvShow}
                   nextEpisode={nextEpisode}
                   onNextEpisode={nextEpisode ? handleNextEpisode : null}
+                  isFreeUser={isFreeUser}
                 />
               )}
             </motion.div>
@@ -585,7 +608,13 @@ export default function TvShowDetailPage() {
                         </p>
                       </div>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 40,
+                        }}
+                      >
                         <div>
                           <SectionTitle>Diễn Viên Nổi Bật</SectionTitle>
                           <PersonScrollRow people={actors} />
@@ -609,12 +638,14 @@ export default function TvShowDetailPage() {
                       tvShowId={id}
                       reviewMode="episode"
                       activeEpisodeId={episodeDetail?.id ?? null}
-                      episodes={Object.values(seasonEpisodesCache).flat().map((ep) => ({
-                        id: ep.id,
-                        seasonNumber: ep.seasonNumber ?? ep.season ?? 1,
-                        episodeNumber: ep.episodeNumber ?? ep.number,
-                        title: ep.title ?? ep.name ?? null,
-                      }))}
+                      episodes={Object.values(seasonEpisodesCache)
+                        .flat()
+                        .map((ep) => ({
+                          id: ep.id,
+                          seasonNumber: ep.seasonNumber ?? ep.season ?? 1,
+                          episodeNumber: ep.episodeNumber ?? ep.number,
+                          title: ep.title ?? ep.name ?? null,
+                        }))}
                       voteCount={tvShow?.voteCount}
                       currentUser={currentUser}
                     />
@@ -679,7 +710,10 @@ export default function TvShowDetailPage() {
                         ],
                         [
                           "Diễn viên chính",
-                          actors.slice(0, 3).map((a) => a.name).join(", ") || "—",
+                          actors
+                            .slice(0, 3)
+                            .map((a) => a.name)
+                            .join(", ") || "—",
                         ],
                       ].map(([label, value]) => (
                         <div

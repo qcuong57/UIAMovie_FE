@@ -71,6 +71,34 @@ export const PALETTE = [
   '#BE185D', '#0E7490', '#5B21B6', '#92400E', '#166534',
 ];
 
+// ── Ad Schedule Constants ─────────────────────────────────────────
+export const AD_CONTENT_TYPES = [
+  { value: 'Movie',   label: 'Phim' },
+  { value: 'TvShow',  label: 'TV Show' },
+  { value: 'Episode', label: 'Tập phim' },
+];
+
+export const AD_POSITIONS = [
+  {
+    value: 'PreRoll',
+    label: 'Pre-Roll',
+    desc: 'Phát trước khi bắt đầu video',
+    color: '#2563EB', bg: '#EFF6FF', border: 'rgba(37,99,235,0.2)',
+  },
+  {
+    value: 'MidRoll',
+    label: 'Mid-Roll',
+    desc: 'Phát giữa chừng, chỉ định thời điểm',
+    color: '#D97706', bg: '#FFFBEB', border: 'rgba(217,119,6,0.2)',
+  },
+  {
+    value: 'PostRoll',
+    label: 'Post-Roll',
+    desc: 'Phát sau khi kết thúc video',
+    color: '#7C3AED', bg: '#F5F3FF', border: 'rgba(124,58,237,0.2)',
+  },
+];
+
 // ── Missing Content Badge Tags ────────────────────────────────────
 export const MISSING_TAGS = {
   _missingPoster:  { label: 'Poster',     color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },

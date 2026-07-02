@@ -50,6 +50,20 @@ const LANGUAGES = [
 
 const STATUS = { READY: 0, PROCESSING: 1, FAILED: 2 };
 
+// BE có thể trả status dạng số (0/1/2) hoặc dạng chuỗi ("Ready"/"Processing"/"Failed")
+// tuỳ cấu hình serializer (JsonStringEnumConverter hay không).
+// Chuẩn hoá về số để so sánh nhất quán trong toàn bộ component.
+const STATUS_STR_MAP = {
+  ready: STATUS.READY,
+  processing: STATUS.PROCESSING,
+  failed: STATUS.FAILED,
+};
+const normalizeStatus = (status) => {
+  if (typeof status === 'number') return status;
+  if (typeof status === 'string') return STATUS_STR_MAP[status.toLowerCase()] ?? status;
+  return status;
+};
+
 const getLangName = (code) =>
   LANGUAGES.find(l => l.code === code)?.name ?? code?.toUpperCase() ?? '—';
 
@@ -62,6 +76,7 @@ const formatDate = (d) =>
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
+  status = normalizeStatus(status);
   const cfg = {
     [STATUS.READY]:      { label: 'Sẵn sàng',   color: T.accent, bg: T.accentLight, icon: CheckCircle2 },
     [STATUS.PROCESSING]: { label: 'Đang xử lý', color: T.blue,   bg: T.blueLight,   icon: Loader2 },
@@ -277,7 +292,7 @@ function TranslateTab({ episodeId, subtitles, onRefresh }) {
   const [error,      setError]      = useState('');
   const [info,       setInfo]       = useState('');
 
-  const readySubtitles = subtitles.filter(s => s.status === STATUS.READY);
+  const readySubtitles = subtitles.filter(s => normalizeStatus(s.status) === STATUS.READY);
 
   const handleTranslate = async () => {
     if (!sourceId)   { setError('Chọn subtitle gốc'); return; }
@@ -411,8 +426,8 @@ function SubtitleRow({ subtitle, episodeId, onSetDefault, onDelete, onStatusUpda
   const [deleting,    setDeleting]    = useState(false);
   const [settingDef,  setSettingDef]  = useState(false);
   const [modalOpen,   setModalOpen]   = useState(false);
-  const isProcessing = subtitle.status === STATUS.PROCESSING;
-  const canEdit      = subtitle.status === STATUS.READY;
+  const isProcessing = normalizeStatus(subtitle.status) === STATUS.PROCESSING;
+  const canEdit      = normalizeStatus(subtitle.status) === STATUS.READY;
 
   // Auto-poll khi đang processing
   useEffect(() => {
@@ -422,7 +437,7 @@ function SubtitleRow({ subtitle, episodeId, onSetDefault, onDelete, onStatusUpda
       try {
         const status = await episodeSubtitleService.getSubtitleStatus(episodeId, subtitle.id);
         if (!cancelled) onStatusUpdate(subtitle.id, status);
-        if (!cancelled && status.status === STATUS.PROCESSING) setTimeout(poll, 3000);
+        if (!cancelled && normalizeStatus(status.status) === STATUS.PROCESSING) setTimeout(poll, 3000);
       } catch { /* silent */ }
     };
     const t = setTimeout(poll, 3000);
@@ -631,7 +646,7 @@ export default function EpisodeSubtitlePanel({ episodeId }) {
     s.id === id ? { ...s, status: status.status, errorMessage: status.errorMessage } : s
   ));
 
-  const processingCount = subtitles.filter(s => s.status === STATUS.PROCESSING).length;
+  const processingCount = subtitles.filter(s => normalizeStatus(s.status) === STATUS.PROCESSING).length;
 
   return (
     <div style={{ fontFamily: FONT }}>

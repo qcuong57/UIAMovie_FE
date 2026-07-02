@@ -116,6 +116,11 @@ const paymentService = {
     }
   },
 
+  cancelMySubscription: async () => {
+  const res = await axiosInstance.delete('/payments/subscription/me');
+  return res.data?.data ?? res.data;
+},
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   /**

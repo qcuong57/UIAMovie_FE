@@ -1,10 +1,18 @@
 // src/components/tvshow/EpisodeVideoPlayer.jsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import tvShowService from "../../../services/tvShowService";
 import episodeSubtitleService from "../../../services/episodeSubtitleService";
+import { useAdManager } from "../../../hooks/useAdManager";
+import AdOverlay from "../shared/AdOverlay";
 import {
   Play,
   Pause,
@@ -14,11 +22,24 @@ import {
   SkipForward,
   SkipBack,
   Subtitles,
+  Check,
   Gauge,
   FastForward,
 } from "lucide-react";
 import { C } from "../ui/movieConstants";
 import NextEpisodeCountdown from "./NextEpisodeCountdown";
+
+// BE có thể trả status dạng số (0/1/2) hoặc dạng chuỗi ("Ready"/"Processing"/"Failed")
+// tuỳ cấu hình serializer. Chuẩn hoá về số để so sánh nhất quán.
+const SUBTITLE_STATUS_READY = 0;
+const normalizeSubtitleStatus = (status) => {
+  if (typeof status === "number") return status;
+  if (typeof status === "string") {
+    const map = { ready: 0, processing: 1, failed: 2 };
+    return map[status.toLowerCase()] ?? status;
+  }
+  return status;
+};
 
 // ── VTT / SRT parser → cue list [{start, end, text}] ────────────
 function parseCues(raw) {
@@ -36,20 +57,25 @@ function parseCues(raw) {
   while (i < lines.length) {
     const line = lines[i].trim();
     if (line.includes("-->")) {
-      const [startRaw, endRaw] = line.split("-->").map((s) => s.trim().split(" ")[0]);
+      const [startRaw, endRaw] = line
+        .split("-->")
+        .map((s) => s.trim().split(" ")[0]);
       const start = timeToSec(startRaw);
-      const end   = timeToSec(endRaw);
+      const end = timeToSec(endRaw);
       i++;
       const textLines = [];
       while (i < lines.length && lines[i].trim() !== "") {
         textLines.push(lines[i].trim());
         i++;
       }
-      const text = textLines.join("\n")
+      const text = textLines
+        .join("\n")
         .replace(/<[^>]+>/g, "")
         .replace(/\{[^}]+\}/g, "");
       if (text) cues.push({ start, end, text });
-    } else { i++; }
+    } else {
+      i++;
+    }
   }
   return cues;
 }
@@ -70,7 +96,13 @@ const fmtSecs = (s) => {
 
 // nextEpisode: { id, episodeNumber, name, stillUrl } | null
 // onNextEpisode: callback() khi muốn chuyển sang tập tiếp theo
-const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode = null }) => {
+const EpisodeVideoPlayer = ({
+  episode,
+  tvShow,
+  nextEpisode = null,
+  onNextEpisode = null,
+  isFreeUser = false,
+}) => {
   const isMobile = useIsMobile();
   const location = useLocation();
   const videoRef = useRef(null);
@@ -81,6 +113,7 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
   const hasResumedRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
+  const [videoReady, setVideoReady] = useState(false); // true sau khi video element fire canplay lần đầu
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [buffered, setBuffered] = useState(0);
@@ -120,11 +153,11 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
   }, []);
 
   // ── Subtitle state ──────────────────────────────────────────
-  const [subtitles,   setSubtitles]   = useState([]);   // EpisodeSubtitleDTO[]
-  const [selSubId,    setSelSubId]    = useState(null); // null = tắt
-  const [cues,        setCues]        = useState([]);   // parsed cues
-  const [activeCue,   setActiveCue]   = useState(null); // cue hiện tại
-  const [subLoading,  setSubLoading]  = useState(false);
+  const [subtitles, setSubtitles] = useState([]); // EpisodeSubtitleDTO[]
+  const [selSubId, setSelSubId] = useState(null); // null = tắt
+  const [cues, setCues] = useState([]); // parsed cues
+  const [activeCue, setActiveCue] = useState(null); // cue hiện tại
+  const [subLoading, setSubLoading] = useState(false);
   const [showSubMenu, setShowSubMenu] = useState(false);
   const subMenuRef = useRef(null);
   const currentTimeRef = useRef(0);
@@ -133,13 +166,9 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
   // secondsLeft: số giây còn lại của video (Infinity khi chưa có duration)
   const [secondsLeft, setSecondsLeft] = useState(Infinity);
 
-  // Resume từ WatchHistory — chỉ áp dụng khi đúng episode được resume
-  const resumeSeconds =
-    location.state?.resumeEpisodeId === episode?.id
-      ? (location.state?.resumeSeconds ?? 0)
-      : 0;
-
-  const videoSources = React.useMemo(() => {
+  // ── videoSources + videoUrl — hoist lên trước useAdManager ────
+  // (phải khai báo ở đây để truyền contentUrl vào hook)
+  const videoSources = useMemo(() => {
     // Ưu tiên episode.videos (array) nếu có
     if (episode?.videos?.length) {
       const main = episode.videos.filter((v) => v.videoType === "main");
@@ -154,16 +183,40 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
   }, [episode?.videos, episode?.videoUrl]);
 
   const videoUrl = videoSources[selSrc]?.videoUrl ?? null;
+
+  // ── Ad manager (hook dùng chung với MovieVideoPlayer) ────────
+  const adManager = useAdManager({
+    isFreeUser,
+    contentType: "Episode",
+    contentId: episode?.id ?? null,
+    parentId: tvShow?.id ?? null,
+    videoRef,
+    videoReady,
+    contentUrl: videoUrl,
+  });
+  const { triggerPostRoll, adProgress } = adManager;
+  // true khi đang phát quảng cáo — dùng để block seek/skip và đổi màu progress
+  const isAd = !!adManager.currentAd;
+
+  // Resume từ WatchHistory — chỉ áp dụng khi đúng episode được resume
+  const resumeSeconds =
+    location.state?.resumeEpisodeId === episode?.id
+      ? (location.state?.resumeSeconds ?? 0)
+      : 0;
   const totalSec = duration || (episode?.runtime ? episode.runtime * 60 : 0);
 
   // ── Fetch subtitle list khi episode thay đổi ─────────────────
   useEffect(() => {
     if (!episode?.id) return;
-    setSubtitles([]); setSelSubId(null); setCues([]); setActiveCue(null);
-    episodeSubtitleService.getSubtitles(episode.id)
+    setSubtitles([]);
+    setSelSubId(null);
+    setCues([]);
+    setActiveCue(null);
+    episodeSubtitleService
+      .getSubtitles(episode.id)
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
-        const ready = list.filter((s) => s.status === 0);
+        const ready = list.filter((s) => normalizeSubtitleStatus(s.status) === SUBTITLE_STATUS_READY);
         setSubtitles(ready);
         const def = ready.find((s) => s.isDefault);
         if (def) setSelSubId(def.id);
@@ -173,17 +226,27 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
 
   // ── Load content của subtitle được chọn ─────────────────────
   useEffect(() => {
-    if (!selSubId || !episode?.id) { setCues([]); setActiveCue(null); return; }
+    if (!selSubId || !episode?.id) {
+      setCues([]);
+      setActiveCue(null);
+      return;
+    }
     setSubLoading(true);
-    episodeSubtitleService.getSubtitleContent(episode.id, selSubId)
-      .then((dto) => { setCues(parseCues(dto?.content ?? "")); })
+    episodeSubtitleService
+      .getSubtitleContent(episode.id, selSubId)
+      .then((dto) => {
+        setCues(parseCues(dto?.content ?? ""));
+      })
       .catch(() => setCues([]))
       .finally(() => setSubLoading(false));
   }, [selSubId, episode?.id]);
 
   // ── Tìm cue active theo currentTime ─────────────────────────
   useEffect(() => {
-    if (!cues.length) { setActiveCue(null); return; }
+    if (!cues.length) {
+      setActiveCue(null);
+      return;
+    }
     const v = videoRef.current;
     if (!v) return;
     // Tính ngay activeCue từ currentTime hiện tại khi cues mới được load
@@ -197,7 +260,8 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
       setActiveCue((prev) => {
         if (prev === found) return prev;
         if (!prev && !found) return prev;
-        if (prev?.start === found?.start && prev?.end === found?.end) return prev;
+        if (prev?.start === found?.start && prev?.end === found?.end)
+          return prev;
         return found;
       });
     };
@@ -244,6 +308,7 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     v.pause();
     setPlaying(false);
     setProgress(0);
+    setVideoReady(false); // reset để preRoll effect chờ canplay mới
     hasResumedRef.current = false;
     v.load();
   }, [videoUrl]);
@@ -254,15 +319,17 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
   const saveProgress = useCallback(
     (pct, forceComplete = false) => {
       if (!tvShow?.id || !episode?.id || pct < 1) return;
-      const dur = videoRef.current?.duration || (episode?.runtime ? episode.runtime * 60 : 0);
+      const dur =
+        videoRef.current?.duration ||
+        (episode?.runtime ? episode.runtime * 60 : 0);
       const secs = Math.floor((pct / 100) * dur);
       if (secs < 1) return; // bỏ qua nếu tính ra 0 giây (duration chưa load)
       tvShowService
         .updateWatchProgress({
-          tvShowId:        tvShow.id,
-          episodeId:       episode.id,
+          tvShowId: tvShow.id,
+          episodeId: episode.id,
           progressSeconds: secs,
-          isCompleted:     forceComplete || pct >= 95,
+          isCompleted: forceComplete || pct >= 95,
         })
         .catch((e) => console.warn("[EpisodeVideoPlayer] saveProgress:", e));
     },
@@ -274,6 +341,13 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     if (!v) return;
 
     const onTimeUpdate = () => {
+      // Đang phát ad → v.currentTime/v.duration là của video ad (do hook
+      // swap src trên cùng videoRef), KHÔNG phải của phim. Bỏ qua để không
+      // ghi đè progress/secondsLeft của phim bằng số liệu của ad — nếu
+      // không, lúc ad gần kết thúc sẽ làm secondsLeft tụt xuống gần 0,
+      // khiến NextEpisodeCountdown tưởng phim sắp hết và nhảy lên ngay
+      // khi ad vừa xong.
+      if (adManager.isAdPlayingRef.current) return;
       if (!v.duration) return;
       const pct = (v.currentTime / v.duration) * 100;
       setProgress(pct);
@@ -281,12 +355,20 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
       // Cập nhật số giây còn lại để NextEpisodeCountdown dùng
       setSecondsLeft(v.duration - v.currentTime);
     };
-    const onDurationChange = () => setDuration(v.duration || 0);
+    const onDurationChange = () => {
+      if (adManager.isAdPlayingRef.current) return;
+      setDuration(v.duration || 0);
+    };
     const onProgress = () => {
+      if (adManager.isAdPlayingRef.current) return;
       if (!v.duration || !v.buffered.length) return;
       setBuffered((v.buffered.end(v.buffered.length - 1) / v.duration) * 100);
     };
     const onEnded = () => {
+      // Nếu đang trong ad break, hook tự xử lý qua listener trên videoRef
+      if (adManager.isAdPlayingRef.current) return;
+      // Thử trigger postroll trước — nếu có thì không show controls ngay
+      if (triggerPostRoll()) return;
       setPlaying(false);
       setShow(true);
       setSecondsLeft(0);
@@ -296,12 +378,17 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     // FIX: Lưu progress khi pause thay vì chỉ update state
     const onPause = () => {
       setPlaying(false);
-      saveProgress(progressRef.current);
+      // Không lưu progress khi ad đang chạy
+      if (!adManager.currentAd) saveProgress(progressRef.current);
     };
     const onCanPlay = () => {
-      if (hasResumedRef.current) return;
-      if (resumeSeconds > 0) v.currentTime = resumeSeconds;
-      hasResumedRef.current = true;
+      // Luôn set videoReady để trigger preRoll effect
+      setVideoReady(true);
+      // Resume chỉ chạy 1 lần
+      if (!hasResumedRef.current) {
+        if (resumeSeconds > 0) v.currentTime = resumeSeconds;
+        hasResumedRef.current = true;
+      }
     };
 
     v.addEventListener("timeupdate", onTimeUpdate);
@@ -321,7 +408,7 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
       v.removeEventListener("pause", onPause);
       v.removeEventListener("canplay", onCanPlay);
     };
-  }, [videoUrl, saveProgress, resumeSeconds]);
+  }, [videoUrl, saveProgress, resumeSeconds, triggerPostRoll]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -330,12 +417,12 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     v.muted = muted;
   }, [vol, muted]);
 
-  // Playback rate
+  // Playback rate — reset về 1x khi ad đang chạy
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.playbackRate = playbackRate;
-  }, [playbackRate]);
+    v.playbackRate = isAd ? 1 : playbackRate;
+  }, [playbackRate, isAd]);
 
   // FIX: Lưu định kỳ 15s (thay vì 30s) khi đang phát
   useEffect(() => {
@@ -343,7 +430,10 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
       clearInterval(saveTimerRef.current);
       return;
     }
-    saveTimerRef.current = setInterval(() => saveProgress(progressRef.current), 15_000);
+    saveTimerRef.current = setInterval(
+      () => saveProgress(progressRef.current),
+      15_000,
+    );
     return () => clearInterval(saveTimerRef.current);
   }, [playing, saveProgress]);
 
@@ -353,14 +443,15 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     () => () => {
       const v = videoRef.current;
       if (progressRef.current > 1 && tvShow?.id && episode?.id) {
-        const dur = v?.duration || (episode?.runtime ? episode.runtime * 60 : 0);
+        const dur =
+          v?.duration || (episode?.runtime ? episode.runtime * 60 : 0);
         if (dur < 1) return;
         tvShowService
           .updateWatchProgress({
-            tvShowId:        tvShow.id,
-            episodeId:       episode.id,
+            tvShowId: tvShow.id,
+            episodeId: episode.id,
             progressSeconds: Math.floor((progressRef.current / 100) * dur),
-            isCompleted:     progressRef.current >= 95,
+            isCompleted: progressRef.current >= 95,
           })
           .catch(() => {});
       }
@@ -411,7 +502,8 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
           setShowSubMenu((p) => !p);
           showKbHint("💬 Subtitles");
           break;
-        default: break;
+        default:
+          break;
       }
     };
     document.addEventListener("keydown", onKey);
@@ -425,8 +517,22 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
     const onTime = () => {
       const t = v.currentTime;
       const { introStart, introEnd, recapStart, recapEnd } = episode ?? {};
-      setShowSkipIntro(!!(introStart != null && introEnd != null && t >= introStart && t < introEnd));
-      setShowSkipRecap(!!(recapStart != null && recapEnd != null && t >= recapStart && t < recapEnd));
+      setShowSkipIntro(
+        !!(
+          introStart != null &&
+          introEnd != null &&
+          t >= introStart &&
+          t < introEnd
+        ),
+      );
+      setShowSkipRecap(
+        !!(
+          recapStart != null &&
+          recapEnd != null &&
+          t >= recapStart &&
+          t < recapEnd
+        ),
+      );
     };
     v.addEventListener("timeupdate", onTime);
     return () => v.removeEventListener("timeupdate", onTime);
@@ -487,6 +593,13 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
       : el.requestFullscreen?.();
   };
 
+  // Giá trị HIỂN THỊ trên thanh seekbar: khi đang ad, dùng % tiến độ của
+  // chính ad đó (adProgress) để thanh vàng vẫn chạy mượt theo ad; khi
+  // không phải ad, dùng progress thật của phim. Tách riêng khỏi state
+  // `progress` (vốn chỉ phản ánh tiến độ phim, được khoá lại trong lúc
+  // ad chạy để NextEpisodeCountdown/saveProgress không bị sai).
+  const displayProgress = isAd ? (adProgress ?? 0) : progress;
+
   const curSec = Math.floor((progress / 100) * totalSec);
   const backdropUrl = tmdbImg(episode?.stillUrl ?? tvShow?.backdropUrl ?? null);
 
@@ -520,538 +633,547 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
 
   return (
     <>
-    <style>{`
+      <style>{`
       :fullscreen .ep-subtitle-overlay,
       :-webkit-full-screen .ep-subtitle-overlay,
       :-moz-full-screen .ep-subtitle-overlay {
         bottom: 96px !important;
       }
     `}</style>
-    <div
-      ref={wrapRef}
-      style={{
-        position: "relative",
-        width: "100%",
-        borderRadius: 12,
-        overflow: "hidden",
-        aspectRatio: "16/9",
-        background: "#000",
-        cursor: show ? "default" : "none",
-      }}
-      onMouseMove={resetTimer}
-      onMouseLeave={() => !videoRef.current?.paused && setShow(false)}
-    >
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        preload="metadata"
-        playsInline
+      <div
+        ref={wrapRef}
         style={{
-          position: "absolute",
-          inset: 0,
+          position: "relative",
           width: "100%",
-          height: "100%",
-          objectFit: "contain",
+          borderRadius: 12,
+          overflow: "hidden",
+          aspectRatio: "16/9",
+          background: "#000",
+          cursor: show ? "default" : "none",
         }}
-        onClick={togglePlay}
-      />
-
-      {!playing && progress === 0 && backdropUrl && (
-        <img
-          src={backdropUrl}
-          alt=""
+        onMouseMove={resetTimer}
+        onMouseLeave={() => !videoRef.current?.paused && setShow(false)}
+      >
+        <video
+          ref={videoRef}
+          src={videoUrl} // ← luôn là contentUrl; hook swap src trực tiếp
+          preload="metadata"
+          playsInline
           style={{
             position: "absolute",
             inset: 0,
             width: "100%",
             height: "100%",
             objectFit: "contain",
-            pointerEvents: "none",
           }}
+          onClick={togglePlay}
         />
-      )}
 
-      {/* ── Keyboard hint toast ── */}
-      <AnimatePresence>
-        {kbHint && (
-          <motion.div
-            key={kbHint}
-            initial={{ opacity: 0, scale: 0.88 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.88 }}
-            transition={{ duration: 0.15 }}
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "rgba(0,0,0,0.72)",
-              backdropFilter: "blur(6px)",
-              borderRadius: 10,
-              padding: "10px 20px",
-              color: "#fff",
-              fontFamily: "'Nunito',sans-serif",
-              fontWeight: 800,
-              fontSize: 15,
-              pointerEvents: "none",
-              zIndex: 30,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {kbHint}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Skip Intro button ── */}
-      <AnimatePresence>
-        {showSkipIntro && (
-          <motion.button
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.2 }}
-            onClick={skipIntro}
-            style={{
-              position: "absolute",
-              bottom: show ? 80 : 20,
-              right: 20,
-              background: "rgba(20,20,20,0.88)",
-              backdropFilter: "blur(10px)",
-              border: "1.5px solid rgba(255,255,255,0.22)",
-              borderRadius: 8,
-              color: "#fff",
-              fontFamily: "'Nunito',sans-serif",
-              fontWeight: 800,
-              fontSize: 13,
-              padding: "8px 18px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              zIndex: 20,
-              transition: "bottom 0.25s ease",
-              letterSpacing: "0.02em",
-            }}
-          >
-            <FastForward size={14} /> Bỏ qua intro
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* ── Skip Recap button ── */}
-      <AnimatePresence>
-        {showSkipRecap && (
-          <motion.button
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.2 }}
-            onClick={skipRecap}
-            style={{
-              position: "absolute",
-              bottom: show ? 80 : 20,
-              right: 20,
-              background: "rgba(20,20,20,0.88)",
-              backdropFilter: "blur(10px)",
-              border: "1.5px solid rgba(255,255,255,0.22)",
-              borderRadius: 8,
-              color: "#fff",
-              fontFamily: "'Nunito',sans-serif",
-              fontWeight: 800,
-              fontSize: 13,
-              padding: "8px 18px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              zIndex: 20,
-              transition: "bottom 0.25s ease",
-              letterSpacing: "0.02em",
-            }}
-          >
-            <FastForward size={14} /> Bỏ qua recap
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* ── Next episode countdown (Netflix style) ── */}
-      {nextEpisode && onNextEpisode && (
-        <NextEpisodeCountdown
-          nextEpisode={nextEpisode}
-          secondsLeft={secondsLeft}
-          triggerAt={30}
-          countdownSecs={10}
-          onNext={onNextEpisode}
-          onDismiss={() => {}}
-        />
-      )}
-
-      {/* ── Subtitle cue overlay ── */}
-      <AnimatePresence>
-        {activeCue && selSubId && (
-          <motion.div
-            key={activeCue.start}
-            className="ep-subtitle-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-            style={{
-              position: "absolute",
-              bottom: show ? 78 : 24,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: "90%",
-              maxWidth: "90%",
-              textAlign: "center",
-              pointerEvents: "none",
-              transition: "bottom 0.25s ease",
-              zIndex: 10,
-            }}
-          >
-            {activeCue.text.split("\n").map((line, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  color: "#fff",
-                  fontFamily: "'Nunito', sans-serif",
-                  fontSize: isFullscreen ? "clamp(20px, 2.4vw, 48px)" : (isMobile ? 13 : 16),
-                  fontWeight: 700,
-                  lineHeight: 1.5,
-                  textShadow:
-                    "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 2px 8px rgba(0,0,0,0.85)",
-                  letterSpacing: "0.01em",
-                  WebkitFontSmoothing: "antialiased",
-                }}
-              >
-                {line}
-              </div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Center play/pause button — hiện khi pause, hoặc khi flash icon (Space/click) */}
-      <AnimatePresence>
-        {(!playing || centerIcon) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+        {!playing && progress === 0 && backdropUrl && (
+          <img
+            src={backdropUrl}
+            alt=""
             style={{
               position: "absolute",
               inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: !playing ? "rgba(0,0,0,0.28)" : "transparent",
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
               pointerEvents: "none",
             }}
-          >
+          />
+        )}
+
+        {/* ── Keyboard hint toast ── */}
+        <AnimatePresence>
+          {kbHint && (
             <motion.div
-              key={centerIcon ?? (playing ? "play" : "pause")}
-              initial={{ scale: 0.75, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.15, opacity: 0 }}
+              key={kbHint}
+              initial={{ opacity: 0, scale: 0.88 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.88 }}
+              transition={{ duration: 0.15 }}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                background: "rgba(0,0,0,0.72)",
+                backdropFilter: "blur(6px)",
+                borderRadius: 10,
+                padding: "10px 20px",
+                color: "#fff",
+                fontFamily: "'Nunito',sans-serif",
+                fontWeight: 800,
+                fontSize: 15,
+                pointerEvents: "none",
+                zIndex: 30,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {kbHint}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Skip Intro button — ẩn khi đang phát quảng cáo ── */}
+        <AnimatePresence>
+          {showSkipIntro && !isAd && (
+            <motion.button
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+              onClick={skipIntro}
+              style={{
+                position: "absolute",
+                bottom: show ? 80 : 20,
+                right: 20,
+                background: "rgba(20,20,20,0.88)",
+                backdropFilter: "blur(10px)",
+                border: "1.5px solid rgba(255,255,255,0.22)",
+                borderRadius: 8,
+                color: "#fff",
+                fontFamily: "'Nunito',sans-serif",
+                fontWeight: 800,
+                fontSize: 13,
+                padding: "8px 18px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                zIndex: 20,
+                transition: "bottom 0.25s ease",
+                letterSpacing: "0.02em",
+              }}
+            >
+              <FastForward size={14} /> Bỏ qua intro
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* ── Skip Recap button — ẩn khi đang phát quảng cáo ── */}
+        <AnimatePresence>
+          {showSkipRecap && !isAd && (
+            <motion.button
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+              onClick={skipRecap}
+              style={{
+                position: "absolute",
+                bottom: show ? 80 : 20,
+                right: 20,
+                background: "rgba(20,20,20,0.88)",
+                backdropFilter: "blur(10px)",
+                border: "1.5px solid rgba(255,255,255,0.22)",
+                borderRadius: 8,
+                color: "#fff",
+                fontFamily: "'Nunito',sans-serif",
+                fontWeight: 800,
+                fontSize: 13,
+                padding: "8px 18px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                zIndex: 20,
+                transition: "bottom 0.25s ease",
+                letterSpacing: "0.02em",
+              }}
+            >
+              <FastForward size={14} /> Bỏ qua recap
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* ── Next episode countdown (Netflix style) — ẩn khi đang phát quảng cáo ── */}
+        {nextEpisode && onNextEpisode && !isAd && (
+          <NextEpisodeCountdown
+            nextEpisode={nextEpisode}
+            secondsLeft={secondsLeft}
+            triggerAt={30}
+            countdownSecs={10}
+            onNext={onNextEpisode}
+            onDismiss={() => {}}
+          />
+        )}
+
+        {/* ── Subtitle cue overlay ── */}
+        <AnimatePresence>
+          {activeCue && selSubId && (
+            <motion.div
+              key={activeCue.start}
+              className="ep-subtitle-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              style={{
+                position: "absolute",
+                bottom: show ? 78 : 24,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "90%",
+                maxWidth: "90%",
+                textAlign: "center",
+                pointerEvents: "none",
+                transition: "bottom 0.25s ease",
+                zIndex: 10,
+              }}
+            >
+              {activeCue.text.split("\n").map((line, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    color: "#fff",
+                    fontFamily: "'Nunito', sans-serif",
+                    fontSize: isFullscreen
+                      ? "clamp(20px, 2.4vw, 48px)"
+                      : isMobile
+                        ? 13
+                        : 16,
+                    fontWeight: 700,
+                    lineHeight: 1.5,
+                    textShadow:
+                      "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 2px 8px rgba(0,0,0,0.85)",
+                    letterSpacing: "0.01em",
+                    WebkitFontSmoothing: "antialiased",
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Center play/pause button — hiện khi pause, hoặc khi flash icon (Space/click) */}
+        <AnimatePresence>
+          {(!playing || centerIcon) && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.92)",
+                position: "absolute",
+                inset: 0,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)",
-                pointerEvents: centerIcon ? "none" : "all",
-                backdropFilter: "blur(4px)",
-                cursor: centerIcon ? "default" : "pointer",
+                background: !playing ? "rgba(0,0,0,0.28)" : "transparent",
+                pointerEvents: "none",
               }}
-              onClick={centerIcon ? undefined : togglePlay}
             >
-              {(centerIcon === "pause" || (!centerIcon && !playing))
-                ? <Pause size={26} fill="#000" color="#000" />
-                : <Play size={26} fill="#000" color="#000" style={{ marginLeft: 3 }} />
-              }
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Controls overlay */}
-      <AnimatePresence>
-        {show && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)",
-              padding: isMobile ? "32px 14px 14px" : "56px 20px 18px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            {/* Progress bar */}
-            <div
-              onClick={seek}
-              className="ep-progress-bar"
-              style={{
-                position: "relative",
-                height: 4,
-                background: "rgba(255,255,255,0.18)",
-                borderRadius: 3,
-                cursor: "pointer",
-                transition: "height 0.15s ease",
-                marginBottom: 2,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.height = "6px"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.height = "4px"; }}
-            >
-              <div
+              <motion.div
+                key={centerIcon ?? (playing ? "play" : "pause")}
+                initial={{ scale: 0.75, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.15, opacity: 0 }}
+                transition={{ duration: 0.18 }}
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  height: "100%",
-                  width: `${buffered}%`,
-                  borderRadius: 3,
-                  background: "rgba(255,255,255,0.28)",
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  height: "100%",
-                  width: `${progress}%`,
-                  borderRadius: 3,
-                  background: C.accent,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: `${progress}%`,
-                  transform: "translate(-50%,-50%)",
-                  width: 13,
-                  height: 13,
+                  width: 64,
+                  height: 64,
                   borderRadius: "50%",
-                  background: "white",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+                  background: "rgba(255,255,255,0.92)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow:
+                    "0 4px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)",
+                  pointerEvents: centerIcon ? "none" : "all",
+                  backdropFilter: "blur(4px)",
+                  cursor: centerIcon ? "default" : "pointer",
                 }}
-              />
-            </div>
+                onClick={centerIcon ? undefined : togglePlay}
+              >
+                {centerIcon === "pause" || (!centerIcon && !playing) ? (
+                  <Pause size={26} fill="#000" color="#000" />
+                ) : (
+                  <Play
+                    size={26}
+                    fill="#000"
+                    color="#000"
+                    style={{ marginLeft: 3 }}
+                  />
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <div
+        {/* ── AD OVERLAY ───────────────────────────────────────────── */}
+        <AdOverlay adManager={adManager} showControls={show} />
+
+        {/* Controls overlay */}
+        <AnimatePresence>
+          {show && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                background:
+                  "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)",
+                padding: isMobile ? "32px 14px 14px" : "56px 20px 18px",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
+                flexDirection: "column",
+                gap: 10,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16 }}>
-                <button
-                  onClick={() => skipSec(-10)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: 0, display: "flex" }}
-                >
-                  <SkipBack size={18} />
-                </button>
-                <button
-                  onClick={togglePlay}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "white", padding: 0, display: "flex" }}
-                >
-                  {playing ? <Pause size={22} fill="white" /> : <Play size={22} fill="white" />}
-                </button>
-                <button
-                  onClick={() => skipSec(10)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: 0, display: "flex" }}
-                >
-                  <SkipForward size={18} />
-                </button>
+              {/* Progress bar */}
+              <div
+                onClick={isAd ? undefined : seek}
+                className="ep-progress-bar"
+                style={{
+                  position: "relative",
+                  height: 4,
+                  background: "rgba(255,255,255,0.18)",
+                  borderRadius: 3,
+                  cursor: isAd ? "default" : "pointer",
+                  transition: "height 0.15s ease",
+                  marginBottom: 2,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isAd) e.currentTarget.style.height = "6px";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.height = "4px";
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "100%",
+                    width: `${buffered}%`,
+                    borderRadius: 3,
+                    background: "rgba(255,255,255,0.28)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "100%",
+                    width: `${displayProgress}%`,
+                    borderRadius: 3,
+                    background: isAd ? "#FFD600" : C.accent,
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: `${displayProgress}%`,
+                    transform: "translate(-50%,-50%)",
+                    width: 13,
+                    height: 13,
+                    borderRadius: "50%",
+                    background: "white",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+                  }}
+                />
+              </div>
 
-                {!isMobile ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: isMobile ? 10 : 16,
+                  }}
+                >
+                  <button
+                    onClick={() => !isAd && skipSec(-10)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: isAd ? "default" : "pointer",
+                      color: "rgba(255,255,255,0.7)",
+                      padding: 0,
+                      display: "flex",
+                      opacity: isAd ? 0.25 : 1,
+                      transition: "opacity 0.2s",
+                    }}
+                  >
+                    <SkipBack size={18} />
+                  </button>
+                  <button
+                    onClick={togglePlay}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "white",
+                      padding: 0,
+                      display: "flex",
+                    }}
+                  >
+                    {playing ? (
+                      <Pause size={22} fill="white" />
+                    ) : (
+                      <Play size={22} fill="white" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => !isAd && skipSec(10)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: isAd ? "default" : "pointer",
+                      color: "rgba(255,255,255,0.7)",
+                      padding: 0,
+                      display: "flex",
+                      opacity: isAd ? 0.25 : 1,
+                      transition: "opacity 0.2s",
+                    }}
+                  >
+                    <SkipForward size={18} />
+                  </button>
+
+                  {!isMobile ? (
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <button
+                        onClick={() => setMuted(!muted)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "rgba(255,255,255,0.8)",
+                          padding: 0,
+                          display: "flex",
+                        }}
+                      >
+                        {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={muted ? 0 : vol}
+                        onChange={(e) => {
+                          setVol(+e.target.value);
+                          if (+e.target.value > 0) setMuted(false);
+                        }}
+                        style={{
+                          width: 72,
+                          accentColor: "white",
+                          cursor: "pointer",
+                        }}
+                      />
+                    </div>
+                  ) : (
                     <button
                       onClick={() => setMuted(!muted)}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.8)", padding: 0, display: "flex" }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "rgba(255,255,255,0.8)",
+                        padding: 0,
+                        display: "flex",
+                      }}
                     >
                       {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                     </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={muted ? 0 : vol}
-                      onChange={(e) => {
-                        setVol(+e.target.value);
-                        if (+e.target.value > 0) setMuted(false);
-                      }}
-                      style={{ width: 72, accentColor: "white", cursor: "pointer" }}
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setMuted(!muted)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.8)", padding: 0, display: "flex" }}
-                  >
-                    {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                  </button>
-                )}
+                  )}
 
-                <span
-                  style={{
-                    color: "rgba(255,255,255,0.65)",
-                    fontSize: 12,
-                    fontFamily: "'Nunito',sans-serif",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {fmtSecs(curSec)} / {fmtSecs(totalSec)}
-                </span>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {videoSources.length > 1 && (
-                  <select
-                    value={selSrc}
-                    onChange={(e) => setSelSrc(+e.target.value)}
+                  <span
                     style={{
-                      background: "rgba(0,0,0,0.6)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      color: "white",
-                      borderRadius: 4,
+                      color: "rgba(255,255,255,0.65)",
+                      fontSize: 12,
                       fontFamily: "'Nunito',sans-serif",
-                      fontSize: 11,
-                      padding: "3px 6px",
-                      cursor: "pointer",
-                      outline: "none",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {videoSources.map((s, i) => (
-                      <option key={i} value={i}>
-                        {s.quality ?? s.videoType ?? `Nguồn ${i + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* ── Speed button + dropdown ── */}
-                <div ref={speedMenuRef} style={{ position: "relative" }}>
-                  <button
-                    onClick={() => { setShowSpeedMenu((p) => !p); setShowSubMenu(false); }}
-                    title="Tốc độ phát"
-                    style={{
-                      background: playbackRate !== 1 ? "rgba(255,255,255,0.18)" : "none",
-                      border: playbackRate !== 1 ? "1px solid rgba(255,255,255,0.3)" : "none",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                      color: playbackRate !== 1 ? "#fff" : "rgba(255,255,255,0.65)",
-                      padding: "2px 6px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: "0.04em",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    <Gauge size={15} />
-                    {playbackRate !== 1 && <span>{playbackRate}x</span>}
-                  </button>
-
-                  <AnimatePresence>
-                    {showSpeedMenu && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                        transition={{ duration: 0.15 }}
-                        style={{
-                          position: "absolute",
-                          bottom: "calc(100% + 10px)",
-                          right: 0,
-                          background: "rgba(18,18,18,0.97)",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          borderRadius: 10,
-                          overflow: "hidden",
-                          minWidth: 120,
-                          boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
-                          zIndex: 50,
-                        }}
-                      >
-                        <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                          <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                            Tốc độ phát
-                          </p>
-                        </div>
-                        {SPEED_OPTIONS.map((rate) => (
-                          <button
-                            key={rate}
-                            onClick={() => { setPlaybackRate(rate); setShowSpeedMenu(false); }}
-                            style={{
-                              display: "flex", alignItems: "center", justifyContent: "space-between",
-                              width: "100%", padding: "9px 12px",
-                              background: playbackRate === rate ? "rgba(255,255,255,0.07)" : "none",
-                              border: "none", cursor: "pointer",
-                              fontFamily: "'Nunito',sans-serif", fontSize: 13,
-                              fontWeight: playbackRate === rate ? 700 : 500,
-                              color: playbackRate === rate ? "#fff" : "rgba(255,255,255,0.65)",
-                              textAlign: "left", transition: "background 0.12s",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = playbackRate === rate ? "rgba(255,255,255,0.07)" : "none"}
-                          >
-                            {rate === 1 ? "Bình thường" : `${rate}x`}
-                            {playbackRate === rate && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                    {fmtSecs(curSec)} / {fmtSecs(totalSec)}
+                  </span>
                 </div>
 
-                {/* ── CC button + dropdown ── */}
-                {subtitles.length > 0 && (
-                  <div ref={subMenuRef} style={{ position: "relative" }}>
-                    <button
-                      onClick={() => setShowSubMenu((p) => !p)}
-                      title="Phụ đề"
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {videoSources.length > 1 && (
+                    <select
+                      value={selSrc}
+                      onChange={(e) => setSelSrc(+e.target.value)}
                       style={{
-                        background: selSubId ? "rgba(255,255,255,0.18)" : "none",
-                        border: selSubId ? "1px solid rgba(255,255,255,0.3)" : "none",
+                        background: "rgba(0,0,0,0.6)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        color: "white",
+                        borderRadius: 4,
+                        fontFamily: "'Nunito',sans-serif",
+                        fontSize: 11,
+                        padding: "3px 6px",
+                        cursor: "pointer",
+                        outline: "none",
+                      }}
+                    >
+                      {videoSources.map((s, i) => (
+                        <option key={i} value={i}>
+                          {s.quality ?? s.videoType ?? `Nguồn ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* ── Speed button + dropdown ── */}
+                  <div ref={speedMenuRef} style={{ position: "relative" }}>
+                    <button
+                      onClick={() => {
+                        setShowSpeedMenu((p) => !p);
+                        setShowSubMenu(false);
+                      }}
+                      title="Tốc độ phát"
+                      style={{
+                        background:
+                          playbackRate !== 1
+                            ? "rgba(255,255,255,0.18)"
+                            : "none",
+                        border:
+                          playbackRate !== 1
+                            ? "1px solid rgba(255,255,255,0.3)"
+                            : "none",
                         borderRadius: 4,
                         cursor: "pointer",
-                        color: selSubId ? "#fff" : "rgba(255,255,255,0.65)",
-                        padding: selSubId ? "2px 6px" : 0,
+                        color:
+                          playbackRate !== 1
+                            ? "#fff"
+                            : "rgba(255,255,255,0.65)",
+                        padding: "4px",
                         display: "flex",
                         alignItems: "center",
-                        gap: 3,
+                        gap: 4,
+                        fontFamily: "'Nunito',sans-serif",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: "0.04em",
                         transition: "all 0.15s",
                       }}
                     >
-                      <Subtitles size={18} />
-                      {subLoading && (
-                        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)" }}>…</span>
-                      )}
+                      <Gauge size={15} />
+                      {playbackRate !== 1 && <span>{playbackRate}x</span>}
                     </button>
 
-                    {/* Dropdown menu */}
                     <AnimatePresence>
-                      {showSubMenu && (
+                      {showSpeedMenu && (
                         <motion.div
                           initial={{ opacity: 0, y: 6, scale: 0.96 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1065,86 +1187,306 @@ const EpisodeVideoPlayer = ({ episode, tvShow, nextEpisode = null, onNextEpisode
                             border: "1px solid rgba(255,255,255,0.12)",
                             borderRadius: 10,
                             overflow: "hidden",
-                            minWidth: 168,
+                            minWidth: 120,
                             boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
                             zIndex: 50,
                           }}
                         >
-                          {/* Header */}
-                          <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                            <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                              Phụ đề
+                          <div
+                            style={{
+                              padding: "8px 12px 6px",
+                              borderBottom: "1px solid rgba(255,255,255,0.08)",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontFamily: "'Nunito',sans-serif",
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "rgba(255,255,255,0.4)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                              }}
+                            >
+                              Tốc độ phát
                             </p>
                           </div>
-
-                          {/* Tắt phụ đề */}
-                          <button
-                            onClick={() => { setSelSubId(null); setCues([]); setActiveCue(null); setShowSubMenu(false); }}
-                            style={{
-                              display: "flex", alignItems: "center", justifyContent: "space-between",
-                              width: "100%", padding: "9px 12px",
-                              background: !selSubId ? "rgba(255,255,255,0.07)" : "none",
-                              border: "none", cursor: "pointer",
-                              fontFamily: "'Nunito',sans-serif", fontSize: 13, fontWeight: !selSubId ? 700 : 500,
-                              color: !selSubId ? "#fff" : "rgba(255,255,255,0.6)",
-                              textAlign: "left", transition: "background 0.12s",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = !selSubId ? "rgba(255,255,255,0.07)" : "none"}
-                          >
-                            Tắt phụ đề
-                            {!selSubId && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
-                          </button>
-
-                          {/* Danh sách ngôn ngữ */}
-                          {subtitles.map((s) => (
+                          {SPEED_OPTIONS.map((rate) => (
                             <button
-                              key={s.id}
-                              onClick={() => { setSelSubId(s.id); setShowSubMenu(false); }}
-                              style={{
-                                display: "flex", alignItems: "center", justifyContent: "space-between",
-                                width: "100%", padding: "9px 12px",
-                                background: selSubId === s.id ? "rgba(255,255,255,0.07)" : "none",
-                                border: "none", cursor: "pointer",
-                                fontFamily: "'Nunito',sans-serif", fontSize: 13,
-                                fontWeight: selSubId === s.id ? 700 : 500,
-                                color: selSubId === s.id ? "#fff" : "rgba(255,255,255,0.65)",
-                                textAlign: "left", gap: 8, transition: "background 0.12s",
+                              key={rate}
+                              onClick={() => {
+                                setPlaybackRate(rate);
+                                setShowSpeedMenu(false);
                               }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
-                              onMouseLeave={(e) => e.currentTarget.style.background = selSubId === s.id ? "rgba(255,255,255,0.07)" : "none"}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                width: "100%",
+                                padding: "9px 12px",
+                                background:
+                                  playbackRate === rate
+                                    ? "rgba(255,255,255,0.07)"
+                                    : "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontFamily: "'Nunito',sans-serif",
+                                fontSize: 13,
+                                fontWeight: playbackRate === rate ? 700 : 500,
+                                color:
+                                  playbackRate === rate
+                                    ? "#fff"
+                                    : "rgba(255,255,255,0.65)",
+                                textAlign: "left",
+                                transition: "background 0.12s",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background =
+                                  "rgba(255,255,255,0.07)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background =
+                                  playbackRate === rate
+                                    ? "rgba(255,255,255,0.07)"
+                                    : "none")
+                              }
                             >
-                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{
-                                  fontSize: 10, fontWeight: 800, padding: "1px 5px",
-                                  borderRadius: 4, background: "rgba(255,255,255,0.1)",
-                                  color: "rgba(255,255,255,0.5)", letterSpacing: "0.04em",
-                                }}>
-                                  {(s.languageCode ?? "??").toUpperCase()}
+                              {rate === 1 ? "Bình thường" : `${rate}x`}
+                              {playbackRate === rate && (
+                                <span style={{ color: C.accent, fontSize: 11 }}>
+                                  ✓
                                 </span>
-                                {s.languageName || s.languageCode}
-                              </span>
-                              {selSubId === s.id && <span style={{ color: C.accent, fontSize: 11 }}>✓</span>}
+                              )}
                             </button>
                           ))}
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
-                )}
 
-                <button
-                  onClick={toggleFullscreen}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: 0, display: "flex" }}
-                >
-                  <Maximize size={18} />
-                </button>
+                  {/* ── CC button + dropdown ── */}
+                  {subtitles.length > 0 && (
+                    <div ref={subMenuRef} style={{ position: "relative" }}>
+                      <button
+                        onClick={() => setShowSubMenu((p) => !p)}
+                        title="Phụ đề"
+                        style={{
+                          background: selSubId
+                            ? "rgba(255,255,255,0.18)"
+                            : "none",
+                          border: selSubId
+                            ? "1px solid rgba(255,255,255,0.3)"
+                            : "none",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          color: selSubId ? "#fff" : "rgba(255,255,255,0.65)",
+                          padding: "4px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 3,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <Subtitles size={18} />
+                        {subLoading && (
+                          <span
+                            style={{
+                              fontSize: 9,
+                              color: "rgba(255,255,255,0.5)",
+                            }}
+                          >
+                            …
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Dropdown menu */}
+                      <AnimatePresence>
+                        {showSubMenu && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                            transition={{ duration: 0.15 }}
+                            style={{
+                              position: "absolute",
+                              bottom: "calc(100% + 10px)",
+                              right: 0,
+                              background: "rgba(18,18,18,0.97)",
+                              border: "1px solid rgba(255,255,255,0.12)",
+                              borderRadius: 10,
+                              overflow: "hidden",
+                              minWidth: 168,
+                              boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                              zIndex: 50,
+                            }}
+                          >
+                            {/* Header */}
+                            <div
+                              style={{
+                                padding: "8px 12px 6px",
+                                borderBottom:
+                                  "1px solid rgba(255,255,255,0.08)",
+                              }}
+                            >
+                              <p
+                                style={{
+                                  fontFamily: "'Nunito',sans-serif",
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  color: "rgba(255,255,255,0.4)",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.08em",
+                                }}
+                              >
+                                Phụ đề
+                              </p>
+                            </div>
+
+                            {/* Tắt phụ đề */}
+                            <button
+                              onClick={() => {
+                                setSelSubId(null);
+                                setCues([]);
+                                setActiveCue(null);
+                                setShowSubMenu(false);
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                width: "100%",
+                                padding: "9px 12px",
+                                background: !selSubId
+                                  ? "rgba(255,255,255,0.07)"
+                                  : "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontFamily: "'Nunito',sans-serif",
+                                fontSize: 13,
+                                fontWeight: !selSubId ? 700 : 500,
+                                color: !selSubId
+                                  ? "#fff"
+                                  : "rgba(255,255,255,0.6)",
+                                textAlign: "left",
+                                transition: "background 0.12s",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background =
+                                  "rgba(255,255,255,0.07)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background = !selSubId
+                                  ? "rgba(255,255,255,0.07)"
+                                  : "none")
+                              }
+                            >
+                              Tắt phụ đề
+                              {!selSubId && (
+                                <span style={{ color: C.accent, fontSize: 11 }}>
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+
+                            {/* Danh sách ngôn ngữ */}
+                            {subtitles.map((s) => (
+                              <button
+                                key={s.id}
+                                onClick={() => {
+                                  setSelSubId(s.id);
+                                  setShowSubMenu(false);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  width: "100%",
+                                  padding: "9px 12px",
+                                  background:
+                                    selSubId === s.id
+                                      ? "rgba(255,255,255,0.07)"
+                                      : "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontFamily: "'Nunito',sans-serif",
+                                  fontSize: 13,
+                                  fontWeight: selSubId === s.id ? 700 : 500,
+                                  color:
+                                    selSubId === s.id
+                                      ? "#fff"
+                                      : "rgba(255,255,255,0.65)",
+                                  textAlign: "left",
+                                  gap: 8,
+                                  transition: "background 0.12s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.background =
+                                    "rgba(255,255,255,0.07)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.background =
+                                    selSubId === s.id
+                                      ? "rgba(255,255,255,0.07)"
+                                      : "none")
+                                }
+                              >
+                                <span
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      background: "rgba(255,255,255,0.1)",
+                                      color: "rgba(255,255,255,0.5)",
+                                      letterSpacing: "0.04em",
+                                    }}
+                                  >
+                                    {(s.languageCode ?? "??").toUpperCase()}
+                                  </span>
+                                  {s.languageName || s.languageCode}
+                                </span>
+                                {selSubId === s.id && (
+                                  <span
+                                    style={{ color: C.accent, fontSize: 11 }}
+                                  >
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={toggleFullscreen}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "rgba(255,255,255,0.7)",
+                      padding: "4px",
+                      display: "flex",
+                    }}
+                  >
+                    <Maximize size={18} />
+                  </button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </>
   );
 };

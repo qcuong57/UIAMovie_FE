@@ -50,6 +50,8 @@ export default function MovieDetailPage() {
     }
   });
 
+  const isFreeUser = currentUser ? !currentUser.isPremium : true;
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
@@ -199,7 +201,7 @@ export default function MovieDetailPage() {
               animate="show"
               transition={{ duration: 0.5 }}
             >
-              <MovieVideoPlayer movie={movie} />
+              <MovieVideoPlayer movie={movie} isFreeUser={isFreeUser} />
             </motion.div>
 
             {/* Title + meta + description */}

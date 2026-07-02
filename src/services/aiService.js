@@ -1,9 +1,13 @@
 // src/services/aiService.js
 // ─── AI Service — wrapper toàn bộ /api/ai/* ──────────────────────────────────
 //
-// v5 fixes:
-//   [FIX-1] getReviewSummary: đổi GET /ai/review-summary/{id} → POST /ai/review
-//           cho đúng với AiController.cs [HttpPost("review")]
+// v6 — TV Show support [v4 backend]:
+//   [NEW] chat: response shape thêm `tvshows` (TvShowSummaryDTO[]) khi intent = "tvshow"
+//   [NEW] getTvShowRecommendations: GET /ai/recommend/tvshows (yêu cầu auth)
+//   [NEW] smartSearchTvShows:       GET /ai/search/tvshows?q=
+//
+// Giữ nguyên từ v5:
+//   [FIX-1] getReviewSummary: POST /ai/review (không phải GET /ai/review-summary/{id})
 
 import axiosInstance from '../config/axios';
 
@@ -16,9 +20,15 @@ const aiService = {
 
   // ── POST /api/ai/chat ─────────────────────────────────────────────────────
   //
-  // @returns {Promise<{ reply: string, movies: MovieDTO[], intent: string, compareTable?: string }>}
+  // @returns {Promise<{
+  //   reply:        string,
+  //   movies:       MovieDTO[],       // có giá trị khi intent = "movie" | "mood" | "compare"
+  //   tvshows:      TvShowSummaryDTO[], // có giá trị khi intent = "tvshow"
+  //   intent:       string,           // "movie" | "tvshow" | "mood" | "compare" | "review" | "site"
+  //   compareTable: string | null,
+  // }>}
   //
-  // Backend trả: { success, data: { reply, movies, intent, compareTable? }, message }
+  // Backend trả: { success, data: { reply, movies, tvshows, intent, compareTable? }, message }
   chat: async (message, history = []) => {
     const res = await axiosInstance.post('/ai/chat', {
       message,
@@ -30,13 +40,17 @@ const aiService = {
     const data = unwrap(res);
     return {
       reply:        data?.reply        ?? 'Xin lỗi, tôi đang bận. Vui lòng thử lại.',
-      movies:       Array.isArray(data?.movies) ? data.movies : [],
+      movies:       Array.isArray(data?.movies)   ? data.movies   : [],
+      tvshows:      Array.isArray(data?.tvshows)  ? data.tvshows  : [],
       intent:       data?.intent       ?? 'movie',
       compareTable: data?.compareTable ?? null,
     };
   },
 
   // ── GET /api/ai/recommend ─────────────────────────────────────────────────
+  // Gợi ý phim lẻ dựa trên lịch sử xem — yêu cầu đăng nhập.
+  //
+  // @returns {Promise<{ movies: MovieDTO[], message: string }>}
   getRecommendations: async () => {
     const res  = await axiosInstance.get('/ai/recommend');
     const data = unwrap(res);
@@ -46,10 +60,40 @@ const aiService = {
     };
   },
 
+  // ── GET /api/ai/recommend/tvshows ─────────────────────────────────────────
+  // Gợi ý TV show/series dựa trên lịch sử xem — yêu cầu đăng nhập.
+  //
+  // @returns {Promise<{ tvshows: TvShowSummaryDTO[], message: string }>}
+  getTvShowRecommendations: async () => {
+    const res  = await axiosInstance.get('/ai/recommend/tvshows');
+    const data = unwrap(res);
+    return {
+      tvshows: Array.isArray(data) ? data : [],
+      message: res?.message ?? 'Gợi ý series cho bạn',
+    };
+  },
+
   // ── GET /api/ai/search?q=... ──────────────────────────────────────────────
+  // AI search phim lẻ bằng ngôn ngữ tự nhiên.
+  //
+  // @returns {Promise<MovieDTO[]>}
   smartSearch: async (query) => {
     if (!query?.trim()) return [];
     const res  = await axiosInstance.get('/ai/search', {
+      params: { q: query.trim() },
+    });
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
+  },
+
+  // ── GET /api/ai/search/tvshows?q=... ─────────────────────────────────────
+  // AI search TV show/series bằng ngôn ngữ tự nhiên.
+  // Luồng backend: basic search → nếu < 5 kết quả → gọi AI → merge.
+  //
+  // @returns {Promise<TvShowSummaryDTO[]>}
+  smartSearchTvShows: async (query) => {
+    if (!query?.trim()) return [];
+    const res  = await axiosInstance.get('/ai/search/tvshows', {
       params: { q: query.trim() },
     });
     const data = unwrap(res);
@@ -88,8 +132,7 @@ const aiService = {
 
   // ── POST /api/ai/review ───────────────────────────────────────────────────
   //
-  // [FIX-1] Đổi từ GET /ai/review-summary/{movieId} → POST /ai/review
-  //         cho đúng với AiController.cs: [HttpPost("review")]
+  // [FIX-1] POST /ai/review — đúng với AiController.cs [HttpPost("review")]
   //
   // @param  {string} movieId - UUID phim
   // @returns {Promise<{ movieId: string, summary: string }>}

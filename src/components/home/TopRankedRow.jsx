@@ -1,6 +1,6 @@
 // src/components/home/TopRankedRow.jsx
 // ─── Top 10: 5 phim/trang, không scroll nội bộ, poster xéo, hover đầy đủ ───
-// ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
+// ─── Hỗ trợ cả Movie lẫn TV Show — favorite API đồng bộ hoàn toàn ────────────
 
 import React, { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -27,6 +27,7 @@ import {
   FONT_BODY,
 } from "../../context/homeTokens";
 import movieService from "../../services/movieService";
+import tvShowService from "../../services/tvShowService";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
 
 // ── Premium helpers ──────────────────────────────────────────────
@@ -39,7 +40,7 @@ function userHasPremium(user) {
   return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
 }
 
-// FIX: Portal để modal thoát khỏi stacking context của motion.div (transform+zIndex)
+// Portal để modal thoát khỏi stacking context của motion.div (transform+zIndex)
 function ModalPortal({ children }) {
   return createPortal(children, document.body);
 }
@@ -93,26 +94,36 @@ const RankCard = ({
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
     if (favLoading) return;
-    // TV show chưa có favorite API → chỉ toggle local
-    if (item.isTvShow) {
-      setLocalFav((v) => !v);
-      onFavoriteToggle?.(item, !localFav);
-      return;
-    }
+
+    const prevFav = localFav;
+    const newFav = !localFav;
+
+    // Optimistic update — đổi UI ngay lập tức
+    setLocalFav(newFav);
+    onFavoriteToggle?.(item, newFav);
+
     setFavLoading(true);
     try {
-      if (localFav) {
-        await movieService.removeFavorite(item.id);
-        setLocalFav(false);
-        onFavoriteToggle?.(item, false);
+      if (item.isTvShow) {
+        // TV Show: gọi tvShowService
+        if (newFav) {
+          await tvShowService.addFavorite?.(item.id);
+        } else {
+          await tvShowService.removeFavorite?.(item.id);
+        }
       } else {
-        await movieService.addFavorite(item.id);
-        setLocalFav(true);
-        onFavoriteToggle?.(item, true);
-        navigate("/favorites");
+        // Movie: gọi movieService
+        if (newFav) {
+          await movieService.addFavorite(item.id);
+        } else {
+          await movieService.removeFavorite(item.id);
+        }
       }
     } catch (err) {
       console.error("Favorite toggle error:", err);
+      // Rollback nếu API lỗi
+      setLocalFav(prevFav);
+      onFavoriteToggle?.(item, prevFav);
     } finally {
       setFavLoading(false);
     }

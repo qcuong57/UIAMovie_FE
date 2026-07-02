@@ -11,6 +11,7 @@ import AdminUsers from "../../components/admin/AdminUsers";
 import AdminPersons from "../../components/admin/AdminPersons";
 import AdminTvShows from "../../components/admin/AdminTvShows";
 import AdminRevenue from "../../components/admin/AdminRevenue";
+import AdminAds from "../../components/admin/AdminAds";
 
 export default function AdminPage() {
   const [tab, setTab] = useState("dashboard");
@@ -26,6 +27,8 @@ export default function AdminPage() {
         return <AdminDashboard />;
       case "revenue":
         return <AdminRevenue />;
+      case "ads":
+        return <AdminAds />;
       case "movies":
         return <AdminMovies />;
         case "tvshows":

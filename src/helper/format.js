@@ -53,6 +53,14 @@ export const toArray = (r) => {
   return r.items ?? r.data?.items ?? r.data ?? [];
 };
 
+// ── Duration Formatter ─────────────────────────────────────────────────────────
+/** Chuyển giây sang dạng "Xs" hoặc "Xm Ys" */
+export const fmtDuration = (s) => {
+  if (!s) return '—';
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+};
+
 // ── Content / Video Helpers ────────────────────────────────────────────────────
 export const hasVideoType = (videos, type) =>
   Array.isArray(videos) &&
