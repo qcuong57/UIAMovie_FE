@@ -914,15 +914,15 @@ const EpisodeVideoPlayer = ({
                 }}
                 onClick={centerIcon ? undefined : togglePlay}
               >
-                {centerIcon === "pause" || (!centerIcon && !playing) ? (
-                  <Pause size={26} fill="#000" color="#000" />
-                ) : (
+                {centerIcon === "play" || (!centerIcon && !playing) ? (
                   <Play
                     size={26}
                     fill="#000"
                     color="#000"
                     style={{ marginLeft: 3 }}
                   />
+                ) : (
+                  <Pause size={26} fill="#000" color="#000" />
                 )}
               </motion.div>
             </motion.div>
