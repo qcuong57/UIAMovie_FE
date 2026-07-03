@@ -105,6 +105,15 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
   const [show, setShow] = useState(true);
   const [vol, setVol] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // "Fake fullscreen" cho iPhone Safari: iPhone không hỗ trợ Fullscreen API
+  // trên div, và `video.webkitEnterFullscreen()` (fullscreen gốc của iOS)
+  // sẽ đẩy CHỈ riêng <video> vào 1 layer native tách biệt khỏi cây DOM của
+  // trang — khiến phụ đề, AdOverlay, control bar (đều là sibling của
+  // <video>, không phải con) biến mất hoàn toàn. Giải pháp: không gọi
+  // webkitEnterFullscreen nữa, thay vào đó "giả lập" fullscreen bằng CSS —
+  // kéo dãn chính div wrapper (position: fixed, phủ kín viewport) để mọi
+  // overlay vẫn là con của nó và tiếp tục hiển thị bình thường.
+  const [isFakeFullscreen, setIsFakeFullscreen] = useState(false);
 
   // ── Playback speed ──────────────────────────────────────────
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -384,6 +393,18 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     };
   }, []);
 
+  // ── Khoá scroll nền khi đang ở "fake fullscreen" (iPhone) ────────────
+  // Vì đây không phải fullscreen thật (chỉ là div fixed phủ viewport),
+  // trang phía sau vẫn có thể cuộn được nếu không khoá overflow thủ công.
+  useEffect(() => {
+    if (!isFakeFullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFakeFullscreen]);
+
   // Auto-hide controls
   const resetTimer = useCallback(() => {
     setShow(true);
@@ -481,7 +502,15 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     const v = videoRef.current;
     if (!el) return;
 
-    // Đang ở fullscreen → thoát ra (thử cả 2 kiểu API)
+    // Đang ở "fake fullscreen" (iPhone) → thoát bằng cách tắt state, không
+    // có API fullscreen thật nào để gọi exit ở đây.
+    if (isFakeFullscreen) {
+      setIsFakeFullscreen(false);
+      setIsFullscreen(false);
+      return;
+    }
+
+    // Đang ở fullscreen chuẩn (Fullscreen API) → thoát ra (thử cả 2 kiểu API)
     if (document.fullscreenElement || document.webkitFullscreenElement) {
       if (document.exitFullscreen) document.exitFullscreen();
       else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -489,15 +518,19 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     }
 
     // iPhone Safari KHÔNG hỗ trợ Fullscreen API trên div (`el.requestFullscreen`
-    // undefined hoặc reject âm thầm) — chỉ iPad mới hỗ trợ. Trên iPhone, cách
-    // duy nhất để fullscreen là gọi thẳng `webkitEnterFullscreen()` của chính
-    // thẻ <video>. Ưu tiên thử chuẩn trước, fallback dần xuống API cũ hơn.
+    // sẽ là undefined) — chỉ iPad mới hỗ trợ. Trên iPhone, KHÔNG dùng
+    // `v.webkitEnterFullscreen()` nữa: API này chỉ fullscreen riêng thẻ
+    // <video> trong 1 layer native của iOS, khiến phụ đề và AdOverlay (vốn
+    // là sibling của <video>) bị ẩn mất hoàn toàn. Thay vào đó, giả lập
+    // fullscreen bằng CSS (div wrapper position: fixed phủ kín viewport) —
+    // mọi overlay vẫn nằm trong cùng cây DOM nên vẫn hiển thị bình thường.
     if (el.requestFullscreen) {
       el.requestFullscreen();
     } else if (el.webkitRequestFullscreen) {
       el.webkitRequestFullscreen();
-    } else if (v?.webkitEnterFullscreen) {
-      v.webkitEnterFullscreen();
+    } else {
+      setIsFakeFullscreen(true);
+      setIsFullscreen(true);
     }
   };
 
@@ -639,20 +672,29 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
       <style>{`
       :fullscreen .subtitle-overlay,
       :-webkit-full-screen .subtitle-overlay,
-      :-moz-full-screen .subtitle-overlay {
+      :-moz-full-screen .subtitle-overlay,
+      .mv-fake-fullscreen .subtitle-overlay {
         bottom: 96px !important;
       }
     `}</style>
       <div
         ref={wrapRef}
+        className={isFakeFullscreen ? "mv-fake-fullscreen" : undefined}
         style={{
-          position: "relative",
-          width: "100%",
-          borderRadius: 12,
+          position: isFakeFullscreen ? "fixed" : "relative",
+          top: isFakeFullscreen ? 0 : undefined,
+          left: isFakeFullscreen ? 0 : undefined,
+          width: isFakeFullscreen ? "100vw" : "100%",
+          height: isFakeFullscreen ? "100dvh" : undefined,
+          borderRadius: isFakeFullscreen ? 0 : 12,
           overflow: "hidden",
-          aspectRatio: "16/9",
+          aspectRatio: isFakeFullscreen ? "auto" : "16/9",
           background: "#000",
           cursor: show ? "default" : "none",
+          // z-index tối đa để đảm bảo nổi trên mọi header/navbar cố định
+          // của trang khi ở fake fullscreen (vì đây không phải fullscreen
+          // thật nên không tự nổi trên layer khác như Fullscreen API).
+          zIndex: isFakeFullscreen ? 2147483647 : undefined,
         }}
         onMouseMove={resetTimer}
         onMouseLeave={() => !videoRef.current?.paused && setShow(false)}
