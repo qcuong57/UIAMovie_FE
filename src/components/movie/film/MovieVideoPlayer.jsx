@@ -393,6 +393,31 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     };
   }, []);
 
+  // ── Chặn cử chỉ pinch kích hoạt native fullscreen video của iOS ──────
+  // ĐÂY LÀ NGUYÊN NHÂN THẬT của việc phụ đề/AdOverlay biến mất trên mobile
+  // thật (không phải do toggleFullscreen()/isFakeFullscreen ở trên).
+  // Từ iOS 11, Safari cho phép người dùng "pinch" (zoom 2 ngón) TRỰC TIẾP
+  // trên thẻ <video> để mở AVPlayer fullscreen gốc của hệ điều hành — cử
+  // chỉ này hoàn toàn độc lập với playsInline và với toggleFullscreen() tự
+  // viết, nên không cách nào chặn được qua state hay logic fullscreen phía
+  // trên. Vì native player đó chỉ render riêng <video>, mọi sibling của nó
+  // (phụ đề .subtitle-overlay, AdOverlay, control bar) bị loại khỏi layer
+  // hiển thị → biến mất, dù logic "fake fullscreen" hoàn toàn không chạy.
+  // `gesturestart`/`gesturechange` là sự kiện riêng của WebKit bắn ra khi
+  // bắt đầu cử chỉ đa điểm chạm (pinch) — gọi preventDefault() để chặn
+  // hành vi mặc định (mở native fullscreen) mà không ảnh hưởng tap/click.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const preventPinchFullscreen = (e) => e.preventDefault();
+    v.addEventListener("gesturestart", preventPinchFullscreen);
+    v.addEventListener("gesturechange", preventPinchFullscreen);
+    return () => {
+      v.removeEventListener("gesturestart", preventPinchFullscreen);
+      v.removeEventListener("gesturechange", preventPinchFullscreen);
+    };
+  }, []);
+
   // ── Khoá scroll nền khi đang ở "fake fullscreen" (iPhone) ────────────
   // Vì đây không phải fullscreen thật (chỉ là div fixed phủ viewport),
   // trang phía sau vẫn có thể cuộn được nếu không khoá overflow thủ công.
@@ -712,6 +737,11 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
             width: "100%",
             height: "100%",
             objectFit: "contain",
+            // Lớp phòng vệ CSS bổ sung cho việc chặn pinch ở effect phía trên —
+            // touch-action: manipulation tắt double-tap-zoom mặc định của trình
+            // duyệt trên phần tử này (không tắt hoàn toàn pinch nhưng giảm khả
+            // năng trình duyệt "nuốt" cử chỉ trước khi tới JS listener).
+            touchAction: "manipulation",
           }}
           onClick={togglePlay}
         />
