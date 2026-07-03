@@ -227,19 +227,39 @@ export function useAdManager({
     };
   }, [currentAd, onAdEnded, videoRef]);
 
-  // ── Trigger PreRoll khi allAds có + video sẵn sàng ──────────
-  useEffect(() => {
-    if (!allAds || preRollFiredRef.current) return;
-    if (!allAds.preRoll?.length) {
+  // ── PreRoll: KHÔNG tự động trigger qua useEffect ────────────
+  // LƯU Ý QUAN TRỌNG (iOS Safari): video.play() chỉ được phép chạy mà
+  // không bị chặn khi nó nằm trong cùng call stack đồng bộ với 1 user
+  // gesture thật (click/tap). Nếu preroll tự bắn ra từ useEffect (phản
+  // ứng theo videoReady) mà không có gesture nào, Safari/iOS sẽ reject
+  // play() ÂM THẦM (không throw lỗi rõ ràng) — video/ad kẹt cứng, không
+  // phát được gì, dù Chrome desktop vẫn chạy bình thường (policy autoplay
+  // của desktop khoan dung hơn).
+  //
+  // Thay vào đó, component cha PHẢI gọi tryStartPreRoll() ngay bên trong
+  // handler của lần tap Play đầu tiên (vd onClick nút Play / onClick video)
+  // — KHÔNG qua setTimeout/Promise.then/useEffect — để play() của ad vẫn
+  // còn nằm trong cùng "user activation" của cú tap đó.
+  //
+  // Trả về true nếu đã bắt đầu phát 1 ad break (component cha không cần
+  // tự gọi v.play() cho content nữa — playAdOnVideo đã swap src + play()).
+  // Trả về false nếu không có preroll (hoặc đã fire rồi) — component cha
+  // tự gọi v.play() cho content như bình thường.
+  const tryStartPreRoll = useCallback(() => {
+    if (preRollFiredRef.current) return false;
+    // allAds chưa load kịp lúc user tap (fetch ads thường rất nhanh so với
+    // thời gian user chờ video buffer, nhưng vẫn có thể race) — chấp nhận
+    // bỏ qua preroll cho lượt xem này thay vì giữ video treo chờ, vì chờ
+    // rồi tự động play() sau đó lại quay về đúng vấn đề autoplay-without-
+    // gesture ban đầu.
+    if (!allAds?.preRoll?.length) {
       preRollFiredRef.current = true;
-      return;
+      return false;
     }
-    if (!videoReady) return;
-
     preRollFiredRef.current = true;
     mainResumeTimeRef.current = 0;
-    playNextAd([...allAds.preRoll], "preroll");
-  }, [allAds, playNextAd, videoReady]);
+    return playNextAd([...allAds.preRoll], "preroll");
+  }, [allAds, playNextAd]);
 
   // ── MidRoll: check khi video chính đang chạy ────────────────
   // BUG FIX: trước đây chỉ check `currentTime >= offsetSeconds` trên mỗi
@@ -328,5 +348,6 @@ export function useAdManager({
     // actions
     triggerPostRoll,
     skipAd,
+    tryStartPreRoll,
   };
 }

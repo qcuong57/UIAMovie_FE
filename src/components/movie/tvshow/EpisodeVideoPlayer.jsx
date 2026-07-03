@@ -194,9 +194,26 @@ const EpisodeVideoPlayer = ({
     videoReady,
     contentUrl: videoUrl,
   });
-  const { triggerPostRoll, adProgress } = adManager;
+  const { triggerPostRoll, adProgress, tryStartPreRoll } = adManager;
   // true khi đang phát quảng cáo — dùng để block seek/skip và đổi màu progress
   const isAd = !!adManager.currentAd;
+
+  // ── Bắt đầu playback (content hoặc preroll) ───────────────────
+  // BẮT BUỘC dùng hàm này ở MỌI nơi thay vì gọi v.play() trực tiếp khi
+  // đang paused (nút play giữa màn hình, tap video, phím Space/K). Lý do:
+  // tryStartPreRoll() cần được gọi ĐỒNG BỘ, ngay bên trong call stack của
+  // user gesture (click/tap) — nếu preroll ads có, nó swap src sang ad rồi
+  // gọi play() ngay trong gesture đó, thỏa policy autoplay của iOS Safari.
+  // Gọi play() cho ad qua useEffect/async (như code cũ) khiến iOS reject
+  // play() âm thầm vì không còn nằm trong "user activation" nữa.
+  const startPlayback = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (tryStartPreRoll()) return; // đã swap sang ad + play() bên trong
+    v.play().catch((err) =>
+      console.warn("[EpisodeVideoPlayer] play() failed:", err),
+    );
+  }, [tryStartPreRoll]);
 
   // Resume từ WatchHistory — chỉ áp dụng khi đúng episode được resume
   const resumeSeconds =
@@ -474,7 +491,7 @@ const EpisodeVideoPlayer = ({
           // togglePlay().
           if (isAd) break;
           if (v.paused) {
-            v.play().catch((err) => console.warn("[EpisodeVideoPlayer] play() failed:", err));
+            startPlayback();
             flashCenterIcon("play");
           } else {
             v.pause();
@@ -516,7 +533,7 @@ const EpisodeVideoPlayer = ({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showKbHint, flashCenterIcon, isAd]);
+  }, [showKbHint, flashCenterIcon, isAd, startPlayback]);
 
   // ── Skip Intro / Recap visibility ────────────────────────────
   useEffect(() => {
@@ -580,10 +597,10 @@ const EpisodeVideoPlayer = ({
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
-      // Safari iOS có thể reject play() âm thầm nếu readyState chưa đủ
-      // (đặc biệt khi video chưa tải xong metadata) — bắt lỗi để không mất
-      // dấu vết và tránh trạng thái treo (center-icon đổi nhưng video vẫn pause).
-      v.play().catch((err) => console.warn("[EpisodeVideoPlayer] play() failed:", err));
+      // Dùng startPlayback() thay vì gọi v.play() trực tiếp — nếu đây là
+      // lần play đầu tiên và có preroll ads, cần swap+play() ad ngay trong
+      // gesture này (xem giải thích ở khai báo startPlayback phía trên).
+      startPlayback();
       flashCenterIcon("play");
     } else {
       v.pause();
