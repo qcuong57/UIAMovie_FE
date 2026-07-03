@@ -309,15 +309,35 @@ const EpisodeVideoPlayer = ({
   }, [showSpeedMenu]);
 
   // ── Track fullscreen state ───────────────────────────────────
+  // iPhone Safari KHÔNG hỗ trợ Fullscreen API (`requestFullscreen`) trên
+  // element bất kỳ (div) — chỉ hỗ trợ trên iPad. Trên iPhone, cách fullscreen
+  // duy nhất là gọi `videoEl.webkitEnterFullscreen()` (API riêng của
+  // WebKit, chỉ tồn tại trên <video>) — và nó bắn ra sự kiện riêng
+  // `webkitbeginfullscreen`/`webkitendfullscreen` trên chính <video>, KHÔNG
+  // phải `fullscreenchange` trên document. Phải lắng nghe cả 2 loại để
+  // isFullscreen luôn đúng trên mọi thiết bị.
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFsChange = () =>
+      setIsFullscreen(
+        !!(document.fullscreenElement || document.webkitFullscreenElement),
+      );
     document.addEventListener("fullscreenchange", onFsChange);
     document.addEventListener("webkitfullscreenchange", onFsChange);
+
+    const v = videoRef.current;
+    const onIosBegin = () => setIsFullscreen(true);
+    const onIosEnd = () => setIsFullscreen(false);
+    v?.addEventListener("webkitbeginfullscreen", onIosBegin);
+    v?.addEventListener("webkitendfullscreen", onIosEnd);
+
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
       document.removeEventListener("webkitfullscreenchange", onFsChange);
+      v?.removeEventListener("webkitbeginfullscreen", onIosBegin);
+      v?.removeEventListener("webkitendfullscreen", onIosEnd);
     };
   }, []);
+
 
   useEffect(() => {
     const v = videoRef.current;
@@ -623,10 +643,28 @@ const EpisodeVideoPlayer = ({
 
   const toggleFullscreen = () => {
     const el = wrapRef.current;
+    const v = videoRef.current;
     if (!el) return;
-    document.fullscreenElement
-      ? document.exitFullscreen()
-      : el.requestFullscreen?.();
+
+    // Đang ở fullscreen → thoát ra (thử cả 2 kiểu API)
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+
+    // iPhone Safari KHÔNG hỗ trợ Fullscreen API trên div (`el.requestFullscreen`
+    // sẽ là undefined hoặc reject âm thầm) — chỉ iPad mới hỗ trợ. Trên iPhone,
+    // cách duy nhất để fullscreen là gọi thẳng `webkitEnterFullscreen()` của
+    // chính thẻ <video>, đây là API riêng của WebKit chỉ tồn tại trên video.
+    // Ưu tiên thử chuẩn trước, fallback dần xuống các API cũ hơn.
+    if (el.requestFullscreen) {
+      el.requestFullscreen();
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    } else if (v?.webkitEnterFullscreen) {
+      v.webkitEnterFullscreen();
+    }
   };
 
   // Giá trị HIỂN THỊ trên thanh seekbar: khi đang ad, dùng % tiến độ của

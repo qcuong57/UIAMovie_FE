@@ -164,9 +164,26 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     videoReady,
     contentUrl: videoUrl,
   });
-  const { triggerPostRoll } = adManager;
+  const { triggerPostRoll, tryStartPreRoll } = adManager;
   // true khi đang phát quảng cáo — dùng để block seek/skip và đổi màu progress
   const isAd = !!adManager.currentAd;
+
+  // ── Bắt đầu playback (content hoặc preroll) ───────────────────
+  // BẮT BUỘC dùng hàm này ở MỌI nơi thay vì gọi v.play() trực tiếp khi
+  // đang paused (nút play giữa màn hình, tap video, phím Space/K). Lý do:
+  // tryStartPreRoll() cần được gọi ĐỒNG BỘ, ngay bên trong call stack của
+  // user gesture (click/tap) — nếu preroll ads có, nó swap src sang ad rồi
+  // gọi play() ngay trong gesture đó, thỏa policy autoplay của iOS Safari.
+  // Gọi play() cho ad qua useEffect/async khiến iOS reject play() âm thầm
+  // vì không còn nằm trong "user activation" nữa (đồng bộ với EpisodeVideoPlayer).
+  const startPlayback = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (tryStartPreRoll()) return; // đã swap sang ad + play() bên trong
+    v.play().catch((err) =>
+      console.warn("[MovieVideoPlayer] play() failed:", err),
+    );
+  }, [tryStartPreRoll]);
 
   // ── Fetch subtitle list khi movie thay đổi ───────────────────
   useEffect(() => {
@@ -338,13 +355,32 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
   }, [playbackRate, isAd]);
 
   // Track fullscreen state
+  // iPhone Safari KHÔNG hỗ trợ Fullscreen API (`requestFullscreen`) trên
+  // element bất kỳ (div) — chỉ iPad mới có. Trên iPhone, cách fullscreen
+  // duy nhất là gọi `videoEl.webkitEnterFullscreen()` (API riêng WebKit,
+  // chỉ tồn tại trên <video>) — và nó bắn sự kiện riêng
+  // `webkitbeginfullscreen`/`webkitendfullscreen` trên chính <video>, KHÔNG
+  // phải `fullscreenchange` trên document. Lắng nghe cả 2 loại để
+  // isFullscreen luôn đúng trên mọi thiết bị (đồng bộ với EpisodeVideoPlayer).
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFsChange = () =>
+      setIsFullscreen(
+        !!(document.fullscreenElement || document.webkitFullscreenElement),
+      );
     document.addEventListener("fullscreenchange", onFsChange);
     document.addEventListener("webkitfullscreenchange", onFsChange);
+
+    const v = videoRef.current;
+    const onIosBegin = () => setIsFullscreen(true);
+    const onIosEnd = () => setIsFullscreen(false);
+    v?.addEventListener("webkitbeginfullscreen", onIosBegin);
+    v?.addEventListener("webkitendfullscreen", onIosEnd);
+
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
       document.removeEventListener("webkitfullscreenchange", onFsChange);
+      v?.removeEventListener("webkitbeginfullscreen", onIosBegin);
+      v?.removeEventListener("webkitendfullscreen", onIosEnd);
     };
   }, []);
 
@@ -416,10 +452,10 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
-      // Safari iOS có thể reject play() âm thầm nếu readyState chưa đủ
-      // (đặc biệt khi video chưa tải xong metadata) — bắt lỗi để không mất
-      // dấu vết và tránh trạng thái treo (center-icon đổi nhưng video vẫn pause).
-      v.play().catch((err) => console.warn("[MovieVideoPlayer] play() failed:", err));
+      // Dùng startPlayback() thay vì gọi v.play() trực tiếp — nếu đây là
+      // lần play đầu tiên và có preroll ads, cần swap+play() ad ngay trong
+      // gesture này (xem giải thích ở khai báo startPlayback phía trên).
+      startPlayback();
       flashCenterIcon("play");
     } else {
       v.pause();
@@ -442,10 +478,27 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
 
   const toggleFullscreen = () => {
     const el = wrapRef.current;
+    const v = videoRef.current;
     if (!el) return;
-    document.fullscreenElement
-      ? document.exitFullscreen()
-      : el.requestFullscreen?.();
+
+    // Đang ở fullscreen → thoát ra (thử cả 2 kiểu API)
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+
+    // iPhone Safari KHÔNG hỗ trợ Fullscreen API trên div (`el.requestFullscreen`
+    // undefined hoặc reject âm thầm) — chỉ iPad mới hỗ trợ. Trên iPhone, cách
+    // duy nhất để fullscreen là gọi thẳng `webkitEnterFullscreen()` của chính
+    // thẻ <video>. Ưu tiên thử chuẩn trước, fallback dần xuống API cũ hơn.
+    if (el.requestFullscreen) {
+      el.requestFullscreen();
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    } else if (v?.webkitEnterFullscreen) {
+      v.webkitEnterFullscreen();
+    }
   };
 
   // ── Keyboard shortcuts ───────────────────────────────────────
@@ -464,7 +517,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
           // Space/K là chỗ bị bỏ sót.
           if (isAd) break;
           if (v.paused) {
-            v.play().catch((err) => console.warn("[MovieVideoPlayer] play() failed:", err));
+            startPlayback();
             flashCenterIcon("play");
           } else {
             v.pause();
@@ -505,7 +558,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showKbHint, flashCenterIcon, isAd]);
+  }, [showKbHint, flashCenterIcon, isAd, startPlayback]);
 
   // ── Skip Intro / Recap visibility ────────────────────────────
   useEffect(() => {
@@ -836,15 +889,15 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
                 }}
                 onClick={centerIcon ? undefined : togglePlay}
               >
-                {centerIcon === "pause" || (!centerIcon && !playing) ? (
-                  <Pause size={26} fill="#000" color="#000" />
-                ) : (
+                {centerIcon === "play" || (!centerIcon && !playing) ? (
                   <Play
                     size={26}
                     fill="#000"
                     color="#000"
                     style={{ marginLeft: 3 }}
                   />
+                ) : (
+                  <Pause size={26} fill="#000" color="#000" />
                 )}
               </motion.div>
             </motion.div>
