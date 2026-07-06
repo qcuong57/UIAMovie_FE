@@ -25,6 +25,7 @@ import {
   Check,
   Gauge,
   FastForward,
+  Volume1,
 } from "lucide-react";
 import { C } from "../ui/movieConstants";
 import NextEpisodeCountdown from "./NextEpisodeCountdown";
@@ -159,6 +160,15 @@ const EpisodeVideoPlayer = ({
     setCenterIcon(type);
     clearTimeout(centerIconTimer.current);
     centerIconTimer.current = setTimeout(() => setCenterIcon(null), 700);
+  }, []);
+
+  // ── Skip 10s flash overlay (mờ tràn nửa trái/phải) ───────────
+  const [skipFlash, setSkipFlash] = useState(null); // { dir: "back" | "forward", id }
+  const skipFlashTimer = useRef(null);
+  const triggerSkipFlash = useCallback((dir) => {
+    setSkipFlash({ dir, id: Date.now() + Math.random() });
+    clearTimeout(skipFlashTimer.current);
+    skipFlashTimer.current = setTimeout(() => setSkipFlash(null), 550);
   }, []);
 
   // ── Subtitle state ──────────────────────────────────────────
@@ -582,18 +592,17 @@ const EpisodeVideoPlayer = ({
           // videoRef, tua ở đây sẽ tua thẳng lên currentTime của ad.
           if (isAd) break;
           v.currentTime = Math.max(0, v.currentTime - 10);
-          showKbHint("⏪ −10s");
+          triggerSkipFlash("back");
           break;
         case "ArrowRight":
           e.preventDefault();
           if (isAd) break;
           v.currentTime = Math.min(v.duration, v.currentTime + 10);
-          showKbHint("⏩ +10s");
+          triggerSkipFlash("forward");
           break;
         case "KeyF":
           e.preventDefault();
           toggleFullscreen();
-          showKbHint("⛶ Fullscreen");
           break;
         case "KeyM":
           e.preventDefault();
@@ -602,7 +611,6 @@ const EpisodeVideoPlayer = ({
         case "KeyC":
           e.preventDefault();
           setShowSubMenu((p) => !p);
-          showKbHint("💬 Subtitles");
           break;
         default:
           break;
@@ -610,7 +618,7 @@ const EpisodeVideoPlayer = ({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showKbHint, flashCenterIcon, isAd, startPlayback]);
+  }, [showKbHint, flashCenterIcon, triggerSkipFlash, isAd, startPlayback]);
 
   // ── Skip Intro / Recap visibility ────────────────────────────
   useEffect(() => {
@@ -696,6 +704,7 @@ const EpisodeVideoPlayer = ({
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + sec));
+    triggerSkipFlash(sec < 0 ? "back" : "forward");
   };
 
   const toggleFullscreen = () => {
@@ -782,6 +791,88 @@ const EpisodeVideoPlayer = ({
       .ep-fake-fullscreen .ep-subtitle-overlay {
         bottom: 96px !important;
       }
+
+      /* ── Nút điều khiển kiểu YouTube: vòng tròn mờ khi hover, gọn & tinh tế ── */
+      .vp-ctrl-btn {
+        position: relative;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: rgba(255,255,255,0.78);
+        padding: 8px;
+        margin: -8px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+      }
+      .vp-ctrl-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+      .vp-ctrl-btn:active { transform: scale(0.90); }
+      .vp-ctrl-btn.is-active { color: #fff; }
+      .vp-ctrl-btn.is-active::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 2px;
+        transform: translateX(-50%);
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: ${C.accent};
+      }
+      .vp-ctrl-btn[data-disabled="true"] { opacity: 0.3; cursor: default; pointer-events: none; }
+
+      /* ── Thanh âm lượng: track mảnh + núm tinh tế, sáng dần khi hover ── */
+      .vp-volume-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 72px;
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255,255,255,0.28);
+        outline: none;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .vp-volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        transition: transform 0.12s ease;
+        margin-top: 0;
+      }
+      .vp-volume-slider:hover::-webkit-slider-thumb { transform: scale(1.2); }
+      .vp-volume-slider::-moz-range-thumb {
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #fff; border: none; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      }
+      .vp-volume-slider::-moz-range-track {
+        height: 3px; border-radius: 2px; background: rgba(255,255,255,0.28);
+      }
+
+      /* ── Thanh tiến trình: vùng bấm rộng, track mảnh, núm chỉ hiện khi hover (như YouTube) ── */
+      .vp-progress-wrap {
+        position: relative;
+        padding: 8px 0;
+        margin: -8px 0 2px;
+        cursor: pointer;
+      }
+      .vp-progress-track { position: relative; height: 3px; border-radius: 3px; transition: height 0.15s ease; }
+      .vp-progress-wrap:hover .vp-progress-track { height: 5px; }
+      .vp-progress-thumb {
+        opacity: 0;
+        transform: translate(-50%,-50%) scale(0.6);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+      }
+      .vp-progress-wrap:hover .vp-progress-thumb { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+
+      /* ── Nút bỏ qua intro/recap: mờ dần sang trọng khi hover ── */
+      .vp-skip-btn { transition: background 0.15s ease, border-color 0.15s ease; }
+      .vp-skip-btn:hover { background: rgba(32,32,32,0.94) !important; border-color: rgba(255,255,255,0.34) !important; }
     `}</style>
       <div
         ref={wrapRef}
@@ -1066,6 +1157,66 @@ const EpisodeVideoPlayer = ({
           )}
         </AnimatePresence>
 
+        {/* ── Skip 10s flash overlay — mờ tràn nửa trái (lùi) hoặc
+            nửa phải (tiến) mỗi khi bấm nút tua hoặc phím tắt ── */}
+        <AnimatePresence>
+          {skipFlash && (
+            <motion.div
+              key={skipFlash.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: skipFlash.dir === "back" ? 0 : "50%",
+                width: "50%",
+                background:
+                  skipFlash.dir === "back"
+                    ? "linear-gradient(to right, rgba(0,0,0,0.5), transparent)"
+                    : "linear-gradient(to left, rgba(0,0,0,0.5), transparent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+                zIndex: 25,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.75, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ duration: 0.22 }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "#fff",
+                }}
+              >
+                {skipFlash.dir === "back" ? (
+                  <SkipBack size={isMobile ? 26 : 34} fill="#fff" />
+                ) : (
+                  <SkipForward size={isMobile ? 26 : 34} fill="#fff" />
+                )}
+                <span
+                  style={{
+                    fontFamily: "'Nunito',sans-serif",
+                    fontWeight: 800,
+                    fontSize: isMobile ? 13 : 15,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {skipFlash.dir === "back" ? "−10 giây" : "+10 giây"}
+                </span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── AD OVERLAY ───────────────────────────────────────────── */}
         <AdOverlay adManager={adManager} showControls={show} />
 
@@ -1089,61 +1240,55 @@ const EpisodeVideoPlayer = ({
                 gap: 10,
               }}
             >
-              {/* Progress bar */}
+              {/* Progress bar — kiểu YouTube: vùng bấm rộng, track mảnh gọn, núm hiện khi hover */}
               <div
                 onClick={isAd ? undefined : seek}
-                className="ep-progress-bar"
-                style={{
-                  position: "relative",
-                  height: 4,
-                  background: "rgba(255,255,255,0.18)",
-                  borderRadius: 3,
-                  cursor: isAd ? "default" : "pointer",
-                  transition: "height 0.15s ease",
-                  marginBottom: 2,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isAd) e.currentTarget.style.height = "6px";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.height = "4px";
-                }}
+                className="ep-progress-bar vp-progress-wrap"
+                style={{ cursor: isAd ? "default" : "pointer" }}
               >
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    height: "100%",
-                    width: `${buffered}%`,
-                    borderRadius: 3,
-                    background: "rgba(255,255,255,0.28)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    height: "100%",
-                    width: `${displayProgress}%`,
-                    borderRadius: 3,
-                    background: isAd ? "#FFD600" : C.accent,
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: `${displayProgress}%`,
-                    transform: "translate(-50%,-50%)",
-                    width: 13,
-                    height: 13,
-                    borderRadius: "50%",
-                    background: "white",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
-                  }}
-                />
+                  className="vp-progress-track"
+                  style={{ background: "rgba(255,255,255,0.22)" }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      height: "100%",
+                      width: `${buffered}%`,
+                      borderRadius: 3,
+                      background: "rgba(255,255,255,0.32)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      height: "100%",
+                      width: `${displayProgress}%`,
+                      borderRadius: 3,
+                      background: isAd ? "#FFD600" : C.accent,
+                      boxShadow: isAd
+                        ? "none"
+                        : `0 0 6px ${C.accent}66`,
+                    }}
+                  />
+                  <div
+                    className="vp-progress-thumb"
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: `${displayProgress}%`,
+                      width: 13,
+                      height: 13,
+                      borderRadius: "50%",
+                      background: "white",
+                      boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
+                    }}
+                  />
+                </div>
               </div>
 
               <div
@@ -1157,73 +1302,54 @@ const EpisodeVideoPlayer = ({
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: isMobile ? 10 : 16,
+                    gap: isMobile ? 18 : 22,
                   }}
                 >
                   <button
                     onClick={() => !isAd && skipSec(-10)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: isAd ? "default" : "pointer",
-                      color: "rgba(255,255,255,0.7)",
-                      padding: 0,
-                      display: "flex",
-                      opacity: isAd ? 0.25 : 1,
-                      transition: "opacity 0.2s",
-                    }}
+                    title="Lùi 10 giây"
+                    className="vp-ctrl-btn"
+                    data-disabled={isAd}
                   >
-                    <SkipBack size={18} />
+                    <SkipBack size={19} />
                   </button>
                   <button
                     onClick={togglePlay}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "white",
-                      padding: 0,
-                      display: "flex",
-                    }}
+                    title={playing ? "Tạm dừng" : "Phát"}
+                    className="vp-ctrl-btn"
+                    style={{ color: "#fff" }}
                   >
                     {playing ? (
-                      <Pause size={22} fill="white" />
+                      <Pause size={23} fill="currentColor" />
                     ) : (
-                      <Play size={22} fill="white" />
+                      <Play size={23} fill="currentColor" style={{ marginLeft: 2 }} />
                     )}
                   </button>
                   <button
                     onClick={() => !isAd && skipSec(10)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: isAd ? "default" : "pointer",
-                      color: "rgba(255,255,255,0.7)",
-                      padding: 0,
-                      display: "flex",
-                      opacity: isAd ? 0.25 : 1,
-                      transition: "opacity 0.2s",
-                    }}
+                    title="Tiến 10 giây"
+                    className="vp-ctrl-btn"
+                    data-disabled={isAd}
                   >
-                    <SkipForward size={18} />
+                    <SkipForward size={19} />
                   </button>
 
                   {!isMobile ? (
                     <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                      style={{ display: "flex", alignItems: "center", gap: 10 }}
                     >
                       <button
                         onClick={() => setMuted(!muted)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "rgba(255,255,255,0.8)",
-                          padding: 0,
-                          display: "flex",
-                        }}
+                        title={muted ? "Bật tiếng" : "Tắt tiếng"}
+                        className="vp-ctrl-btn"
                       >
-                        {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                        {muted || vol === 0 ? (
+                          <VolumeX size={19} />
+                        ) : vol < 50 ? (
+                          <Volume1 size={19} />
+                        ) : (
+                          <Volume2 size={19} />
+                        )}
                       </button>
                       <input
                         type="range"
@@ -1234,26 +1360,40 @@ const EpisodeVideoPlayer = ({
                           setVol(+e.target.value);
                           if (+e.target.value > 0) setMuted(false);
                         }}
+                        className="vp-volume-slider"
                         style={{
-                          width: 72,
-                          accentColor: "white",
-                          cursor: "pointer",
+                          background: `linear-gradient(to right, #fff 0%, #fff ${
+                            muted ? 0 : vol
+                          }%, rgba(255,255,255,0.28) ${
+                            muted ? 0 : vol
+                          }%, rgba(255,255,255,0.28) 100%)`,
                         }}
                       />
+                      <span
+                        style={{
+                          color: "rgba(255,255,255,0.65)",
+                          fontSize: 12,
+                          fontFamily: "'Nunito',sans-serif",
+                          minWidth: 30,
+                          textAlign: "right",
+                        }}
+                      >
+                        {muted ? 0 : vol}%
+                      </span>
                     </div>
                   ) : (
                     <button
                       onClick={() => setMuted(!muted)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "rgba(255,255,255,0.8)",
-                        padding: 0,
-                        display: "flex",
-                      }}
+                      title={muted ? "Bật tiếng" : `Âm lượng ${vol}%`}
+                      className="vp-ctrl-btn"
                     >
-                      {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                      {muted || vol === 0 ? (
+                        <VolumeX size={19} />
+                      ) : vol < 50 ? (
+                        <Volume1 size={19} />
+                      ) : (
+                        <Volume2 size={19} />
+                      )}
                     </button>
                   )}
 
@@ -1269,19 +1409,20 @@ const EpisodeVideoPlayer = ({
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
                   {videoSources.length > 1 && (
                     <select
                       value={selSrc}
                       onChange={(e) => setSelSrc(+e.target.value)}
                       style={{
-                        background: "rgba(0,0,0,0.6)",
-                        border: "1px solid rgba(255,255,255,0.15)",
+                        background: "rgba(255,255,255,0.08)",
+                        border: "1px solid rgba(255,255,255,0.16)",
                         color: "white",
-                        borderRadius: 4,
+                        borderRadius: 6,
                         fontFamily: "'Nunito',sans-serif",
                         fontSize: 11,
-                        padding: "3px 6px",
+                        fontWeight: 700,
+                        padding: "5px 8px",
                         cursor: "pointer",
                         outline: "none",
                       }}
@@ -1302,53 +1443,38 @@ const EpisodeVideoPlayer = ({
                         setShowSubMenu(false);
                       }}
                       title="Tốc độ phát"
+                      className={`vp-ctrl-btn${playbackRate !== 1 ? " is-active" : ""}`}
                       style={{
-                        background:
-                          playbackRate !== 1
-                            ? "rgba(255,255,255,0.18)"
-                            : "none",
-                        border:
-                          playbackRate !== 1
-                            ? "1px solid rgba(255,255,255,0.3)"
-                            : "none",
-                        borderRadius: 4,
-                        cursor: "pointer",
-                        color:
-                          playbackRate !== 1
-                            ? "#fff"
-                            : "rgba(255,255,255,0.65)",
-                        padding: "4px",
-                        display: "flex",
-                        alignItems: "center",
                         gap: 4,
                         fontFamily: "'Nunito',sans-serif",
                         fontSize: 11,
                         fontWeight: 800,
-                        letterSpacing: "0.04em",
-                        transition: "all 0.15s",
+                        letterSpacing: "0.02em",
+                        borderRadius: 16,
+                        padding: "8px 9px",
                       }}
                     >
-                      <Gauge size={15} />
+                      <Gauge size={18} />
                       {playbackRate !== 1 && <span>{playbackRate}x</span>}
                     </button>
 
                     <AnimatePresence>
                       {showSpeedMenu && (
                         <motion.div
-                          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                          initial={{ opacity: 0, y: 6, scale: 0.97 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                          transition={{ duration: 0.15 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                          transition={{ duration: 0.14 }}
                           style={{
                             position: "absolute",
                             bottom: "calc(100% + 10px)",
                             right: 0,
-                            background: "rgba(18,18,18,0.97)",
-                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(20,20,20,0.97)",
+                            border: "1px solid rgba(255,255,255,0.1)",
                             borderRadius: 10,
                             overflow: "hidden",
-                            minWidth: 120,
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                            minWidth: 130,
+                            boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
                             zIndex: 50,
                           }}
                         >
@@ -1362,63 +1488,61 @@ const EpisodeVideoPlayer = ({
                               style={{
                                 fontFamily: "'Nunito',sans-serif",
                                 fontSize: 10,
-                                fontWeight: 800,
+                                fontWeight: 700,
                                 color: "rgba(255,255,255,0.4)",
                                 textTransform: "uppercase",
-                                letterSpacing: "0.08em",
+                                letterSpacing: "0.06em",
+                                margin: 0,
                               }}
                             >
                               Tốc độ phát
                             </p>
                           </div>
-                          {SPEED_OPTIONS.map((rate) => (
-                            <button
-                              key={rate}
-                              onClick={() => {
-                                setPlaybackRate(rate);
-                                setShowSpeedMenu(false);
-                              }}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                width: "100%",
-                                padding: "9px 12px",
-                                background:
-                                  playbackRate === rate
-                                    ? "rgba(255,255,255,0.07)"
-                                    : "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontFamily: "'Nunito',sans-serif",
-                                fontSize: 13,
-                                fontWeight: playbackRate === rate ? 700 : 500,
-                                color:
-                                  playbackRate === rate
-                                    ? "#fff"
-                                    : "rgba(255,255,255,0.65)",
-                                textAlign: "left",
-                                transition: "background 0.12s",
-                              }}
-                              onMouseEnter={(e) =>
-                                (e.currentTarget.style.background =
-                                  "rgba(255,255,255,0.07)")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.currentTarget.style.background =
-                                  playbackRate === rate
-                                    ? "rgba(255,255,255,0.07)"
-                                    : "none")
-                              }
-                            >
-                              {rate === 1 ? "Bình thường" : `${rate}x`}
-                              {playbackRate === rate && (
-                                <span style={{ color: C.accent, fontSize: 11 }}>
-                                  ✓
-                                </span>
-                              )}
-                            </button>
-                          ))}
+
+                          {SPEED_OPTIONS.map((rate) => {
+                            const active = playbackRate === rate;
+                            return (
+                              <button
+                                key={rate}
+                                onClick={() => {
+                                  setPlaybackRate(rate);
+                                  setShowSpeedMenu(false);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  width: "100%",
+                                  padding: "9px 12px",
+                                  background: active
+                                    ? "rgba(255,255,255,0.08)"
+                                    : "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontFamily: "'Nunito',sans-serif",
+                                  fontSize: 13,
+                                  fontWeight: active ? 700 : 500,
+                                  color: active ? "#fff" : "rgba(255,255,255,0.62)",
+                                  textAlign: "left",
+                                  transition: "background 0.12s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.background =
+                                    "rgba(255,255,255,0.08)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.background = active
+                                    ? "rgba(255,255,255,0.08)"
+                                    : "transparent")
+                                }
+                              >
+                                {rate === 1 ? "Bình thường" : `${rate}x`}
+                                {active && (
+                                  <Check size={14} color={C.accent} strokeWidth={2.75} />
+                                )}
+                              </button>
+                            );
+                          })}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1430,29 +1554,15 @@ const EpisodeVideoPlayer = ({
                       <button
                         onClick={() => setShowSubMenu((p) => !p)}
                         title="Phụ đề"
-                        style={{
-                          background: selSubId
-                            ? "rgba(255,255,255,0.18)"
-                            : "none",
-                          border: selSubId
-                            ? "1px solid rgba(255,255,255,0.3)"
-                            : "none",
-                          borderRadius: 4,
-                          cursor: "pointer",
-                          color: selSubId ? "#fff" : "rgba(255,255,255,0.65)",
-                          padding: "4px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 3,
-                          transition: "all 0.15s",
-                        }}
+                        className={`vp-ctrl-btn${selSubId ? " is-active" : ""}`}
                       >
-                        <Subtitles size={18} />
+                        <Subtitles size={19} />
                         {subLoading && (
                           <span
                             style={{
                               fontSize: 9,
                               color: "rgba(255,255,255,0.5)",
+                              marginLeft: 2,
                             }}
                           >
                             …
@@ -1464,20 +1574,20 @@ const EpisodeVideoPlayer = ({
                       <AnimatePresence>
                         {showSubMenu && (
                           <motion.div
-                            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                            initial={{ opacity: 0, y: 6, scale: 0.97 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                            transition={{ duration: 0.15 }}
+                            exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                            transition={{ duration: 0.14 }}
                             style={{
                               position: "absolute",
                               bottom: "calc(100% + 10px)",
                               right: 0,
-                              background: "rgba(18,18,18,0.97)",
-                              border: "1px solid rgba(255,255,255,0.12)",
+                              background: "rgba(20,20,20,0.97)",
+                              border: "1px solid rgba(255,255,255,0.1)",
                               borderRadius: 10,
                               overflow: "hidden",
-                              minWidth: 168,
-                              boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                              minWidth: 175,
+                              boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
                               zIndex: 50,
                             }}
                           >
@@ -1493,10 +1603,11 @@ const EpisodeVideoPlayer = ({
                                 style={{
                                   fontFamily: "'Nunito',sans-serif",
                                   fontSize: 10,
-                                  fontWeight: 800,
+                                  fontWeight: 700,
                                   color: "rgba(255,255,255,0.4)",
                                   textTransform: "uppercase",
-                                  letterSpacing: "0.08em",
+                                  letterSpacing: "0.06em",
+                                  margin: 0,
                                 }}
                               >
                                 Phụ đề
@@ -1518,8 +1629,8 @@ const EpisodeVideoPlayer = ({
                                 width: "100%",
                                 padding: "9px 12px",
                                 background: !selSubId
-                                  ? "rgba(255,255,255,0.07)"
-                                  : "none",
+                                  ? "rgba(255,255,255,0.08)"
+                                  : "transparent",
                                 border: "none",
                                 cursor: "pointer",
                                 fontFamily: "'Nunito',sans-serif",
@@ -1527,101 +1638,95 @@ const EpisodeVideoPlayer = ({
                                 fontWeight: !selSubId ? 700 : 500,
                                 color: !selSubId
                                   ? "#fff"
-                                  : "rgba(255,255,255,0.6)",
+                                  : "rgba(255,255,255,0.62)",
                                 textAlign: "left",
                                 transition: "background 0.12s",
                               }}
                               onMouseEnter={(e) =>
                                 (e.currentTarget.style.background =
-                                  "rgba(255,255,255,0.07)")
+                                  "rgba(255,255,255,0.08)")
                               }
                               onMouseLeave={(e) =>
                                 (e.currentTarget.style.background = !selSubId
-                                  ? "rgba(255,255,255,0.07)"
-                                  : "none")
+                                  ? "rgba(255,255,255,0.08)"
+                                  : "transparent")
                               }
                             >
                               Tắt phụ đề
                               {!selSubId && (
-                                <span style={{ color: C.accent, fontSize: 11 }}>
-                                  ✓
-                                </span>
+                                <Check size={14} color={C.accent} strokeWidth={2.75} />
                               )}
                             </button>
 
                             {/* Danh sách ngôn ngữ */}
-                            {subtitles.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={() => {
-                                  setSelSubId(s.id);
-                                  setShowSubMenu(false);
-                                }}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "space-between",
-                                  width: "100%",
-                                  padding: "9px 12px",
-                                  background:
-                                    selSubId === s.id
-                                      ? "rgba(255,255,255,0.07)"
-                                      : "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  fontFamily: "'Nunito',sans-serif",
-                                  fontSize: 13,
-                                  fontWeight: selSubId === s.id ? 700 : 500,
-                                  color:
-                                    selSubId === s.id
-                                      ? "#fff"
-                                      : "rgba(255,255,255,0.65)",
-                                  textAlign: "left",
-                                  gap: 8,
-                                  transition: "background 0.12s",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.currentTarget.style.background =
-                                    "rgba(255,255,255,0.07)")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.currentTarget.style.background =
-                                    selSubId === s.id
-                                      ? "rgba(255,255,255,0.07)"
-                                      : "none")
-                                }
-                              >
-                                <span
+                            {subtitles.map((s) => {
+                              const active = selSubId === s.id;
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => {
+                                    setSelSubId(s.id);
+                                    setShowSubMenu(false);
+                                  }}
                                   style={{
                                     display: "flex",
                                     alignItems: "center",
+                                    justifyContent: "space-between",
+                                    width: "100%",
+                                    padding: "9px 12px",
+                                    background: active
+                                      ? "rgba(255,255,255,0.08)"
+                                      : "transparent",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    fontFamily: "'Nunito',sans-serif",
+                                    fontSize: 13,
+                                    fontWeight: active ? 700 : 500,
+                                    color: active
+                                      ? "#fff"
+                                      : "rgba(255,255,255,0.62)",
+                                    textAlign: "left",
                                     gap: 8,
+                                    transition: "background 0.12s",
                                   }}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.background =
+                                      "rgba(255,255,255,0.08)")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = active
+                                      ? "rgba(255,255,255,0.08)"
+                                      : "transparent")
+                                  }
                                 >
                                   <span
                                     style={{
-                                      fontSize: 10,
-                                      fontWeight: 800,
-                                      padding: "1px 5px",
-                                      borderRadius: 4,
-                                      background: "rgba(255,255,255,0.1)",
-                                      color: "rgba(255,255,255,0.5)",
-                                      letterSpacing: "0.04em",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
                                     }}
                                   >
-                                    {(s.languageCode ?? "??").toUpperCase()}
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 800,
+                                        padding: "1px 5px",
+                                        borderRadius: 4,
+                                        background: "rgba(255,255,255,0.1)",
+                                        color: "rgba(255,255,255,0.5)",
+                                        letterSpacing: "0.04em",
+                                      }}
+                                    >
+                                      {(s.languageCode ?? "??").toUpperCase()}
+                                    </span>
+                                    {s.languageName || s.languageCode}
                                   </span>
-                                  {s.languageName || s.languageCode}
-                                </span>
-                                {selSubId === s.id && (
-                                  <span
-                                    style={{ color: C.accent, fontSize: 11 }}
-                                  >
-                                    ✓
-                                  </span>
-                                )}
-                              </button>
-                            ))}
+                                  {active && (
+                                    <Check size={14} color={C.accent} strokeWidth={2.75} />
+                                  )}
+                                </button>
+                              );
+                            })}
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -1630,16 +1735,10 @@ const EpisodeVideoPlayer = ({
 
                   <button
                     onClick={toggleFullscreen}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "rgba(255,255,255,0.7)",
-                      padding: "4px",
-                      display: "flex",
-                    }}
+                    title={isFullscreen || isFakeFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+                    className="vp-ctrl-btn"
                   >
-                    <Maximize size={18} />
+                    <Maximize size={19} />
                   </button>
                 </div>
               </div>
