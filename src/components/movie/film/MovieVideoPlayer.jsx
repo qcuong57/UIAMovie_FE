@@ -418,15 +418,26 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     };
   }, []);
 
-  // ── Khoá scroll nền khi đang ở "fake fullscreen" (iPhone) ────────────
+  // ── Khoá scroll nền + tô đen html/body khi đang ở "fake fullscreen" ──
   // Vì đây không phải fullscreen thật (chỉ là div fixed phủ viewport),
   // trang phía sau vẫn có thể cuộn được nếu không khoá overflow thủ công.
+  // Tô nền html/body thành đen: nếu thiếu `viewport-fit=cover` trong meta
+  // viewport (hoặc trên các máy notch/dynamic-island khi xoay ngang),
+  // Safari sẽ để lộ nền mặc định (trắng) của trang ở vùng an toàn 2 bên
+  // (notch + vùng home-indicator) — đây chính là "viền trắng 2 bên" khi
+  // xoay ngang. Set nền đen ở html/body đảm bảo dù có lộ ra thì vẫn đen.
   useEffect(() => {
     if (!isFakeFullscreen) return;
     const prevOverflow = document.body.style.overflow;
+    const prevBodyBg = document.body.style.backgroundColor;
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
     document.body.style.overflow = "hidden";
+    document.body.style.backgroundColor = "#000";
+    document.documentElement.style.backgroundColor = "#000";
     return () => {
       document.body.style.overflow = prevOverflow;
+      document.body.style.backgroundColor = prevBodyBg;
+      document.documentElement.style.backgroundColor = prevHtmlBg;
     };
   }, [isFakeFullscreen]);
 
