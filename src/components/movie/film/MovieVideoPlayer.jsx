@@ -531,6 +531,27 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     }
   };
 
+  // Chạm trực tiếp lên <video> trên mobile. Trước đây dùng chung togglePlay
+  // với desktop nên chỉ 1 chạm là pause/play ngay — rất dễ bấm nhầm khi
+  // người dùng chỉ muốn chạm để xem tiến trình / hiện lại thanh điều khiển
+  // (kiểu Netflix/YouTube). Tách riêng: trên mobile, chạm khi controls đang
+  // ẩn chỉ hiện controls lên (không đổi trạng thái phát); chạm khi controls
+  // đã hiện sẵn thì ẩn đi. Chỉ nút play/pause ở giữa hoặc trên thanh điều
+  // khiển mới thực sự toggle play — nơi người dùng bấm có chủ đích rõ ràng.
+  const handleVideoTap = () => {
+    if (isAd) return;
+    if (isMobile) {
+      if (!show) {
+        resetTimer();
+        return;
+      }
+      setShow(false);
+      clearTimeout(timerRef.current);
+      return;
+    }
+    togglePlay();
+  };
+
   const seek = (e) => {
     const v = videoRef.current;
     if (!v) return;
@@ -849,7 +870,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
             // năng trình duyệt "nuốt" cử chỉ trước khi tới JS listener).
             touchAction: "manipulation",
           }}
-          onClick={togglePlay}
+          onClick={handleVideoTap}
         />
 
         {/* Thumbnail backdrop khi chưa phát */}

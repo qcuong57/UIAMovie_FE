@@ -1,73 +1,37 @@
 // src/components/movie/ui/PremiumGateModal.jsx
 // Modal hiển thị khi user cố xem phim Premium mà chưa kích hoạt gói
+// Thiết kế v4: đồng bộ tinh thần "mềm, tròn, fluid" của PremiumPage —
+// bo góc lớn, chuyển động spring, các khối pill-shaped. Sang trọng đến
+// từ chất liệu (radial vignette rất nhẹ mô phỏng ánh sáng ấm, viền kép
+// mảnh) chứ không phải glow rực hay gradient sặc sỡ kiểu AI. Điểm nhấn
+// vàng đồng (gold) thay vì đỏ thuần cho cảm giác "premium" ấm áp hơn,
+// đỏ thương hiệu chỉ còn ở nút CTA chính.
 // Usage: <PremiumGateModal open={show} onClose={() => setShow(false)} movieTitle="..." />
 
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Zap, Shield, Sparkles, Check } from "lucide-react";
-
-// ── Design tokens — đồng bộ với homeTokens.js (đỏ-đen) ──────────────
-const C = {
-  bg:         "#000000",
-  surface:    "#0d0d0d",
-  surfaceAlt: "#111111",
-  surfaceHigh:"#181818",
-  border:     "rgba(255,255,255,0.06)",
-  borderMid:  "rgba(255,255,255,0.10)",
-  text:       "#f0f0f0",
-  textSub:    "#888888",
-  accent:     "#e5181e",
-  accentSoft: "rgba(229,24,30,0.12)",
-  accentGlow: "rgba(229,24,30,0.30)",
-};
+import { X, Sparkle } from "lucide-react";
+import { C, FONT_DISPLAY, FONT_BODY } from "../../../context/homeTokens";
 
 const PERKS = [
-  { icon: <Zap      size={14} />, label: "Không quảng cáo, xem liền mạch"    },
-  { icon: <Shield   size={14} />, label: "Chất lượng 4K HDR tối đa"           },
-  { icon: <Sparkles size={14} />, label: "Truy cập toàn bộ kho phim Premium"  },
-  { icon: <Check    size={14} />, label: "Xem đồng thời trên 4 thiết bị"      },
+  "Không quảng cáo",
+  "Chất lượng 4K",
+  "Toàn bộ kho phim Premium",
+  "Xem trên 4 thiết bị cùng lúc",
 ];
 
-// ── UIA Logo mark (thay thế icon vương miện) ──────────────────────────
-function UIAMark() {
-  return (
-    <div style={{
-      width: 72, height: 72,
-      borderRadius: "50%",
-      background: "radial-gradient(135deg, #1a0000 0%, #0d0d0d 100%)",
-      border: `2px solid ${C.accent}`,
-      boxShadow: `0 0 0 6px rgba(229,24,30,0.10), 0 8px 28px rgba(229,24,30,0.35)`,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    }}>
-      <span style={{
-        fontFamily: "'Be Vietnam Pro', 'Nunito', sans-serif",
-        fontSize: 20,
-        fontWeight: 900,
-        color: C.accent,
-        letterSpacing: "0.06em",
-        lineHeight: 1,
-        userSelect: "none",
-      }}>
-        UIA
-      </span>
-    </div>
-  );
-}
+// spring dùng chung — nhịp mềm, không nảy quá đà
+const softSpring = { type: "spring", stiffness: 340, damping: 32, mass: 0.9 };
 
 export default function PremiumGateModal({ open, onClose, movieTitle, onUpgrade }) {
   const navigate = useNavigate();
 
-  // Khoá scroll khi modal mở
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  // Đóng khi nhấn Escape
   useEffect(() => {
     if (!open) return;
     const handler = (e) => { if (e.key === "Escape") onClose?.(); };
@@ -81,7 +45,6 @@ export default function PremiumGateModal({ open, onClose, movieTitle, onUpgrade 
       onUpgrade();
       return;
     }
-    // Navigate trước, close sau để tránh component unmount trước khi navigate kịp
     navigate("/premium");
     setTimeout(() => onClose?.(), 50);
   };
@@ -101,35 +64,25 @@ export default function PremiumGateModal({ open, onClose, movieTitle, onUpgrade 
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.82)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
+              background: "rgba(6,5,4,0.82)",
               zIndex: 9998,
             }}
           />
 
-          {/* ── Panel wrapper — căn giữa, tránh navbar ── */}
+          {/* ── Panel wrapper ── */}
           <motion.div
             key="pg-panel"
-            initial={{ opacity: 0, scale: 0.90, y: 28 }}
-            animate={{ opacity: 1, scale: 1,    y: 0  }}
-            exit={{    opacity: 0, scale: 0.94,  y: 14 }}
-            transition={{ type: "spring", stiffness: 360, damping: 28 }}
+            initial={{ opacity: 0, y: 28, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={softSpring}
             style={{
               position: "fixed",
-              /* Đẩy xuống để tránh navbar (~64px) và để lại khoảng trên */
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
+              inset: 0,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              /* padding top lớn hơn để không bị navbar che */
-              paddingTop: 80,
-              paddingBottom: 24,
-              paddingLeft: 16,
-              paddingRight: 16,
+              padding: 20,
               zIndex: 9999,
               pointerEvents: "none",
             }}
@@ -139,213 +92,208 @@ export default function PremiumGateModal({ open, onClose, movieTitle, onUpgrade 
               style={{
                 pointerEvents: "auto",
                 width: "100%",
-                maxWidth: 440,
-                /* maxHeight để modal không cao hơn viewport - navbar */
-                maxHeight: "calc(100vh - 104px)",
+                maxWidth: 420,
+                maxHeight: "calc(100vh - 40px)",
                 overflowY: "auto",
-                borderRadius: 20,
-                background: C.surface,
-                border: `1px solid rgba(229,24,30,0.20)`,
-                boxShadow: `0 24px 72px rgba(0,0,0,0.75), 0 0 0 1px rgba(229,24,30,0.06) inset`,
+                borderRadius: 28,
+                background: C.surfaceMid,
+                border: `1px solid ${C.border}`,
+                boxShadow: "0 40px 90px rgba(0,0,0,0.5), 0 12px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
                 position: "relative",
                 scrollbarWidth: "none",
               }}
             >
-              {/* Red glow top */}
+              {/* ── Header — vignette ấm rất nhẹ, không phải glow ── */}
               <div style={{
-                position: "absolute",
-                top: -40, left: "50%",
-                transform: "translateX(-50%)",
-                width: 260, height: 100,
-                background: "radial-gradient(ellipse, rgba(229,24,30,0.14) 0%, transparent 70%)",
-                pointerEvents: "none",
-              }} />
-
-              {/* ── Close ── */}
-              <button
-                onClick={onClose}
-                style={{
-                  position: "absolute", top: 14, right: 14,
-                  width: 30, height: 30, borderRadius: "50%",
-                  background: "rgba(255,255,255,0.05)",
-                  border: `1px solid ${C.border}`,
-                  cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: C.textSub,
-                  transition: "background 0.15s",
-                  zIndex: 2,
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(229,24,30,0.15)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-              >
-                <X size={14} />
-              </button>
-
-              {/* ── Header ── */}
-              <div style={{
-                padding: "36px 32px 24px",
-                textAlign: "center",
+                position: "relative",
+                padding: "44px 34px 28px",
+                overflow: "hidden",
                 borderBottom: `1px solid ${C.border}`,
               }}>
-                {/* UIA mark */}
-                <motion.div
-                  initial={{ scale: 0, rotate: -15 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.08 }}
-                  style={{ display: "inline-flex", marginBottom: 18 }}
+                {/* vignette ánh sáng ấm, tâm lệch trên-trái, rất mờ */}
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "radial-gradient(120% 100% at 18% -10%, rgba(245,197,24,0.10) 0%, rgba(245,197,24,0) 55%)",
+                  pointerEvents: "none",
+                }} />
+
+                <button
+                  onClick={onClose}
+                  aria-label="Đóng"
+                  style={{
+                    position: "absolute", top: 18, right: 18,
+                    width: 32, height: 32, borderRadius: "50%",
+                    background: "rgba(255,255,255,0.05)",
+                    border: `1px solid ${C.border}`,
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: C.textSub,
+                    transition: "background 0.18s, color 0.18s, transform 0.18s",
+                    zIndex: 2,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.10)";
+                    e.currentTarget.style.color = C.text;
+                    e.currentTarget.style.transform = "scale(1.06)";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                    e.currentTarget.style.color = C.textSub;
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
                 >
-                  <UIAMark />
-                </motion.div>
+                  <X size={15} />
+                </button>
+
+                {/* badge pill nhỏ thay cho thanh đỏ vuông — mềm hơn, sang hơn */}
+                <div style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 12px 5px 9px",
+                  borderRadius: 999,
+                  background: "rgba(245,197,24,0.10)",
+                  border: "1px solid rgba(245,197,24,0.22)",
+                  marginBottom: 18,
+                }}>
+                  <Sparkle size={11} color={C.gold} strokeWidth={2.5} />
+                  <span style={{
+                    fontFamily: FONT_BODY,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.03em",
+                    color: C.gold,
+                  }}>
+                    PREMIUM
+                  </span>
+                </div>
 
                 <h2 style={{
-                  fontFamily: "'Be Vietnam Pro', 'Nunito', sans-serif",
-                  fontSize: 21,
+                  fontFamily: FONT_DISPLAY,
+                  fontSize: 22,
                   fontWeight: 800,
                   color: C.text,
-                  marginBottom: 10,
-                  letterSpacing: "-0.02em",
+                  lineHeight: 1.34,
+                  letterSpacing: "-0.01em",
+                  marginBottom: movieTitle ? 10 : 0,
+                  position: "relative",
                 }}>
-                  Nội dung Premium
+                  {movieTitle
+                    ? <>Nội dung này dành riêng cho thành viên Premium</>
+                    : <>Nâng cấp để xem không giới hạn</>}
                 </h2>
 
                 {movieTitle && (
                   <p style={{
-                    fontFamily: "'Nunito', sans-serif",
-                    fontSize: 13,
+                    fontFamily: FONT_BODY,
+                    fontSize: 13.5,
                     color: C.textSub,
                     lineHeight: 1.6,
+                    position: "relative",
                   }}>
-                    <span style={{ color: C.accent, fontWeight: 700 }}>
-                      "{movieTitle}"
-                    </span>{" "}
-                    là nội dung độc quyền dành riêng cho thành viên Premium.
+                    <span style={{ color: C.text, fontWeight: 600 }}>"{movieTitle}"</span> là nội dung độc quyền Premium.
                   </p>
                 )}
               </div>
 
-              {/* ── Perks ── */}
-              <div style={{ padding: "20px 32px" }}>
-                <p style={{
-                  fontFamily: "'Nunito', sans-serif",
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: C.accent,
-                  marginBottom: 12,
-                }}>
-                  Quyền lợi thành viên
-                </p>
-
+              {/* ── Perks — dạng pill mềm, xếp dọc ── */}
+              <div style={{ padding: "22px 26px 6px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {PERKS.map((p, i) => (
+                  {PERKS.map((label, i) => (
                     <motion.div
                       key={i}
-                      initial={{ opacity: 0, x: -10 }}
+                      initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.12 + i * 0.06 }}
+                      transition={{ ...softSpring, delay: 0.05 + i * 0.045 }}
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 10,
-                        padding: "10px 13px",
-                        borderRadius: 10,
-                        background: C.surfaceAlt,
-                        border: `1px solid ${C.border}`,
+                        gap: 12,
+                        padding: "11px 14px",
+                        borderRadius: 16,
+                        background: "rgba(255,255,255,0.025)",
                       }}
                     >
                       <span style={{
-                        color: C.accent,
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        background: "rgba(245,197,24,0.14)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         flexShrink: 0,
-                        opacity: 0.85,
                       }}>
-                        {p.icon}
+                        <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                          <path d="M1 4.5L4 7.5L10 1" stroke={C.gold} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       </span>
                       <span style={{
-                        fontFamily: "'Nunito', sans-serif",
-                        fontSize: 13,
+                        fontFamily: FONT_BODY,
+                        fontSize: 13.5,
                         color: C.text,
                         fontWeight: 500,
                       }}>
-                        {p.label}
+                        {label}
                       </span>
                     </motion.div>
                   ))}
                 </div>
               </div>
 
-              {/* ── CTA ── */}
+              {/* ── CTA — nút pill đầy, elevation mềm ── */}
               <div style={{
-                padding: "4px 32px 28px",
+                padding: "22px 26px 30px",
                 display: "flex",
                 flexDirection: "column",
-                gap: 8,
+                gap: 10,
               }}>
-                {/* Primary — đỏ */}
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
+                  whileHover={{ scale: 1.015 }}
                   whileTap={{ scale: 0.97 }}
+                  transition={softSpring}
                   onClick={handleUpgrade}
                   style={{
                     width: "100%",
-                    padding: "13px 20px",
-                    borderRadius: 12,
+                    padding: "15px 20px",
+                    borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
                     background: C.accent,
                     color: "#ffffff",
-                    fontFamily: "'Nunito', sans-serif",
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: "0.01em",
-                    boxShadow: `0 4px 14px rgba(229,24,30,0.28)`,
-                    transition: "box-shadow 0.2s, background 0.2s",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = "#f02020";
-                    e.currentTarget.style.boxShadow = "0 6px 20px rgba(229,24,30,0.38)";
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = C.accent;
-                    e.currentTarget.style.boxShadow = "0 4px 14px rgba(229,24,30,0.28)";
+                    fontFamily: FONT_BODY,
+                    fontSize: 14.5,
+                    fontWeight: 700,
+                    boxShadow: "0 10px 24px rgba(229,24,30,0.28)",
                   }}
                 >
-                  Kích hoạt Premium ngay
+                  Kích hoạt Premium
                 </motion.button>
 
-                {/* Secondary — outline */}
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={softSpring}
                   onClick={onClose}
                   style={{
                     width: "100%",
-                    padding: "11px 20px",
-                    borderRadius: 12,
-                    border: `1px solid ${C.border}`,
+                    padding: "12px 20px",
+                    borderRadius: 999,
+                    border: `1px solid transparent`,
                     cursor: "pointer",
                     background: "transparent",
                     color: C.textSub,
-                    fontFamily: "'Nunito', sans-serif",
+                    fontFamily: FONT_BODY,
                     fontSize: 13,
                     fontWeight: 600,
-                    transition: "background 0.15s, color 0.15s, border-color 0.15s",
+                    transition: "color 0.18s",
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = C.surfaceAlt;
-                    e.currentTarget.style.color = C.text;
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = C.textSub;
-                    e.currentTarget.style.borderColor = C.border;
-                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.text; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.textSub; }}
                 >
                   Để sau
-                </button>
+                </motion.button>
               </div>
             </div>
           </motion.div>

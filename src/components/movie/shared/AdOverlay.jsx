@@ -233,7 +233,7 @@ const AdOverlay = ({ adManager, showControls = false }) => {
 
       {/* Top-right: link bỏ quảng cáo */}
       <a
-        href="/upgrade"
+        href="/premium"
         target="_blank"
         rel="noopener noreferrer"
         style={{
