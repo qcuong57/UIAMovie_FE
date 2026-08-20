@@ -289,6 +289,8 @@ const Navbar = () => {
     }
   };
 
+  const isLoggedIn = !!currentUser;
+
   const isPremium =
     currentUser?.subscriptionPlan === "premium" || currentUser?.isPremium;
 
@@ -832,7 +834,74 @@ const Navbar = () => {
             }}
           />
 
-          {/* ── Avatar + Dropdown ── */}
+          {/* ── Đăng nhập / Đăng ký (chỉ khi chưa đăng nhập) ── */}
+          {!isLoggedIn ? (
+            <div className="flex items-center gap-2.5">
+              <motion.button
+                onClick={() =>
+                  navigate("/welcome", { state: { view: "register" } })
+                }
+                whileHover="hover"
+                whileTap={{ scale: 0.96 }}
+                initial="rest"
+                animate="rest"
+                className="relative px-4 py-[7px] rounded-lg overflow-hidden"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  cursor: "pointer",
+                  backdropFilter: "blur(6px)",
+                }}
+              >
+                <motion.span
+                  variants={{
+                    rest: { opacity: 0 },
+                    hover: { opacity: 1 },
+                  }}
+                  transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                  className="absolute inset-0"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                />
+                <motion.span
+                  variants={{
+                    rest: { color: "rgba(255,255,255,0.55)" },
+                    hover: { color: "rgba(255,255,255,0.95)" },
+                  }}
+                  transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                  className="relative text-[13px] font-semibold whitespace-nowrap tracking-wide"
+                  style={{ fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  Đăng ký
+                </motion.span>
+              </motion.button>
+
+              <motion.button
+                onClick={() =>
+                  navigate("/welcome", { state: { view: "login" } })
+                }
+                whileHover={{
+                  scale: 1.035,
+                  boxShadow: "0 6px 20px rgba(229,24,30,0.45)",
+                }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                className="px-[18px] py-[7px] rounded-lg"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #ff2b32 0%, #e5181e 55%, #c81017 100%)",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 3px 12px rgba(229,24,30,0.3)",
+                }}
+              >
+                <span
+                  className="text-[13px] font-semibold text-white whitespace-nowrap tracking-wide"
+                  style={{ fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  Đăng nhập
+                </span>
+              </motion.button>
+            </div>
+          ) : (
           <div className="relative" ref={dropdownRef}>
             <motion.button
               onClick={() => setShowDropdown((p) => !p)}
@@ -1032,6 +1101,7 @@ const Navbar = () => {
               )}
             </AnimatePresence>
           </div>
+          )}
         </div>
       </div>
 
@@ -1057,9 +1127,14 @@ const Navbar = () => {
           >
             {[
               { label: "Trang chủ", path: "/" },
-              { label: "Yêu thích", path: "/favorites" },
-              { label: "Watchlist", path: "/search?filter=watchlist" },
-              { label: "Lịch sử xem", path: "/watch-history" },
+              // Các mục dưới đây cần đăng nhập → chỉ hiện khi đã login
+              ...(isLoggedIn
+                ? [
+                    { label: "Yêu thích", path: "/favorites" },
+                    { label: "Watchlist", path: "/search?filter=watchlist" },
+                    { label: "Lịch sử xem", path: "/watch-history" },
+                  ]
+                : []),
             ].map(({ label, path }) => (
               <button
                 key={label}
@@ -1112,28 +1187,87 @@ const Navbar = () => {
               <IconAdjustmentsHorizontal size={16} strokeWidth={1.6} />
               Bộ lọc
             </button>
-            <button
-              onClick={() => {
-                handleLogout();
-                setShowMobileMenu(false);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 8,
-                padding: "12px 8px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#e5181e",
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 15,
-                fontWeight: 600,
-              }}
-            >
-              <LogOut size={16} /> Đăng xuất
-            </button>
+            {isLoggedIn ? (
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setShowMobileMenu(false);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 8,
+                  padding: "12px 8px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#e5181e",
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 15,
+                  fontWeight: 600,
+                }}
+              >
+                <LogOut size={16} /> Đăng xuất
+              </button>
+            ) : (
+              <div
+                style={{ display: "flex", gap: 8, marginTop: 8 }}
+              >
+                <button
+                  onClick={() => {
+                    navigate("/welcome", { state: { view: "login" } });
+                    setShowMobileMenu(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    padding: "12px 8px",
+                    background:
+                      "linear-gradient(135deg, #ff2b32 0%, #e5181e 55%, #c81017 100%)",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    color: "#fff",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    letterSpacing: "0.01em",
+                    boxShadow: "0 3px 12px rgba(229,24,30,0.3)",
+                  }}
+                >
+                  Đăng nhập
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/welcome", { state: { view: "register" } });
+                    setShowMobileMenu(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    padding: "12px 8px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    color: "rgba(255,255,255,0.6)",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    letterSpacing: "0.01em",
+                  }}
+                >
+                  Đăng ký
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -14,7 +14,7 @@ import {
   AlertCircle,
   Ban,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService";
 import { useIsMobile } from "../hooks/useIsMobile";
 
@@ -1287,8 +1287,12 @@ const FEATURES = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
-  const [view, setView] = useState("login");
+  // Cho phép Navbar điều hướng thẳng vào tab login/register qua location.state
+  const [view, setView] = useState(
+    location.state?.view === "register" ? "register" : "login",
+  );
   const [otpData, setOtpData] = useState(null);           // login 2FA
   const [registerOtpData, setRegisterOtpData] = useState(null); // register OTP
   const [resetEmail, setResetEmail] = useState("");

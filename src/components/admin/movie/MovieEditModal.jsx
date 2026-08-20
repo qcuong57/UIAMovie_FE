@@ -4,6 +4,12 @@ import { Check, Crown, X } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
+import { GenrePickerField, BackdropGalleryField, PosterField, backdropStateToDto } from './GenreAndImageFields'; // ✅ PosterField giờ đã có export thật
+import movieService from '../../../services/movieService';
+
+let editUidSeq = 0;
+const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;
 
 const gold     = '#D97706';
 const goldLight = '#FEF3C7';
@@ -137,10 +143,55 @@ function PremiumToggleField({ value, onChange }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function MovieEditModal({ movie, onClose, onSaved }) {
   const [form,   setForm]   = useState({ title: '', description: '', imdbRating: '', isPremium: false });
+  const [posterUrl, setPosterUrl] = useState('');    // URL poster hiện tại, sửa được qua PosterField
+  const [backdropUrl, setBackdropUrl] = useState(''); // URL backdrop bìa chính, sửa được qua PosterField
+  const [cast,     setCast]     = useState([]);   // [{ uid, personId, tmdbPersonId, name, character, order, profileUrl }]
+  const [director, setDirector] = useState(null); // { personId, tmdbPersonId, name, profileUrl } | null
+  const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
+  const [backdrops, setBackdrops] = useState([]); // [{ uid, id?, url }]
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
+  const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
+  const [fullMovie, setFullMovie] = useState(null); // chi tiết đầy đủ, fetch riêng vì list item (m) không có description/cast/director/images
+
   useEffect(() => {
+    let cancelled = false;
+    movieService.getGenres()
+      .then(res => {
+        if (cancelled) return;
+        const list = res?.data ?? res ?? [];
+        setAllGenres(Array.isArray(list) ? list : []);
+      })
+      .catch(() => { /* GenrePickerField sẽ tự báo lỗi riêng nếu fetch thất bại */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Object `movie` truyền từ bảng danh sách chỉ là DTO rút gọn (không có description/cast/director/images).
+  // Luôn fetch lại chi tiết đầy đủ theo id khi modal mở để form không bị trống.
+  useEffect(() => {
+    let cancelled = false;
+    if (movie?.id) {
+      setFullMovie(null);
+      movieService.getMovieById(movie.id)
+        .then(res => {
+          if (cancelled) return;
+          const detail = res?.data ?? res ?? null;
+          setFullMovie(detail);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Fetch lỗi → tạm dùng object đã có (title/rating/isPremium vẫn hiện đúng, phần còn lại có thể trống)
+          setFullMovie(movie);
+        });
+    } else {
+      setFullMovie(null);
+    }
+    return () => { cancelled = true; };
+  }, [movie?.id]);
+
+  useEffect(() => {
+    const movie = fullMovie; // dùng bản chi tiết đầy đủ để khởi tạo form, không dùng list item nữa
     if (movie) {
       setForm({
         title:       movie.title       ?? '',
@@ -148,9 +199,56 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         imdbRating:  movie.rating != null ? String(movie.rating) : '',
         isPremium:   movie.isPremium   ?? false,
       });
+      setPosterUrl(movie.posterUrl ?? '');
+      setBackdropUrl(movie.backdropUrl ?? '');
+
+      // Ảnh backdrop hiện có trong gallery (tab "Hình ảnh")
+      const initialBackdrops = (movie.images ?? [])
+        .filter(img => img.imageType === 'backdrop')
+        .map(img => ({ uid: `bd_${img.id ?? img.url}`, id: img.id, url: img.url }));
+      setBackdrops(initialBackdrops);
+
+      // movie.cast (MovieCastDTO) không có personId — chỉ có tmdbPersonId (nếu import từ TMDB).
+      // Khi lưu, backend sẽ match lại theo tmdbPersonId hoặc theo Name.
+      const initialCast = (movie.cast ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map(c => ({
+          uid: nextEditUid(),
+          personId: null,
+          tmdbPersonId: c.tmdbPersonId ?? null,
+          name: c.name,
+          character: c.character ?? '',
+          order: c.order ?? 0,
+          profileUrl: c.profileUrl ?? null,
+        }));
+      setCast(initialCast);
+
+      const directorName = movie.directorDetail?.name ?? movie.director ?? '';
+      setDirector(
+        directorName
+          ? {
+              personId: null,
+              tmdbPersonId: movie.directorDetail?.tmdbPersonId ?? null,
+              name: directorName,
+              profileUrl: movie.directorDetail?.profileUrl ?? null,
+            }
+          : null
+      );
+
       setError('');
     }
-  }, [movie]);
+  }, [fullMovie]);
+
+  // Match tên thể loại hiện có của phim (fullMovie.genres: string[]) sang Guid khi danh sách thể loại đã tải xong
+  useEffect(() => {
+    if (!fullMovie || allGenres.length === 0) return;
+    const names = (fullMovie.genres ?? []).map(n => n.toLowerCase());
+    const matchedIds = allGenres
+      .filter(g => names.includes(g.name.toLowerCase()))
+      .map(g => g.id);
+    setGenreIds(matchedIds);
+  }, [fullMovie, allGenres]);
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Tên phim không được để trống'); return; }
@@ -165,13 +263,28 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         description: form.description.trim() || null,
         imdbRating:  rating,
         isPremium:   form.isPremium,
+        posterUrl:   posterUrl.trim() || null,
+        backdropUrl: backdropUrl.trim() || null,
+        cast:        castStateToDto(cast),
+        director:    directorStateToDto(director),
+        genreIds,
+        backdropImages: backdropStateToDto(backdrops),
       });
+      const genreNames = allGenres.filter(g => genreIds.includes(g.id)).map(g => g.name);
       onSaved?.({
         ...movie,
         title:       form.title.trim(),
         description: form.description.trim(),
         rating,
         isPremium:   form.isPremium,
+        posterUrl:   posterUrl.trim() || null,
+        backdropUrl: backdropUrl.trim() || null,
+        director:    director?.name || null,
+        genres:      genreNames,
+        images: [
+          ...(movie.images ?? []).filter(img => img.imageType !== 'backdrop'),
+          ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
+        ],
       });
       onClose();
     } catch (e) {
@@ -244,12 +357,21 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
               <LightInput label="Rating IMDB (0–10)" placeholder="VD: 8.5" value={form.imdbRating} onChange={v => setForm(f => ({ ...f, imdbRating: v }))} error={/Rating/i.test(error) ? error : ''} />
               <PremiumToggleField value={form.isPremium} onChange={v => setForm(f => ({ ...f, isPremium: v }))} />
 
+              <PosterField label="Poster" imageType="poster" value={posterUrl} onChange={setPosterUrl} />
+              <PosterField label="Backdrop (ảnh bìa)" imageType="backdrop" value={backdropUrl} onChange={setBackdropUrl} />
+
+              <GenrePickerField value={genreIds} onChange={setGenreIds} />
+              <BackdropGalleryField value={backdrops} onChange={setBackdrops} />
+
+              <DirectorPickerField value={director} onChange={setDirector} />
+              <CastPickerField value={cast} onChange={setCast} />
+
               {error && !/tên|Tên|Rating/i.test(error) && (
                 <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</p>
               )}
 
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.65, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 9, border: `1px solid ${T.border}`, margin: 0 }}>
-                Chỉ có thể sửa tên, mô tả, rating và loại nội dung. Để cập nhật thông tin khác hãy xóa và import lại từ TMDB.
+                Có thể sửa tên, mô tả, rating, loại nội dung, poster, backdrop bìa chính, thể loại, ảnh backdrop (gallery), diễn viên và đạo diễn. Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới.
               </p>
             </div>
 

@@ -2,9 +2,9 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/';
+// const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/';
 // const API_BASE_URL =  'http://192.168.1.222:5000/api';
-// const API_BASE_URL = 'http://localhost:5000/api/';
+const API_BASE_URL = 'http://localhost:5000/api/';
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -46,9 +46,19 @@ axiosInstance.interceptors.response.use(
         return Promise.reject(error); // giữ nguyên error để .response còn đầy đủ
       }
 
+      const accessToken = localStorage.getItem('accessToken');
       const refreshToken = localStorage.getItem('refreshToken');
 
-      // Không có refresh token → về landing
+      // Khách chưa từng đăng nhập (không hề có token nào) → đây KHÔNG phải
+      // "hết phiên", chỉ là đang duyệt tự do và gọi trúng API cần auth
+      // (favorites, recommendations...). Không được ép về /welcome, cứ trả
+      // lỗi 401 để component tự xử lý (bỏ qua hoặc hiện nút đăng nhập).
+      if (!accessToken && !refreshToken) {
+        return Promise.reject(error);
+      }
+
+      // Có từng đăng nhập nhưng không còn refresh token (đã bị xoá/hết hạn
+      // hẳn) → đây mới thực sự là hết phiên, cần đưa về landing để login lại.
       if (!refreshToken) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');

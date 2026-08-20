@@ -78,26 +78,63 @@ const AppRouter = () => (
       />
 
       {/* ── Trang có Navbar (phim, tìm kiếm) ── */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <WithNavbar />
-          </ProtectedRoute>
-        }
-      >
+      {/* Layout KHÔNG bọc ProtectedRoute nữa → khách (chưa đăng nhập) vẫn */}
+      {/* duyệt được Home/Search/Browse/Info/Person/Trending bình thường. */}
+      {/* Chỉ những route thực sự cần tài khoản (xem phim, yêu thích, lịch sử, */}
+      {/* thanh toán) mới bọc riêng ProtectedRoute → tự động redirect sang */}
+      {/* /welcome để đăng nhập khi bấm vào. */}
+      <Route element={<WithNavbar />}>
+        {/* Công khai — không cần đăng nhập */}
         <Route path="/" element={<HomePage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/browse" element={<BrowsePage />} />
-        <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
         <Route path="/tvshow/:id/info" element={<TvShowInfoPage />} />
-        <Route path="/tvshow/:id" element={<TvShowDetailPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
-        <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/trending" element={<TrendingPage />} />
-        <Route path="/watch-history" element={<WatchHistoryPage />} />
         <Route path="/premium" element={<PremiumPage />} />
-        <Route path="/payment/result" element={<PaymentResultPage />} />
+
+        {/* Bắt buộc đăng nhập — chủ yếu là hành động "xem phim" thật sự */}
+        <Route
+          path="/movie/:id"
+          element={
+            <ProtectedRoute>
+              <MovieDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tvshow/:id"
+          element={
+            <ProtectedRoute>
+              <TvShowDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/favorites"
+          element={
+            <ProtectedRoute>
+              <FavoritesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/watch-history"
+          element={
+            <ProtectedRoute>
+              <WatchHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment/result"
+          element={
+            <ProtectedRoute>
+              <PaymentResultPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
 
       {/* ── Admin (layout riêng, không dùng Navbar) ── */}

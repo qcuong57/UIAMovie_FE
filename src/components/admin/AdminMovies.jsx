@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, Search, Eye, Pencil, Video, Crown,
+  AlertCircle, Search, Eye, Pencil, Video, Crown, Plus,
 } from 'lucide-react';
 import movieService from '../../services/movieService';
 import { Input } from '../ui';
@@ -12,6 +12,7 @@ import AdminPagination from '../common/AdminPagination';
 import MovieDetailPanel  from './movie/MovieDetailPanel';
 import MovieEditModal    from './movie/MovieEditModal';
 import MovieDeleteModal  from './movie/MovieDeleteModal';
+import MovieAddModal     from './movie/MovieAddModal';
 import VideoUploadPanel  from './movie/VideoUploadPanel';
 import AdminTmdbSearch   from './AdminTmdbSearch';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
@@ -149,6 +150,7 @@ export default function AdminMovies() {
   const [editMovie,   setEditMovie]   = useState(null);
   const [uploadMovie, setUploadMovie] = useState(null);
   const [togglingId,  setTogglingId]  = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
   const pageMovies = pagination.paginate(filtered);
@@ -226,6 +228,9 @@ export default function AdminMovies() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <GhostBtn onClick={fetchMovies}>
             <RefreshCw size={14}/> Tải lại
+          </GhostBtn>
+          <GhostBtn onClick={() => setShowAddModal(true)}>
+            <Plus size={14}/> Thêm thủ công
           </GhostBtn>
           <GhostBtn onClick={() => setShowPanel(true)} accent>
             <Download size={14}/> Import TMDB
@@ -382,6 +387,13 @@ export default function AdminMovies() {
       </div>
 
       <AdminPagination {...pagination.props} itemLabel="phim" />
+
+      {/* ── Add (manual) modal ── */}
+      <MovieAddModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreated={() => fetchMovies()}
+      />
 
       {/* ── Delete modal ── */}
       <MovieDeleteModal

@@ -216,7 +216,7 @@ const RankCard = ({
           transition={{ duration: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
           onClick={() => {
             if (isPremiumLocked) { setShowGate(true); return; }
-            navigate(getRoute(item));
+            navigate(getInfoRoute(item));
           }}
           style={{
             position: "relative",
