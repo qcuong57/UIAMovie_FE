@@ -5,7 +5,7 @@ import axiosInstance from '../../../config/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
-import { GenrePickerField, BackdropGalleryField, PosterField, backdropStateToDto } from './GenreAndImageFields'; // ✅ PosterField giờ đã có export thật
+import { GenrePickerField, BackdropGalleryField, PosterField, backdropStateToDto } from '../shared/GenreAndImageFields'; // ✅ file dùng chung với TvShow, preview poster/backdrop đã phóng to
 import movieService from '../../../services/movieService';
 
 let editUidSeq = 0;
@@ -357,11 +357,11 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
               <LightInput label="Rating IMDB (0–10)" placeholder="VD: 8.5" value={form.imdbRating} onChange={v => setForm(f => ({ ...f, imdbRating: v }))} error={/Rating/i.test(error) ? error : ''} />
               <PremiumToggleField value={form.isPremium} onChange={v => setForm(f => ({ ...f, isPremium: v }))} />
 
-              <PosterField label="Poster" imageType="poster" value={posterUrl} onChange={setPosterUrl} />
-              <PosterField label="Backdrop (ảnh bìa)" imageType="backdrop" value={backdropUrl} onChange={setBackdropUrl} />
+              <PosterField service={movieService} label="Poster" imageType="poster" value={posterUrl} onChange={setPosterUrl} />
+              <PosterField service={movieService} label="Backdrop (ảnh bìa)" imageType="backdrop" value={backdropUrl} onChange={setBackdropUrl} />
 
-              <GenrePickerField value={genreIds} onChange={setGenreIds} />
-              <BackdropGalleryField value={backdrops} onChange={setBackdrops} />
+              <GenrePickerField service={movieService} value={genreIds} onChange={setGenreIds} />
+              <BackdropGalleryField service={movieService} value={backdrops} onChange={setBackdrops} />
 
               <DirectorPickerField value={director} onChange={setDirector} />
               <CastPickerField value={cast} onChange={setCast} />

@@ -20,6 +20,7 @@ import {
 import axiosInstance from "../../../config/axios";
 import { UploadZone } from "../movie/VideoUploadPanel";
 import EpisodeSubtitlePanel from "./EpisodeSubtitlePanel";
+import { SeasonEditModal, EpisodeEditModal } from "./SeasonEpisodeFields";
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {
@@ -389,6 +390,15 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
   const [loadingEps, setLoadingEps] = useState(false);
   const [loaded, setLoaded] = useState((season.episodes ?? []).length > 0);
 
+  // Bản hiển thị cục bộ của season (name/overview/posterUrl/airDate) — cập nhật
+  // ngay sau khi sửa qua SeasonEditModal mà không cần reload lại cả TV show.
+  const [displaySeason, setDisplaySeason] = useState(season);
+  useEffect(() => { setDisplaySeason(season); }, [season]);
+
+  // Modal sửa season (kèm quản lý danh sách tập) / sửa 1 tập cụ thể
+  const [editingSeason, setEditingSeason]   = useState(false);
+  const [editingEpisode, setEditingEpisode] = useState(null);
+
   // Bug 4 fix: khi backend báo season này đã bị cache bust sau sync,
   // reset loaded=false để lần mở tiếp theo sẽ fetch lại thay vì dùng snapshot cũ.
   const prevInvalidated = React.useRef(false);
@@ -401,7 +411,42 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
   }, [invalidated]);
 
   const handleEpisodeUpdated = (updated) => {
-    setEpisodes(prev => prev.map(ep => ep.id === updated.id ? updated : ep));
+    setEpisodes(prev => prev.map(ep => ep.id === updated.id ? { ...ep, ...updated } : ep));
+  };
+
+  const handleSeasonSaved = (patch) => {
+    setDisplaySeason(prev => ({ ...prev, ...patch }));
+  };
+
+  const handleEpisodeAdded = (created) => {
+    if (!loaded) {
+      // Accordion chưa từng fetch danh sách tập gốc — nếu tự vá thêm 1 phần tử
+      // vào mảng rỗng rồi đánh dấu loaded=true thì các tập cũ sẽ "biến mất"
+      // (bị coi là đã load xong trong khi thực ra chưa lấy gì cả). Thay vào đó,
+      // fetch lại toàn bộ season từ server để có danh sách đầy đủ + tập mới.
+      setLoadingEps(true);
+      axiosInstance
+        .get(`/tvshows/${showId}/seasons/${season.seasonNumber}`)
+        .then((res) => {
+          const envelope = res?.data ?? res;
+          const data = envelope?.data ?? envelope;
+          setEpisodes(data?.episodes ?? []);
+          setLoaded(true);
+        })
+        .catch((err) => {
+          console.error('[SeasonAccordion] Error reloading episodes after add:', err);
+          // fallback: ít nhất vẫn hiện được tập vừa thêm
+          setEpisodes(prev => [...prev, created]);
+          setLoaded(true);
+        })
+        .finally(() => setLoadingEps(false));
+    } else {
+      setEpisodes(prev => [...prev, created]);
+    }
+  };
+
+  const handleEpisodeDeleted = (episodeId) => {
+    setEpisodes(prev => prev.filter(ep => ep.id !== episodeId));
   };
 
   const handleToggle = async () => {
@@ -435,8 +480,11 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
         marginBottom: 8,
       }}
     >
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={handleToggle}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleToggle(); } }}
         style={{
           width: "100%",
           display: "flex",
@@ -452,9 +500,9 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
         onMouseEnter={(e) => (e.currentTarget.style.background = T.surfaceHov)}
         onMouseLeave={(e) => (e.currentTarget.style.background = T.surface)}
       >
-        {season.posterUrl ? (
+        {displaySeason.posterUrl ? (
           <img
-            src={season.posterUrl}
+            src={displaySeason.posterUrl}
             alt=""
             style={{
               width: 36,
@@ -492,19 +540,32 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
               marginBottom: 2,
             }}
           >
-            {season.name ?? `Season ${season.seasonNumber}`}
+            {displaySeason.name ?? `Season ${season.seasonNumber}`}
           </p>
           <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>
             {episodes.length > 0
               ? `${episodes.length} tập`
-              : season.episodeCount != null
-                ? `${season.episodeCount} tập`
+              : displaySeason.episodeCount != null
+                ? `${displaySeason.episodeCount} tập`
                 : "Không có tập"}
-            {season.airDate
-              ? ` · ${new Date(season.airDate).getFullYear()}`
+            {displaySeason.airDate
+              ? ` · ${new Date(displaySeason.airDate).getFullYear()}`
               : ""}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setEditingSeason(true); }}
+          title="Sửa season"
+          style={{
+            width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+            background: T.surfaceAlt, border: `1px solid ${T.border}`,
+            cursor: "pointer", color: T.textSub,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <Pencil size={11} />
+        </button>
         <div
           style={{
             flexShrink: 0,
@@ -517,7 +578,7 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
         >
           <ChevronDown size={16} />
         </div>
-      </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {open && (
@@ -605,6 +666,21 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
                             <Star size={9} style={{ fill: T.gold, color: T.gold }} /> {Number(ep.voteAverage).toFixed(1)}
                           </span>
                         )}
+                        {ep.id && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingEpisode(ep)}
+                            title="Sửa tập"
+                            style={{
+                              width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                              background: T.surfaceAlt, border: `1px solid ${T.border}`,
+                              cursor: "pointer", color: T.textSub,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        )}
                       </div>
                       {/* Video upload zone — luôn hiển thị bên dưới info row */}
                       {ep.id && <EpisodeVideoZone episode={ep} onUpdated={handleEpisodeUpdated} />}
@@ -627,6 +703,20 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <SeasonEditModal
+        tvShowId={showId}
+        season={editingSeason ? { ...displaySeason, seasonNumber: season.seasonNumber } : null}
+        onClose={() => setEditingSeason(false)}
+        onSaved={handleSeasonSaved}
+        onEpisodeAdded={handleEpisodeAdded}
+        onEpisodeDeleted={handleEpisodeDeleted}
+      />
+      <EpisodeEditModal
+        episode={editingEpisode}
+        onClose={() => setEditingEpisode(null)}
+        onSaved={handleEpisodeUpdated}
+      />
     </div>
   );
 };

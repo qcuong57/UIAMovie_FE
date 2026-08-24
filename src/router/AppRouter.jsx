@@ -94,23 +94,12 @@ const AppRouter = () => (
         <Route path="/trending" element={<TrendingPage />} />
         <Route path="/premium" element={<PremiumPage />} />
 
-        {/* Bắt buộc đăng nhập — chủ yếu là hành động "xem phim" thật sự */}
-        <Route
-          path="/movie/:id"
-          element={
-            <ProtectedRoute>
-              <MovieDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tvshow/:id"
-          element={
-            <ProtectedRoute>
-              <TvShowDetailPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Xem phim — KHÔNG bắt buộc đăng nhập nữa. Guard nội dung Premium */}
+        {/* (nếu có) được xử lý riêng bên trong MovieCard/DetailPage bằng */}
+        {/* PremiumGateModal, độc lập với trạng thái đăng nhập. Chỉ khi bấm */}
+        {/* "Mua Premium" (PremiumPage / luồng thanh toán) mới cần đăng nhập. */}
+        <Route path="/movie/:id" element={<MovieDetailPage />} />
+        <Route path="/tvshow/:id" element={<TvShowDetailPage />} />
         <Route
           path="/favorites"
           element={

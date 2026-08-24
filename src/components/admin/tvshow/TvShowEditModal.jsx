@@ -4,6 +4,12 @@ import { Check, Crown, X } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
+import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
+import tvShowService from '../../../services/tvShowService';
+
+let editUidSeq = 0;
+const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;
 
 function LightInput({ label, value, onChange, placeholder, error }) {
   const [focused, setFocused] = useState(false);
@@ -67,6 +73,46 @@ function LightTextarea({ label, value, onChange, placeholder, rows = 4 }) {
 const gold      = '#D97706';
 const goldLight = '#FEF3C7';
 
+const STATUS_OPTIONS = [
+  { value: '', label: 'Không rõ' },
+  { value: 'Returning Series', label: 'Đang phát sóng (Returning Series)' },
+  { value: 'Ended', label: 'Đã kết thúc (Ended)' },
+  { value: 'Canceled', label: 'Đã hủy (Canceled)' },
+];
+
+function Row({ children }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
+}
+
+function LightSelect({ label, value, onChange, options }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {label && (
+        <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {label}
+        </label>
+      )}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          height: 42, padding: '0 12px',
+          background: T.surface,
+          border: `1px solid ${focused ? T.borderFocus : T.border}`,
+          borderRadius: 10, color: T.text, outline: 'none',
+          fontFamily: FONT, fontSize: 13.5,
+          transition: 'border-color 0.15s', boxSizing: 'border-box', width: '100%',
+        }}
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function PremiumToggleField({ value, onChange }) {
   const id = 'premium-toggle-tvshow-edit';
   return (
@@ -109,21 +155,114 @@ function PremiumToggleField({ value, onChange }) {
 }
 
 export default function TvShowEditModal({ show, onClose, onSaved }) {
-  const [form,   setForm]   = useState({ title: '', description: '', rating: '', isPremium: false });
+  const [form,   setForm]   = useState({ title: '', description: '', rating: '', isPremium: false, status: '' });
+  const [posterUrl, setPosterUrl]     = useState(''); // URL poster hiện tại, sửa được qua PosterField
+  const [backdropUrl, setBackdropUrl] = useState(''); // URL backdrop bìa chính, sửa được qua PosterField
+  const [cast,     setCast]     = useState([]);   // [{ uid, personId, tmdbPersonId, name, character, order, profileUrl }]
+  const [director, setDirector] = useState(null); // { personId, tmdbPersonId, name, profileUrl } | null
+  const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
+  const [backdrops, setBackdrops] = useState([]); // [{ uid, id?, url }]
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
+  const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
+  const [fullShow, setFullShow]   = useState(null); // chi tiết đầy đủ, fetch riêng vì list item (show) không có description/cast/director/images
+
   useEffect(() => {
-    if (show) {
+    let cancelled = false;
+    tvShowService.getGenres()
+      .then(res => {
+        if (cancelled) return;
+        const list = res?.data ?? res ?? [];
+        setAllGenres(Array.isArray(list) ? list : []);
+      })
+      .catch(() => { /* GenrePickerField sẽ tự báo lỗi riêng nếu fetch thất bại */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Object `show` truyền từ bảng danh sách chỉ là DTO rút gọn (không có description/cast/director/images).
+  // Luôn fetch lại chi tiết đầy đủ theo id khi modal mở để form không bị trống.
+  useEffect(() => {
+    let cancelled = false;
+    if (show?.id) {
+      setFullShow(null);
+      tvShowService.getTvShowById(show.id)
+        .then(res => {
+          if (cancelled) return;
+          const detail = res?.data ?? res ?? null;
+          setFullShow(detail);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Fetch lỗi → tạm dùng object đã có (title/rating/isPremium vẫn hiện đúng, phần còn lại có thể trống)
+          setFullShow(show);
+        });
+    } else {
+      setFullShow(null);
+    }
+    return () => { cancelled = true; };
+  }, [show?.id]);
+
+  useEffect(() => {
+    const s = fullShow; // dùng bản chi tiết đầy đủ để khởi tạo form, không dùng list item nữa
+    if (s) {
       setForm({
-        title:       show.title ?? show.name ?? '',
-        description: show.description ?? '',
-        rating:      show.rating != null ? String(show.rating) : '',
-        isPremium:   show.isPremium ?? false,
+        title:       s.title ?? s.name ?? '',
+        description: s.description ?? '',
+        rating:      s.rating != null ? String(s.rating) : '',
+        isPremium:   s.isPremium ?? false,
+        status:      s.status ?? '',
       });
+      setPosterUrl(s.posterUrl ?? '');
+      setBackdropUrl(s.backdropUrl ?? '');
+
+      // Ảnh backdrop hiện có trong gallery (tab "Hình ảnh")
+      const initialBackdrops = (s.images ?? [])
+        .filter(img => img.imageType === 'backdrop')
+        .map(img => ({ uid: `bd_${img.id ?? img.url}`, id: img.id, url: img.url }));
+      setBackdrops(initialBackdrops);
+
+      // s.cast (TvShowCastDTO) không có personId — chỉ có tmdbPersonId (nếu import từ TMDB).
+      // Khi lưu, backend sẽ match lại theo tmdbPersonId hoặc theo Name.
+      const initialCast = (s.cast ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map(c => ({
+          uid: nextEditUid(),
+          personId: null,
+          tmdbPersonId: c.tmdbPersonId ?? null,
+          name: c.name,
+          character: c.character ?? '',
+          order: c.order ?? 0,
+          profileUrl: c.profileUrl ?? null,
+        }));
+      setCast(initialCast);
+
+      const directorName = s.directorDetail?.name ?? s.director ?? '';
+      setDirector(
+        directorName
+          ? {
+              personId: null,
+              tmdbPersonId: s.directorDetail?.tmdbPersonId ?? null,
+              name: directorName,
+              profileUrl: s.directorDetail?.profileUrl ?? null,
+            }
+          : null
+      );
+
       setError('');
     }
-  }, [show]);
+  }, [fullShow]);
+
+  // Match tên thể loại hiện có của TV show (fullShow.genres: string[]) sang Guid khi danh sách thể loại đã tải xong
+  useEffect(() => {
+    if (!fullShow || allGenres.length === 0) return;
+    const names = (fullShow.genres ?? []).map(n => n.toLowerCase());
+    const matchedIds = allGenres
+      .filter(g => names.includes(g.name.toLowerCase()))
+      .map(g => g.id);
+    setGenreIds(matchedIds);
+  }, [fullShow, allGenres]);
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Tên TV show không được để trống'); return; }
@@ -134,12 +273,35 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
     setSaving(true); setError('');
     try {
       await axiosInstance.put(`/tvshows/${show.id}`, {
+        title:          form.title.trim(),
+        description:    form.description.trim() || null,
+        rating,
+        isPremium:      form.isPremium,
+        status:         form.status || null,
+        posterUrl:      posterUrl.trim() || null,
+        backdropUrl:    backdropUrl.trim() || null,
+        cast:           castStateToDto(cast),
+        director:       directorStateToDto(director),
+        genreIds,
+        backdropImages: backdropStateToDto(backdrops),
+      });
+      const genreNames = allGenres.filter(g => genreIds.includes(g.id)).map(g => g.name);
+      onSaved?.({
+        ...show,
         title:       form.title.trim(),
-        description: form.description.trim() || null,
+        description: form.description.trim(),
         rating,
         isPremium:   form.isPremium,
+        status:      form.status || null,
+        posterUrl:   posterUrl.trim() || null,
+        backdropUrl: backdropUrl.trim() || null,
+        director:    director?.name || null,
+        genres:      genreNames,
+        images: [
+          ...(show.images ?? []).filter(img => img.imageType !== 'backdrop'),
+          ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
+        ],
       });
-      onSaved?.({ ...show, title: form.title.trim(), description: form.description.trim(), rating, isPremium: form.isPremium });
       onClose();
     } catch (e) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra');
@@ -151,6 +313,7 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
       {!!show && (
         <>
           <style>{ADMIN_GOOGLE_FONTS}</style>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -212,15 +375,27 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
 
               <LightInput label="Tên TV show" placeholder="Tên TV show..." value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} error={/tên|Tên/i.test(error) ? error : ''} />
               <LightTextarea label="Mô tả" placeholder="Nội dung mô tả TV show..." value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} rows={4} />
-              <LightInput label="Rating IMDB (0–10)" placeholder="VD: 8.5" value={form.rating} onChange={v => setForm(f => ({ ...f, rating: v }))} error={/Rating/i.test(error) ? error : ''} />
+              <Row>
+                <LightInput label="Rating IMDB (0–10)" placeholder="VD: 8.5" value={form.rating} onChange={v => setForm(f => ({ ...f, rating: v }))} error={/Rating/i.test(error) ? error : ''} />
+                <LightSelect label="Trạng thái" value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} options={STATUS_OPTIONS} />
+              </Row>
               <PremiumToggleField value={form.isPremium} onChange={v => setForm(f => ({ ...f, isPremium: v }))} />
+
+              <PosterField service={tvShowService} label="Poster" imageType="poster" value={posterUrl} onChange={setPosterUrl} />
+              <PosterField service={tvShowService} label="Backdrop (ảnh bìa)" imageType="backdrop" value={backdropUrl} onChange={setBackdropUrl} />
+
+              <GenrePickerField service={tvShowService} value={genreIds} onChange={setGenreIds} />
+              <BackdropGalleryField service={tvShowService} value={backdrops} onChange={setBackdrops} />
+
+              <DirectorPickerField value={director} onChange={setDirector} />
+              <CastPickerField value={cast} onChange={setCast} />
 
               {error && !/tên|Tên|Rating/i.test(error) && (
                 <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</p>
               )}
 
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.65, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 9, border: `1px solid ${T.border}`, margin: 0 }}>
-                Chỉ có thể sửa tên, mô tả, rating và loại nội dung. Để cập nhật thông tin khác hãy xóa và import lại từ TMDB.
+                Có thể sửa tên, mô tả, rating, loại nội dung, poster, backdrop bìa chính, thể loại, ảnh backdrop (gallery), diễn viên và đạo diễn. Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới. Season/tập phim được quản lý riêng ở trang chi tiết TV show.
               </p>
             </div>
 

@@ -3,13 +3,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, Search, Tv, Eye, Pencil, Crown,
+  AlertCircle, Search, Tv, Eye, Pencil, Crown, Plus,
 } from 'lucide-react';
 import tvShowService from '../../services/tvShowService';
 import AdminTmdbSearch from './AdminTmdbSearch';
 import TvShowDetailPanel from './tvshow/TvShowDetailPanel';
 import TvShowEditModal   from './tvshow/TvShowEditModal';
 import TvShowDeleteModal from './tvshow/TvShowDeleteModal';
+import TvShowAddModal    from './tvshow/TvShowAddModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 import AdminPagination from '../common/AdminPagination';
 
@@ -148,6 +149,7 @@ export default function AdminTvShows() {
   const [detailId,   setDetailId]   = useState(null);
   const [editShow,   setEditShow]   = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const debounceRef = useRef(null);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -240,6 +242,9 @@ export default function AdminTvShows() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <GhostBtn onClick={() => fetchShows(page, search, sortBy, sortDir)}>
             <RefreshCw size={14}/> Tải lại
+          </GhostBtn>
+          <GhostBtn onClick={() => setShowAddModal(true)}>
+            <Plus size={14}/> Thêm thủ công
           </GhostBtn>
           <GhostBtn onClick={() => setShowPanel(true)} accent>
             <Download size={14}/> Import TMDB
@@ -418,6 +423,13 @@ export default function AdminTvShows() {
         show={deleteShow}
         onClose={() => setDeleteShow(null)}
         onDeleted={() => fetchShows(page, search, sortBy, sortDir)}
+      />
+
+      {/* Add modal — thêm TV show thủ công (không qua TMDB) */}
+      <TvShowAddModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreated={() => fetchShows(1, search, sortBy, sortDir)}
       />
 
       {/* Backdrop */}

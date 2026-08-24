@@ -23,8 +23,20 @@ import SidebarRelatedList from "../../components/movie/ui/SidebarRelatedList";
 import MovieVideoPlayer from "../../components/movie/film/MovieVideoPlayer";
 import MovieTitleBlock from "../../components/movie/film/MovieTitleBlock";
 import MovieTabsPanel from "../../components/movie/film/MovieTabsPanel";
+import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
+import { Crown } from "lucide-react";
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
+
+// ── Premium helper (đồng bộ với MovieCard.jsx) ────────────────────
+function userHasPremium(user) {
+  if (!user) return false;
+  return (
+    user.isPremium === true ||
+    user.plan === "premium" ||
+    user.subscription?.active === true
+  );
+}
 
 // ══════════════════════════════════════════════════════════════
 // MAIN
@@ -55,6 +67,14 @@ export default function MovieDetailPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
+
+  // ── Premium guard — chặn xem trực tiếp qua URL nếu phim là Premium ──
+  const isPremiumLocked = movie?.isPremium && !userHasPremium(currentUser);
+  const [showGate, setShowGate] = useState(false);
+
+  useEffect(() => {
+    setShowGate(!!isPremiumLocked);
+  }, [isPremiumLocked]);
 
   useEffect(() => {
     (async () => {
@@ -201,8 +221,83 @@ export default function MovieDetailPage() {
               animate="show"
               transition={{ duration: 0.5 }}
             >
-              <MovieVideoPlayer movie={movie} isFreeUser={isFreeUser} />
+              {isPremiumLocked ? (
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    aspectRatio: "16/9",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    background: "#0a0a0a",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 14,
+                  }}
+                >
+                  {movie?.posterUrl && (
+                    <img
+                      src={movie.posterUrl}
+                      alt={movie.title}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        filter: "blur(18px) brightness(0.35)",
+                        transform: "scale(1.1)",
+                      }}
+                    />
+                  )}
+                  <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: "50%",
+                        background: "linear-gradient(135deg, rgba(250,204,21,0.95), rgba(245,158,11,0.95))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Crown size={26} fill="#1c1400" color="#1c1400" />
+                    </div>
+                    <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 15, fontWeight: 700, color: "#fff", margin: 0 }}>
+                      Nội dung dành cho thành viên Premium
+                    </p>
+                    <button
+                      onClick={() => navigate("/premium")}
+                      style={{
+                        marginTop: 4,
+                        padding: "10px 22px",
+                        borderRadius: 8,
+                        border: "none",
+                        cursor: "pointer",
+                        background: "linear-gradient(135deg, rgba(250,204,21,0.95), rgba(245,158,11,0.95))",
+                        color: "#1c1400",
+                        fontFamily: "'Nunito',sans-serif",
+                        fontWeight: 800,
+                        fontSize: 13,
+                      }}
+                    >
+                      Nâng cấp Premium
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <MovieVideoPlayer movie={movie} isFreeUser={isFreeUser} />
+              )}
             </motion.div>
+
+            <PremiumGateModal
+              open={showGate}
+              onClose={() => setShowGate(false)}
+              movieTitle={movie?.title}
+            />
 
             {/* Title + meta + description */}
             <MovieTitleBlock movie={movie} year={year} isMobile={isMobile} id={id} />

@@ -154,6 +154,23 @@ const tvShowService = {
     }
   },
 
+  /**
+   * Danh sách thể loại có sẵn trong DB nội bộ (khác getTmdbGenres — cái đó lấy từ TMDB).
+   * Dùng cho ô chọn thể loại khi thêm/sửa TV show thủ công.
+   * GET /api/tvshows/genres
+   * @returns {Promise<Array<{id, name, description}>>}
+   */
+  getGenres: async () => {
+    try {
+      const response = await axiosInstance.get('/tvshows/genres');
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error fetching genres:', error);
+      throw error;
+    }
+  },
+
   // ═══════════════════════════════════════════════════════════════════
   // SEASON / EPISODE — Load on-demand (lazy)
   // ═══════════════════════════════════════════════════════════════════
@@ -191,6 +208,40 @@ const tvShowService = {
       return envelope?.data ?? envelope;
     } catch (error) {
       console.error('[tvShowService] Error fetching episode:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * PUT /api/tvshows/{id}/seasons/{seasonNumber} — sửa tiêu đề/mô tả/poster/ngày
+   * phát sóng của 1 season đã tồn tại (Admin only). Không đụng tới episodes.
+   * @param {string} tvShowId     - GUID
+   * @param {number} seasonNumber
+   * @param {UpdateSeasonDTO} dto - { name?, overview?, posterUrl?, airDate? }
+   */
+  updateSeason: async (tvShowId, seasonNumber, dto) => {
+    try {
+      const response = await axiosInstance.put(`/tvshows/${tvShowId}/seasons/${seasonNumber}`, dto);
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error updating season:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * PUT /api/tvshows/episodes/{episodeId} — sửa tiêu đề/mô tả/ảnh still/thời
+   * lượng/rating/ngày phát sóng của 1 episode đã tồn tại (Admin only).
+   * Không sửa VideoUrl — dùng uploadEpisodeVideo/deleteEpisodeVideo riêng.
+   * @param {string} episodeId - GUID
+   * @param {UpdateEpisodeDTO} dto - { title?, overview?, stillUrl?, runtime?, rating?, airDate? }
+   */
+  updateEpisode: async (episodeId, dto) => {
+    try {
+      const response = await axiosInstance.put(`/tvshows/episodes/${episodeId}`, dto);
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error updating episode:', error);
       throw error;
     }
   },
@@ -539,9 +590,91 @@ const tvShowService = {
     }
   },
 
+  /**
+   * POST /api/tvshows/{id}/seasons/{seasonNumber}/episodes — thêm 1 tập mới vào
+   * season đã tồn tại (Admin only). Dùng ở trang chi tiết TV show khi sửa season,
+   * khác với Seasons gửi kèm lúc createTvShow (chỉ áp dụng lúc tạo mới).
+   * @param {string} tvShowId - GUID
+   * @param {number} seasonNumber
+   * @param {CreateEpisodeDTO} dto - { episodeNumber, title, overview?, stillUrl?, runtime?, rating?, airDate? }
+   * @returns {Promise<EpisodeDTO>}
+   */
+  addEpisode: async (tvShowId, seasonNumber, dto) => {
+    try {
+      const response = await axiosInstance.post(`/tvshows/${tvShowId}/seasons/${seasonNumber}/episodes`, dto);
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error adding episode:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * DELETE /api/tvshows/episodes/{episodeId} — xóa 1 tập đã tồn tại (Admin only).
+   * Đối xứng với addEpisode; backend tự dọn video trên Cloudinary nếu tập đã có video.
+   * @param {string} episodeId - GUID
+   */
+  deleteEpisode: async (episodeId) => {
+    try {
+      const response = await axiosInstance.delete(`/tvshows/episodes/${episodeId}`);
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error deleting episode:', error);
+      throw error;
+    }
+  },
+
   // ═══════════════════════════════════════════════════════════════════
   // ADMIN — CRUD
   // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Tìm diễn viên/đạo diễn (Person) có sẵn trong DB theo tên — dùng cho ô autocomplete
+   * khi thêm TV show thủ công hoặc chỉnh sửa cast của show import từ TMDB.
+   * Cần tối thiểu 2 ký tự.
+   * GET /api/tvshows/persons/search?query=...
+   * @param {string} query
+   * @returns {Promise<Array<{id, name, profileUrl, tmdbPersonId}>>}
+   */
+  searchPersons: async (query) => {
+    try {
+      if (!query || query.trim().length < 2) return [];
+      const response = await axiosInstance.get('/tvshows/persons/search', {
+        params: { query: query.trim() },
+      });
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error searching persons:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Upload 1 ảnh (poster/backdrop/person) lên Cloudinary, trả về URL.
+   * Dùng cho luồng thêm TV show thủ công: FE upload file HOẶC dán URL có sẵn
+   * thẳng vào CreateTvShowDTO — cả 2 cách đều ra 1 chuỗi URL như nhau.
+   * POST /api/tvshows/upload-image
+   * @param {File}   file
+   * @param {string} [type='poster'] - "poster" | "backdrop" | "person"
+   * @returns {Promise<{ url: string }>}
+   */
+  uploadImage: async (file, type = 'poster') => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+      const response = await axiosInstance.post('/tvshows/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error uploading image:', error);
+      throw error;
+    }
+  },
 
   /**
    * POST /api/tvshows — tạo TV show thủ công (Admin only).
