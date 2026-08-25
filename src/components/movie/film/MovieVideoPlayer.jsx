@@ -184,7 +184,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     videoReady,
     contentUrl: videoUrl,
   });
-  const { triggerPostRoll, tryStartPreRoll } = adManager;
+  const { triggerPostRoll, tryStartPreRoll, adsReady } = adManager;
   // true khi đang phát quảng cáo — dùng để block seek/skip và đổi màu progress
   const isAd = !!adManager.currentAd;
 
@@ -520,6 +520,13 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
+      // FIX: chặn lần play ĐẦU TIÊN nếu danh sách ads chưa fetch xong (allAds
+      // vẫn null). Nếu không chặn, tryStartPreRoll() bên trong startPlayback()
+      // sẽ thấy allAds null → bỏ qua preroll vĩnh viễn cho session này (bug
+      // "ads hiện trên PC, mất trên mobile" do mạng mobile chậm hơn, chưa kịp
+      // fetch xong lúc user tap). UI nút Play sẽ hiện spinner nhỏ trong lúc chờ
+      // — chờ xong user tap lại thì play() vẫn đồng bộ trong đúng gesture đó.
+      if (!adsReady) return;
       // Dùng startPlayback() thay vì gọi v.play() trực tiếp — nếu đây là
       // lần play đầu tiên và có preroll ads, cần swap+play() ad ngay trong
       // gesture này (xem giải thích ở khai báo startPlayback phía trên).
@@ -619,6 +626,7 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
           // Space/K là chỗ bị bỏ sót.
           if (isAd) break;
           if (v.paused) {
+            if (!adsReady) break;
             startPlayback();
             flashCenterIcon("play");
           } else {
@@ -828,6 +836,8 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
       /* ── Nút bỏ qua intro/recap: mờ dần sang trọng khi hover ── */
       .vp-skip-btn { transition: background 0.15s ease, border-color 0.15s ease; }
       .vp-skip-btn:hover { background: rgba(32,32,32,0.94) !important; border-color: rgba(255,255,255,0.34) !important; }
+
+      @keyframes vp-spin { to { transform: rotate(360deg); } }
     `}</style>
       <div
         ref={wrapRef}
@@ -1261,12 +1271,30 @@ export default function MovieVideoPlayer({ movie, isFreeUser = false }) {
                   </button>
                   <button
                     onClick={togglePlay}
-                    title={playing ? "Tạm dừng" : "Phát"}
+                    title={
+                      !playing && !adsReady
+                        ? "Đang tải..."
+                        : playing
+                          ? "Tạm dừng"
+                          : "Phát"
+                    }
                     className="vp-ctrl-btn"
                     style={{ color: "#fff" }}
                   >
                     {playing ? (
                       <Pause size={23} fill="currentColor" />
+                    ) : !adsReady ? (
+                      <span
+                        style={{
+                          width: 18,
+                          height: 18,
+                          border: "2px solid rgba(255,255,255,0.3)",
+                          borderTopColor: "#fff",
+                          borderRadius: "50%",
+                          display: "inline-block",
+                          animation: "vp-spin 0.7s linear infinite",
+                        }}
+                      />
                     ) : (
                       <Play size={23} fill="currentColor" style={{ marginLeft: 2 }} />
                     )}

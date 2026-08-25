@@ -333,6 +333,15 @@ export function useAdManager({
     advanceQueueRef.current?.();
   }, [adSkippable]);
 
+  // true khi đã sẵn sàng để user bấm Play mà không lo miss preroll:
+  //   - user premium (isFreeUser=false) → không cần chờ ads
+  //   - hoặc allAds đã fetch xong (dù rỗng hay có data)
+  // Component cha dùng cờ này để disable/hiện spinner trên nút Play cho tới
+  // khi sẵn sàng — đảm bảo lúc user THỰC SỰ tap được thì allAds đã có data,
+  // tránh race trên mạng chậm (mobile) khiến tryStartPreRoll() bỏ qua preroll
+  // vĩnh viễn vì allAds chưa kịp load lúc tap (ads hiện trên PC, mất trên mobile).
+  const adsReady = !isFreeUser || allAds !== null;
+
   return {
     // refs
     isAdPlayingRef,
@@ -343,6 +352,7 @@ export function useAdManager({
     adTimeLeft,
     adSkippable,
     adSkipCountdown,
+    adsReady,
     // actions
     triggerPostRoll,
     skipAd,
