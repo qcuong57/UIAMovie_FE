@@ -115,6 +115,9 @@ const EpisodeVideoPlayer = ({
 
   const [playing, setPlaying] = useState(false);
   const [videoReady, setVideoReady] = useState(false); // true sau khi video element fire canplay lần đầu
+  // ── Debug lỗi phát video trên mobile (không có DevTools) ──────
+  // MediaError.code: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
+  const [videoError, setVideoError] = useState(null); // { code, message, src }
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [buffered, setBuffered] = useState(0);
@@ -229,10 +232,18 @@ const EpisodeVideoPlayer = ({
     const v = videoRef.current;
     if (!v) return;
     if (tryStartPreRoll()) return; // đã swap sang ad + play() bên trong
-    v.play().catch((err) =>
-      console.warn("[EpisodeVideoPlayer] play() failed:", err),
-    );
-  }, [tryStartPreRoll]);
+    v.play().catch((err) => {
+      console.warn("[EpisodeVideoPlayer] play() failed:", err);
+      // play() bị reject không tự bắn sự kiện "error" trên <video> (không
+      // phải lỗi decode/network, mà là bị trình duyệt chặn autoplay) —
+      // nên phải tự set videoError ở đây để hiện overlay debug trên mobile.
+      setVideoError({
+        code: "PLAY_REJECTED",
+        message: `play() bị từ chối: ${err?.name ?? ""} ${err?.message ?? err}`,
+        src: v.currentSrc || videoUrl,
+      });
+    });
+  }, [tryStartPreRoll, videoUrl]);
 
   // Resume từ WatchHistory — chỉ áp dụng khi đúng episode được resume
   const resumeSeconds =
@@ -488,11 +499,32 @@ const EpisodeVideoPlayer = ({
     const onCanPlay = () => {
       // Luôn set videoReady để trigger preRoll effect
       setVideoReady(true);
+      setVideoError(null); // load được thì xoá lỗi cũ (nếu có)
       // Resume chỉ chạy 1 lần
       if (!hasResumedRef.current) {
         if (resumeSeconds > 0) v.currentTime = resumeSeconds;
         hasResumedRef.current = true;
       }
+    };
+    // MediaError chỉ có .code (số) + .message (thường rỗng trên WebKit) —
+    // tự map sang mô tả tiếng Việt để đọc được ngay trên điện thoại mà
+    // không cần Safari Web Inspector / máy Mac.
+    const MEDIA_ERROR_LABELS = {
+      1: "MEDIA_ERR_ABORTED — người dùng/tab huỷ tải video",
+      2: "MEDIA_ERR_NETWORK — lỗi mạng khi tải video (CORS, mất kết nối, URL sai...)",
+      3: "MEDIA_ERR_DECODE — dữ liệu video hỏng hoặc trình duyệt decode lỗi",
+      4: "MEDIA_ERR_SRC_NOT_SUPPORTED — định dạng/codec video không được trình duyệt hỗ trợ",
+    };
+    const onError = () => {
+      const err = v.error;
+      const info = {
+        code: err?.code ?? null,
+        message:
+          MEDIA_ERROR_LABELS[err?.code] ?? err?.message ?? "Lỗi không xác định",
+        src: v.currentSrc || videoUrl,
+      };
+      console.error("[EpisodeVideoPlayer] <video> error:", info, err);
+      setVideoError(info);
     };
 
     v.addEventListener("timeupdate", onTimeUpdate);
@@ -502,6 +534,7 @@ const EpisodeVideoPlayer = ({
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
     v.addEventListener("canplay", onCanPlay);
+    v.addEventListener("error", onError);
 
     return () => {
       v.removeEventListener("timeupdate", onTimeUpdate);
@@ -511,6 +544,7 @@ const EpisodeVideoPlayer = ({
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
       v.removeEventListener("canplay", onCanPlay);
+      v.removeEventListener("error", onError);
     };
   }, [videoUrl, saveProgress, resumeSeconds, triggerPostRoll]);
 
@@ -945,6 +979,47 @@ const EpisodeVideoPlayer = ({
           }}
           onClick={handleVideoTap}
         />
+
+        {/* ── Debug overlay: hiện lỗi video ngay trên màn hình (dùng để
+            debug trên điện thoại khi không có Mac/Safari Inspector).
+            Có thể xoá khối này sau khi đã xác định xong nguyên nhân. ── */}
+        {videoError && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 40,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: 20,
+              textAlign: "center",
+              background: "rgba(0,0,0,0.88)",
+              color: "#fff",
+              fontFamily: "'Nunito',sans-serif",
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#f87171" }}>
+              Lỗi phát video (code: {String(videoError.code)})
+            </p>
+            <p style={{ margin: 0, fontSize: 12, opacity: 0.85, maxWidth: 340 }}>
+              {videoError.message}
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 10,
+                opacity: 0.5,
+                maxWidth: 340,
+                wordBreak: "break-all",
+              }}
+            >
+              {videoError.src}
+            </p>
+          </div>
+        )}
 
         {!playing && progress === 0 && backdropUrl && (
           <img
