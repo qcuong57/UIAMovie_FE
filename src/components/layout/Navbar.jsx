@@ -361,13 +361,13 @@ const Navbar = () => {
           whileTap={{ scale: 0.98 }}
         >
           <span
-            className="text-3xl font-black leading-none"
+            className="text-2xl md:text-3xl font-black leading-none"
             style={{ color: ACCENT, letterSpacing: "-0.02em" }}
           >
             UIA
           </span>
           <span
-            className="text-2xl font-bold leading-none"
+            className="text-xl md:text-2xl font-bold leading-none"
             style={{
               color: scrolled ? "#ffffff" : "#f0f0f0",
               letterSpacing: "0.06em",
@@ -825,7 +825,7 @@ const Navbar = () => {
 
           {/* ── Divider ── */}
           <div
-            className="mx-1 h-5 w-px"
+            className="hidden md:block mx-1 h-5 w-px"
             style={{
               background: scrolled
                 ? "rgba(255,255,255,0.12)"
@@ -836,7 +836,7 @@ const Navbar = () => {
 
           {/* ── Đăng nhập / Đăng ký (chỉ khi chưa đăng nhập) ── */}
           {!isLoggedIn ? (
-            <div className="flex items-center gap-2.5">
+            <div className="hidden md:flex items-center gap-2.5">
               <motion.button
                 onClick={() =>
                   navigate("/welcome", { state: { view: "register" } })
@@ -1166,7 +1166,6 @@ const Navbar = () => {
                 setShowFilter((p) => !p);
                 setShowMobileMenu(false);
               }}
-              F
               style={{
                 display: "flex",
                 alignItems: "center",

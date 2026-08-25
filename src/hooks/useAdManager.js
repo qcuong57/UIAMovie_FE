@@ -118,16 +118,14 @@ export function useAdManager({
       v.src = ad.videoUrl;
       v.currentTime = 0;
       v.load();
-      const tryPlay = () => v.play().catch(() => {});
-      if (v.readyState >= 2) {
-        tryPlay();
-      } else {
-        const onReady = () => {
-          tryPlay();
-          v.removeEventListener("loadedmetadata", onReady);
-        };
-        v.addEventListener("loadedmetadata", onReady);
-      }
+      // QUAN TRỌNG (mobile Safari/Chrome): play() phải được gọi ĐỒNG BỘ,
+      // ngay trong cùng call stack của user gesture — không chờ event
+      // "loadedmetadata" rồi mới play(), vì lúc đó gesture đã kết thúc và
+      // trình duyệt sẽ âm thầm chặn play() (không throw lỗi, video đứng
+      // hình, "ended" không bao giờ bắn ra → isAd kẹt true → toàn bộ
+      // controls bị khoá vĩnh viễn). Gọi play() ngay sau load() là đúng
+      // chuẩn HTML5 video — trình duyệt tự xử lý buffer nội bộ.
+      v.play().catch(() => {});
       return true;
     },
     [videoRef],
