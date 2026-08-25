@@ -65,6 +65,13 @@ export function useAdManager({
   const [adTimeLeft, setAdTimeLeft] = useState(0); // giây còn lại
   const [adSkippable, setAdSkippable] = useState(false);
   const [adSkipCountdown, setAdSkipCountdown] = useState(0);
+  // BUG FIX: cờ riêng đánh dấu "đã fetch xong" (dù thành công/lỗi/rỗng) —
+  // KHÔNG được suy ra từ `allAds !== null`, vì .catch() cũng set allAds về
+  // null. Nếu dùng allAds !== null làm điều kiện "ready", một request ads bị
+  // lỗi mạng (mất mạng, timeout, CORS, 401...) sẽ khiến nút Play xoay spinner
+  // vĩnh viễn không bao giờ bấm được — đúng bug "nút play cứ xoay không phát
+  // được phim".
+  const [adsFetchDone, setAdsFetchDone] = useState(false);
 
   // true trong suốt thời gian video đang phát ad (kể cả giữa 2 ad liên tiếp
   // trong cùng 1 break) — component cha dùng để bỏ qua logic riêng của nó
@@ -85,6 +92,7 @@ export function useAdManager({
   useEffect(() => {
     if (!isFreeUser || !contentId) {
       setAllAds(null);
+      setAdsFetchDone(true); // premium hoặc chưa có contentId → không cần chờ ads
       midRollFiredRef.current = new Set();
       preRollFiredRef.current = false;
       postRollFiredRef.current = false;
@@ -95,11 +103,33 @@ export function useAdManager({
     preRollFiredRef.current = false;
     postRollFiredRef.current = false;
     setAllAds(null);
+    setAdsFetchDone(false);
+
+    let cancelled = false;
+    // An toàn: nếu request treo quá lâu (mạng mobile chập chờn, request không
+    // bao giờ resolve/reject), vẫn mở khóa nút Play sau 5s thay vì để user
+    // kẹt cứng không xem được phim chỉ vì ads không load được.
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setAdsFetchDone(true);
+    }, 5000);
 
     adService
       .getAdsForContent(contentType, contentId, parentId)
-      .then((data) => setAllAds(data))
-      .catch(() => setAllAds(null));
+      .then((data) => {
+        if (!cancelled) setAllAds(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAllAds(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAdsFetchDone(true);
+        clearTimeout(safetyTimer);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
   }, [isFreeUser, contentType, contentId, parentId]);
 
   // ── Phát 1 ad cụ thể trên videoRef (swap src + state) ───────
@@ -340,7 +370,12 @@ export function useAdManager({
   // khi sẵn sàng — đảm bảo lúc user THỰC SỰ tap được thì allAds đã có data,
   // tránh race trên mạng chậm (mobile) khiến tryStartPreRoll() bỏ qua preroll
   // vĩnh viễn vì allAds chưa kịp load lúc tap (ads hiện trên PC, mất trên mobile).
-  const adsReady = !isFreeUser || allAds !== null;
+  // true khi đã sẵn sàng để user bấm Play mà không lo miss preroll:
+  //   - user premium (isFreeUser=false) → không cần chờ ads
+  //   - hoặc fetch ads đã KẾT THÚC (adsFetchDone) — dù thành công, lỗi, hay
+  //     rỗng. Cố tình KHÔNG dùng `allAds !== null` vì .catch() cũng set
+  //     allAds về null khi fetch lỗi → sẽ khiến nút Play kẹt spinner mãi mãi.
+  const adsReady = !isFreeUser || adsFetchDone;
 
   return {
     // refs
