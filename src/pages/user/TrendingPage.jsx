@@ -3,12 +3,11 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Construction, Sparkles, Clock } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../../context/homeTokens';
+import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import BackButton from '../../components/common/BackButton';
 import SectionReveal from '../../motion-configs/SectionReveal';
-import { floatVariants } from '../../motion-configs/variants';
 import { STAGGER_NORMAL } from '../../motion-configs/transitions';
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
@@ -63,56 +62,40 @@ export default function TrendingPage() {
               width: '100%',
             }}
           >
-            {/* Icon — nổi bật, có glow + float nhẹ */}
-            <SectionReveal variant="scale-fade">
-              <motion.div
-                variants={floatVariants}
-                animate="animate"
+            {/* Icon — viền mảnh, không glow, không nền màu */}
+            <SectionReveal variant="fade">
+              <div
                 style={{
-                  width: 96,
-                  height: 96,
-                  borderRadius: 24,
-                  background: 'rgba(229,24,30,0.10)',
-                  border: '1px solid rgba(229,24,30,0.25)',
-                  boxShadow: '0 0 40px rgba(229,24,30,0.18)',
+                  width: 56,
+                  height: 56,
+                  borderRadius: '50%',
+                  border: `1px solid ${C.borderMid}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: 28,
                 }}
               >
-                <Construction size={40} color={C.accent} strokeWidth={1.75} />
-              </motion.div>
+                <Wrench size={20} color={C.textSub} strokeWidth={1.5} />
+              </div>
             </SectionReveal>
 
-            {/* Badge nhỏ */}
-            <SectionReveal variant="fade" delay={0.05}>
-              <div
+            {/* Nhãn nhỏ, chữ hoa, cách chữ rộng — thay cho badge */}
+            <SectionReveal variant="fade" delay={0.06}>
+              <span
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 14px',
-                  borderRadius: 99,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.09)',
-                  marginBottom: 20,
+                  fontFamily: FONT_BODY,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  color: C.textDim,
+                  marginBottom: 18,
+                  display: 'block',
                 }}
               >
-                <Sparkles size={12} color={C.gold} />
-                <span
-                  style={{
-                    fontFamily: FONT_BODY,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    color: C.textSub,
-                  }}
-                >
-                  Đang cập nhật
-                </span>
-              </div>
+                Đang cập nhật
+              </span>
             </SectionReveal>
 
             {/* Tiêu đề */}
@@ -120,11 +103,12 @@ export default function TrendingPage() {
               <h1
                 style={{
                   fontFamily: FONT_DISPLAY,
-                  fontSize: 'clamp(22px, 3vw, 32px)',
-                  fontWeight: 800,
+                  fontSize: 'clamp(22px, 3vw, 30px)',
+                  fontWeight: 700,
                   color: C.text,
-                  lineHeight: 1.25,
-                  marginBottom: 14,
+                  lineHeight: 1.3,
+                  marginBottom: 12,
+                  letterSpacing: '-0.01em',
                 }}
               >
                 Trang này đang được nâng cấp
@@ -137,55 +121,35 @@ export default function TrendingPage() {
                 style={{
                   fontFamily: FONT_BODY,
                   fontSize: 14,
+                  fontWeight: 400,
                   color: C.textSub,
                   lineHeight: 1.7,
-                  marginBottom: 32,
-                  maxWidth: 420,
+                  marginBottom: 36,
+                  maxWidth: 380,
                 }}
               >
-                Chúng tôi đang cải thiện tính năng này để mang đến trải nghiệm mượt mà
-                và tốt hơn cho bạn. Vui lòng quay lại sau ít phút.
+                Chúng tôi đang cải thiện tính năng này để mang đến trải nghiệm
+                tốt hơn. Vui lòng quay lại sau.
               </p>
             </SectionReveal>
 
-            {/* Divider info: đang xử lý */}
+            {/* Nút quay lại trang chủ — outline, không shadow màu */}
             <SectionReveal variant="fade" delay={0.22}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 32,
-                  color: C.textDim,
-                }}
-              >
-                <Clock size={13} />
-                <span style={{ fontFamily: FONT_BODY, fontSize: 12 }}>
-                  Dự kiến sẽ sớm hoạt động trở lại
-                </span>
-              </div>
-            </SectionReveal>
-
-            {/* Nút quay lại trang chủ */}
-            <SectionReveal variant="slide-up" delay={0.28}>
               <motion.button
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
+                whileHover={{ borderColor: C.borderBright, color: C.text }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/')}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '11px 26px',
-                  borderRadius: 8,
-                  background: C.accent,
-                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  border: `1px solid ${C.borderMid}`,
                   cursor: 'pointer',
                   fontFamily: FONT_BODY,
                   fontSize: 13,
-                  fontWeight: 700,
-                  color: '#fff',
-                  boxShadow: `0 8px 24px ${C.accentGlow}`,
+                  fontWeight: 600,
+                  color: C.textSub,
+                  transition: 'border-color 0.2s, color 0.2s',
                 }}
               >
                 Về trang chủ
