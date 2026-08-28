@@ -8,6 +8,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
 import { SeasonEpisodeBuilderField, seasonsStateToDto } from './SeasonEpisodeFields';
+import { useToast } from '../common/Toast';
 
 const gold      = '#D97706';
 const goldLight = '#FEF3C7';
@@ -184,6 +185,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
   const [backdrops, setBackdrops] = useState([]); // [{ uid, url }]
   const [seasons, setSeasons] = useState([]);     // [{ uid, seasonNumber, name, overview, posterUrl, airDate, episodes: [...] }]
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [error,  setError]  = useState('');
 
   const set = (key) => (v) => setForm(f => ({ ...f, [key]: v }));
@@ -246,10 +248,13 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
       };
       const res = await tvShowService.createTvShow(dto);
       const showId = res?.data?.showId ?? res?.showId;
+      toast.success(`Đã tạo TV show "${form.title.trim()}"`);
       onCreated?.(showId);
       resetAndClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo TV show');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo TV show';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

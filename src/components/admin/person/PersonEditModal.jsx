@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axiosInstance from '../../../config/axios';
 import personService from '../../../services/personService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { useToast } from '../common/Toast';
 
 /**
  * Props:
@@ -23,6 +24,7 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   useEffect(() => {
     if (person) {
@@ -69,9 +71,12 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
         placeOfBirth: form.placeOfBirth?.trim(),
         profileImages,
       });
+      toast.success(`Đã lưu "${form.name.trim()}"`);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

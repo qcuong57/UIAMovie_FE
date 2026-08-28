@@ -17,6 +17,9 @@ import { C, extractYoutubeKey, fmt, GLOBAL_STYLES } from "../../components/movie
 import TvShowInfoHero from "../../components/movie/tvshow/TvShowInfoHero";
 import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 
+// ── Loading screen (full-page) ────────────────────────────────────
+import LoadingScreen from "../../components/ui/LoadingScreen";
+
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════
@@ -216,35 +219,7 @@ export default function TvShowInfoPage() {
 
   // ── Loading ──────────────────────────────────────────────────────
   if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: C.bg,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <style>{GLOBAL_STYLES}</style>
-        <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 8 }}>
-          <Skeleton w={90} h={32} r={20} />
-        </div>
-        <Skeleton w="100%" h={420} r={0} />
-        <div
-          style={{
-            maxWidth: 1200,
-            margin: "0 auto",
-            padding: "40px 24px",
-            width: "100%",
-          }}
-        >
-          <Skeleton w={340} h={40} r={6} style={{ marginBottom: 16 }} />
-          <Skeleton w={200} h={20} r={4} style={{ marginBottom: 32 }} />
-          <Skeleton w="100%" h={80} r={8} style={{ marginBottom: 12 }} />
-          <Skeleton w="80%" h={80} r={8} />
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // ── Error ────────────────────────────────────────────────────────

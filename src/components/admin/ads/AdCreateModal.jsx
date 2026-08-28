@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, Link, Check, MonitorPlay, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 // ── Reusable field atoms ───────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
   const [saving,    setSaving]    = useState(false);
   const [progress,  setProgress]  = useState(0);
   const [errors,    setErrors]    = useState({});
-  const [globalErr, setGlobalErr] = useState('');
+  const toast = useToast();
 
   const setF = (key) => (val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -217,7 +218,7 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
   const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setSaving(true); setProgress(0); setGlobalErr('');
+    setSaving(true); setProgress(0);
     try {
       await adService.createAd({
         title:             form.title.trim(),
@@ -233,9 +234,10 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
       setForm(initForm()); setVideoFile(null); setVideoUrl('');
       setBrandSource('upload'); setBrandImageFile(null); setBrandImageUrl('');
       setErrors({});
+      toast.success(`Đã tạo quảng cáo "${form.title.trim()}"`);
       onCreated?.();
     } catch (err) {
-      setGlobalErr(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
+      toast.error(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
     } finally { setSaving(false); }
   };
 
@@ -243,7 +245,7 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
     if (saving) return;
     setForm(initForm()); setVideoFile(null); setVideoUrl('');
     setBrandSource('upload'); setBrandImageFile(null); setBrandImageUrl('');
-    setErrors({}); setGlobalErr('');
+    setErrors({});
     onClose();
   };
 
@@ -346,12 +348,6 @@ export default function AdCreateModal({ open, onClose, onCreated }) {
                     <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: T.accent }}>{progress}%</span>
                   </div>
                   <ProgressBar percent={progress} />
-                </div>
-              )}
-
-              {globalErr && (
-                <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', fontFamily: FONT, fontSize: 12.5, color: T.red }}>
-                  {globalErr}
                 </div>
               )}
             </div>

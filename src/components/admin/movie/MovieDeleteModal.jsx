@@ -4,6 +4,7 @@ import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axiosInstance from '../../../config/axios';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { useToast } from '../common/Toast';
 
 /**
  * Props:
@@ -14,17 +15,22 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 export default function MovieDeleteModal({ movie, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [error,    setError]    = useState('');
+  const toast = useToast();
 
   const handleDelete = async () => {
     if (!movie) return;
+    const title = movie.title;
     setDeleting(true);
     setError('');
     try {
       await axiosInstance.delete(`/movies/${movie.id}`);
       onDeleted?.(movie.id);
       onClose();
+      toast.success(`Đã xóa phim "${title}" khỏi hệ thống`, 'Xóa phim thành công');
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa phim');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa phim';
+      setError(msg);
+      toast.error(msg, 'Xóa phim thất bại');
     } finally {
       setDeleting(false);
     }

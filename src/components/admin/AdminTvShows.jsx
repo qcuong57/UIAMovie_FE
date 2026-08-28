@@ -13,6 +13,7 @@ import TvShowDeleteModal from './tvshow/TvShowDeleteModal';
 import TvShowAddModal    from './tvshow/TvShowAddModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 import AdminPagination from '../common/AdminPagination';
+import { useToast } from './common/Toast';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -151,6 +152,7 @@ export default function AdminTvShows() {
   const [togglingId, setTogglingId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const debounceRef = useRef(null);
+  const toast = useToast();
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -210,9 +212,11 @@ export default function AdminTvShows() {
     setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: next } : s));
     try {
       await tvShowService.setPremium(show.id, next);
+      toast.success(next ? `Đã đặt "${show.title}" thành Premium` : `Đã chuyển "${show.title}" về Free`);
     } catch (e) {
       console.error('[AdminTvShows] togglePremium failed:', e);
       setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: !next } : s));
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'Không thể cập nhật trạng thái Premium');
     } finally {
       setTogglingId(null);
     }

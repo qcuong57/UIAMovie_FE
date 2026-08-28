@@ -12,6 +12,7 @@ import Pagination   from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import LoadingScreen from '../../components/ui/LoadingScreen';
 
 // 6 cột giống BrowsePage
 const grid6 = (isMobile) => ({
@@ -253,21 +254,8 @@ export default function FavoritesPage() {
     if (pagination.page > 1) window.scrollTo({ top: 100, behavior: 'smooth' });
   }, [pagination.page]);
 
-  // ── Loading skeleton ─────────────────────────────────────────────────────────
-  if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#000', paddingTop: 68 }}>
-      <style>{GOOGLE_FONTS}</style>
-      <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px' : '40px 48px' }}>
-        <div style={{ height: 36, width: 240, borderRadius: 8, marginBottom: 36, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
-        <div style={grid6(isMobile)}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} style={{ aspectRatio: '2/3', borderRadius: 10, animationDelay: `${i * 0.07}s`, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.03) 100%)' }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (loading) return <LoadingScreen />;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (

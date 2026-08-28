@@ -7,6 +7,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
 import tvShowService from '../../../services/tvShowService';
+import { useToast } from '../common/Toast';
 
 let editUidSeq = 0;
 const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;
@@ -163,6 +164,7 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
   const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
   const [backdrops, setBackdrops] = useState([]); // [{ uid, id?, url }]
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [error,  setError]  = useState('');
 
   const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
@@ -302,9 +304,12 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
           ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
         ],
       });
+      toast.success(`Đã lưu "${form.title.trim()}"`);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra';
+      setError(msg);
+      toast.error(msg);
     } finally { setSaving(false); }
   };
 

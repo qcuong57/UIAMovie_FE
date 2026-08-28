@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CalendarRange, Check, ChevronDown, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS, AD_CONTENT_TYPES, AD_POSITIONS } from '../../../context/adminTokens';
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
@@ -200,15 +201,14 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled }) {
   const [form,      setForm]      = useState(initForm());
   const [saving,    setSaving]    = useState(false);
   const [errors,    setErrors]    = useState({});
-  const [globalErr, setGlobalErr] = useState('');
   const [success,   setSuccess]   = useState(false);
+  const toast = useToast();
 
   // Reset khi mở modal mới
   useEffect(() => {
     if (open) {
       setForm(initForm());
       setErrors({});
-      setGlobalErr('');
       setSuccess(false);
     }
   }, [open, ad?.id]);
@@ -244,7 +244,7 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled }) {
   const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setSaving(true); setGlobalErr('');
+    setSaving(true);
     try {
       const shared = {
         position:             form.position,
@@ -268,12 +268,13 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled }) {
       }
 
       setSuccess(true);
+      toast.success(form.mode === 'global' ? 'Đã gắn lịch phát toàn cục' : 'Đã gắn override cho nội dung');
       setTimeout(() => {
         onScheduled?.();
         onClose?.();
       }, 900);
     } catch (err) {
-      setGlobalErr(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra khi lưu');
+      toast.error(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra khi lưu');
     } finally {
       setSaving(false);
     }
@@ -533,18 +534,6 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled }) {
                 </Field>
               )}
 
-              {/* Global error */}
-              {globalErr && (
-                <div style={{
-                  padding: '10px 14px', borderRadius: 8,
-                  background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)',
-                  fontFamily: FONT, fontSize: 12.5, color: T.red,
-                  display: 'flex', alignItems: 'center', gap: 7,
-                }}>
-                  <AlertCircle size={13} color={T.red} style={{ flexShrink: 0 }} />
-                  {globalErr}
-                </div>
-              )}
             </div>
 
             {/* ── Footer ── */}

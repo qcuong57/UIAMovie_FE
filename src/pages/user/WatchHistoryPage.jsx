@@ -15,6 +15,7 @@ import tvShowService from '../../services/tvShowService';
 import BackButton    from '../../components/common/BackButton';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import LoadingScreen from '../../components/ui/LoadingScreen';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (date) => {
@@ -449,26 +450,8 @@ export default function WatchHistoryPage() {
 
   const groups = useMemo(() => groupByDay(history), [history]);
 
-  // ── Skeleton ────────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#000', paddingTop: 68 }}>
-      <style>{GOOGLE_FONTS}</style>
-      <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '20px 16px' : '32px 48px' }}>
-        <div style={{ height: 18, width: 60, borderRadius: 6, marginBottom: 32, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
-        <div style={{ height: 32, width: 200, borderRadius: 8, marginBottom: 32, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 100%)' }} />
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', gap: 16, padding: '12px 0', alignItems: 'center' }}>
-            <div style={{ width: 60, height: 90, borderRadius: 8, flexShrink: 0, animationDelay: `${i*0.08}s`, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.03) 100%)' }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ height: 16, width: '60%', borderRadius: 6, marginBottom: 10, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 100%)' }} />
-              <div style={{ height: 10, width: '35%', borderRadius: 6, animation: 'shimmer 1.6s infinite', backgroundSize: '200% 100%', backgroundImage: 'linear-gradient(90deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.03) 100%)' }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (loading) return <LoadingScreen />;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (

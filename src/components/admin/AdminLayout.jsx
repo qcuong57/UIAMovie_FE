@@ -10,6 +10,7 @@ import authService from '../../services/authService';
 
 // Import tokens mới tạo
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
+import { ToastProvider } from './common/Toast';
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
@@ -131,6 +132,7 @@ export default function AdminLayout({ children, activeTab, onTabChange }) {
   };
 
   return (
+    <ToastProvider>
     <div style={{ display: 'flex', minHeight: '100vh', background: T.bg, fontFamily: FONT }}>
       <style>{ADMIN_GOOGLE_FONTS}</style>
       
@@ -201,5 +203,6 @@ export default function AdminLayout({ children, activeTab, onTabChange }) {
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }

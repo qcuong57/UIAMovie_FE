@@ -7,6 +7,7 @@ import {
   RefreshCw, ToggleLeft, ToggleRight, Image as ImageIcon,
 } from 'lucide-react';
 import adService from '../../../services/adService';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
@@ -155,6 +156,7 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
   const [loading,     setLoading]     = useState(false);
   const [togglingId,  setTogglingId]  = useState(null);
   const [deletingId,  setDeletingId]  = useState(null);
+  const toast = useToast();
 
   // Refresh chi tiết đầy đủ (kèm schedules)
   const loadDetail = async () => {
@@ -164,7 +166,10 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
       const res = await adService.getAdById(ad.id);
       const detail = res?.data ?? res;
       if (detail) setAd(detail);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Không tải được chi tiết quảng cáo');
+    }
     finally { setLoading(false); }
   };
 
@@ -183,7 +188,10 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
           s.slotId === slot.slotId ? { ...s, isActive: !s.isActive } : s
         ),
       }));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Không thể đổi trạng thái lịch phát');
+    }
     finally { setTogglingId(null); }
   };
 
@@ -195,7 +203,11 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
         ...prev,
         globalSlots: prev.globalSlots.filter(s => s.slotId !== slot.slotId),
       }));
-    } catch (e) { console.error(e); }
+      toast.success('Đã gỡ lịch phát');
+    } catch (e) {
+      console.error(e);
+      toast.error('Không thể gỡ lịch phát');
+    }
     finally { setDeletingId(null); }
   };
 

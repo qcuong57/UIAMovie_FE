@@ -15,7 +15,7 @@ import movieService from "../../services/movieService";
 import BackButton from "../../components/common/BackButton";
 
 import { C, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
-import PageLoadingSpinner from "../../components/movie/ui/PageLoadingSpinner";
+import LoadingScreen from "../../components/ui/LoadingScreen";
 import SidebarPersonList from "../../components/movie/ui/SidebarPersonList";
 import SidebarRelatedList from "../../components/movie/ui/SidebarRelatedList";
 
@@ -151,7 +151,7 @@ export default function MovieDetailPage() {
     })();
   }, [id]);
 
-  if (loading) return <PageLoadingSpinner />;
+  if (loading) return <LoadingScreen />;
 
   const year = movie?.releaseDate
     ? new Date(movie.releaseDate).getFullYear()

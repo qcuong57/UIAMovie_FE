@@ -4,6 +4,7 @@ import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import personService from '../../../services/personService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { useToast } from '../common/Toast';
 
 /**
  * Props:
@@ -14,6 +15,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 export default function PersonDeleteModal({ person, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   const handleDelete = async () => {
     if (!person) return;
@@ -21,11 +23,13 @@ export default function PersonDeleteModal({ person, onClose, onDeleted }) {
     setError('');
     try {
       await personService.deletePerson(person.id);
+      toast.success(`Đã xóa "${person.name}"`);
       onDeleted?.(person.id);
       onClose();
     } catch (e) {
       const message = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa';
       setError(message);
+      toast.error(message);
     } finally {
       setDeleting(false);
     }

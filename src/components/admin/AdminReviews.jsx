@@ -7,6 +7,7 @@ import movieService  from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
 import { usePagination } from '../../hooks/usePagination';
 import AdminPagination from '../../components/common/AdminPagination';
+import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 12;
@@ -402,6 +403,7 @@ const SearchableDropdown = ({
 
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AdminReviews() {
+  const toast = useToast();
   const [tab,       setTab]       = useState('movie');   // 'movie' | 'tvshow'
   const [movies,    setMovies]    = useState([]);
   const [tvShows,   setTvShows]   = useState([]);
@@ -498,9 +500,12 @@ export default function AdminReviews() {
       setTotalRev(prev => prev - 1);
       setDeleteId(null);
       setDeleteReview(null);
+      toast.success('Xóa đánh giá thành công');
     } catch (e) {
       console.error(e);
-      setDeleteError(e?.response?.data?.message ?? e?.message ?? 'Xóa thất bại, vui lòng thử lại');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Xóa thất bại, vui lòng thử lại';
+      setDeleteError(msg);
+      toast.error(msg);
     } finally { setDeleting(false); }
   };
 

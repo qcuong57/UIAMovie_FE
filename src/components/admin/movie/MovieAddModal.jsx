@@ -7,6 +7,7 @@ import movieService from '../../../services/movieService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
+import { useToast } from '../common/Toast';
 
 const gold      = '#D97706';
 const goldLight = '#FEF3C7';
@@ -143,6 +144,7 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
   const [backdrops, setBackdrops] = useState([]); // [{ uid, url }]
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
+  const toast = useToast();
 
   const set = (key) => (v) => setForm(f => ({ ...f, [key]: v }));
 
@@ -192,8 +194,11 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
       const movieId = res?.data?.movieId ?? res?.movieId;
       onCreated?.(movieId);
       resetAndClose();
+      toast.success(`Đã tạo phim "${dto.title}"`, 'Tạo phim thành công');
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo phim');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo phim';
+      setError(msg);
+      toast.error(msg, 'Tạo phim thất bại');
     } finally {
       setSaving(false);
     }

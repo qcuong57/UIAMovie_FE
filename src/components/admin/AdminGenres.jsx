@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Pencil, AlertCircle, Check, X } from 'lucide-react';
 import genreService from '../../services/genreService';
+import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PALETTE = [
@@ -225,6 +226,7 @@ const GenreCard = ({ genre, color, index, onEdit, onDelete }) => (
 
 // ── AdminGenres ────────────────────────────────────────────────────────────────
 export default function AdminGenres() {
+  const toast = useToast();
   const [genres,   setGenres]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [showAdd,  setShowAdd]  = useState(false);
@@ -241,7 +243,10 @@ export default function AdminGenres() {
       const res  = await genreService.getAllGenres();
       const list = Array.isArray(res) ? res : res?.data ?? res?.genres ?? [];
       setGenres(list);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Không thể tải danh sách thể loại');
+    }
     finally { setLoading(false); }
   };
 
@@ -267,13 +272,17 @@ export default function AdminGenres() {
         await genreService.updateGenre(editItem.id, form);
         setGenres(prev => prev.map(g => g.id === editItem.id ? { ...g, ...form } : g));
         setEditItem(null);
+        toast.success('Cập nhật thể loại thành công');
       } else {
         await genreService.createGenre(form);
         await fetchGenres();
         setShowAdd(false);
+        toast.success('Thêm thể loại thành công');
       }
     } catch (e) {
-      setError(e?.response?.data?.message ?? 'Có lỗi xảy ra');
+      const msg = e?.response?.data?.message ?? 'Có lỗi xảy ra';
+      setError(msg);
+      toast.error(editItem ? `Cập nhật thể loại thất bại: ${msg}` : `Thêm thể loại thất bại: ${msg}`);
     } finally { setSaving(false); }
   };
 
@@ -284,8 +293,12 @@ export default function AdminGenres() {
       await genreService.deleteGenre(deleteId);
       setGenres(prev => prev.filter(g => g.id !== deleteId));
       setDeleteId(null);
-    } catch (e) { console.error(e); }
-    finally { setDeleting(false); }
+      toast.success('Xóa thể loại thành công');
+    } catch (e) {
+      console.error(e);
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Xóa thất bại, vui lòng thử lại';
+      toast.error(msg);
+    } finally { setDeleting(false); }
   };
 
   return (

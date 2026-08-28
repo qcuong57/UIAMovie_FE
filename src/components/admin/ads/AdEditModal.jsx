@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Link, Save, MonitorPlay, RotateCcw, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
@@ -211,7 +212,7 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
   const [saving,      setSaving]      = useState(false);
   const [progress,    setProgress]    = useState(0);
   const [errors,      setErrors]      = useState({});
-  const [globalErr,   setGlobalErr]   = useState('');
+  const toast = useToast();
 
   // Sync form khi ad thay đổi
   useEffect(() => {
@@ -230,7 +231,6 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
     setBrandImageFile(null);
     setBrandImageUrl('');
     setErrors({});
-    setGlobalErr('');
   }, [ad]);
 
   const setF = (key) => (val) => setForm(f => ({ ...f, [key]: val }));
@@ -257,7 +257,7 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
   const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setSaving(true); setProgress(0); setGlobalErr('');
+    setSaving(true); setProgress(0);
     try {
       const dto = {
         title:           form.title.trim(),
@@ -277,8 +277,9 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
         videoUrl: videoSource === 'url' ? videoUrl.trim() : ad.videoUrl,
         brandImageUrl: brandImageSource === 'url' ? brandImageUrl.trim() : ad.brandImageUrl,
       });
+      toast.success(`Đã cập nhật quảng cáo "${form.title.trim()}"`);
     } catch (err) {
-      setGlobalErr(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
+      toast.error(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
     } finally { setSaving(false); }
   };
 
@@ -425,12 +426,6 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
                     <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: T.accent }}>{progress}%</span>
                   </div>
                   <ProgressBar percent={progress} />
-                </div>
-              )}
-
-              {globalErr && (
-                <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', fontFamily: FONT, fontSize: 12.5, color: T.red }}>
-                  {globalErr}
                 </div>
               )}
             </div>

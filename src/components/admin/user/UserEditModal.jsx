@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, User, Link } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
+import { useToast } from '../common/Toast';
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {
@@ -61,6 +62,7 @@ export default function UserEditModal({ user, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
   const [focused, setFocused] = useState('');
+  const toast = useToast();
 
   useEffect(() => {
     if (user) {
@@ -86,9 +88,12 @@ export default function UserEditModal({ user, onClose, onSaved }) {
         username:  form.username.trim(),
         avatarUrl: form.avatarUrl.trim() || user.avatarUrl,
       });
+      toast.success('Đã cập nhật người dùng');
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

@@ -34,6 +34,7 @@ import CountryMovieRows from "../../components/home/CountryMovieRows";
 import UserReviewsSection from "../../components/home/UserReviewsSection";
 import RecommendSection from "../../components/home/RecommendSection";
 import SectionReveal from "../../motion-configs/SectionReveal";
+import { LoadingScreen } from "../../components/ui";
 // ✅ ScrollProgressBar đã bỏ → dùng CSS scrollbar trong NetflixScrollbar.css
 
 // ─── Normalize movie ──────────────────────────────────────────────────────────
@@ -128,51 +129,8 @@ const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
   return scored.slice(0, 20);
 };
 
-// ─── Loading / Error screens ──────────────────────────────────────────────────
-const LoadingScreen = () => (
-  <div
-    style={{
-      height: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: C.bg,
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 16,
-      }}
-    >
-      <motion.div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          border: `2px solid ${C.accent}`,
-          borderTopColor: "transparent",
-        }}
-        animate={{ rotate: 360 }}
-        transition={{ repeat: Infinity, duration: 0.75, ease: "linear" }}
-      />
-      <p
-        style={{
-          fontFamily: FONT_BODY,
-          fontSize: 11,
-          color: C.textDim,
-          letterSpacing: "0.15em",
-          textTransform: "uppercase",
-        }}
-      >
-        Đang tải
-      </p>
-    </div>
-  </div>
-);
-
+// ─── Error screen ───────────────────────────────────────────────────────────
+// (LoadingScreen giờ nằm ở src/components/ui/LoadingScreen.jsx, import ở trên)
 const ErrorScreen = ({ message, onRetry }) => (
   <div
     style={{

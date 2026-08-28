@@ -8,6 +8,7 @@ import axiosInstance from '../../config/axios';
 import authService from '../../services/authService';
 import UserDetailPanel from './user/UserDetailPanel';
 import UserEditModal from './user/UserEditModal';
+import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 15;
@@ -841,6 +842,7 @@ export default function AdminUsers() {
 
   const pagination = usePagination({ total, pageSize: PAGE_SIZE });
   const me = authService.getCurrentUser();
+  const toast = useToast();
 
   const fetchUsers = useCallback(async (page = 1) => {
     setLoading(true);
@@ -872,7 +874,11 @@ export default function AdminUsers() {
       setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
       setTotal(t => t - 1);
       setDeleteTarget(null);
-    } catch (e) { console.error(e); }
+      toast.success('Đã xóa người dùng');
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'Xóa người dùng thất bại');
+    }
     finally { setDeleting(false); }
   };
 
@@ -883,7 +889,11 @@ export default function AdminUsers() {
       await axiosInstance.patch(`/user/${roleTarget.id}/role`, { role: newRole });
       setUsers(prev => prev.map(u => u.id === roleTarget.id ? { ...u, role: newRole } : u));
       setRoleTarget(null);
-    } catch (e) { console.error(e); }
+      toast.success('Đã đổi role người dùng');
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'Đổi role thất bại');
+    }
     finally { setSavingRole(false); }
   };
 
@@ -894,7 +904,11 @@ export default function AdminUsers() {
       await axiosInstance.post(`/user/${banTarget.id}/ban`, { reason: banReason.trim() || null });
       setUsers(prev => prev.map(u => u.id === banTarget.id ? { ...u, isActive: false, banReason: banReason.trim() || null } : u));
       setBanTarget(null); setBanReason('');
-    } catch (e) { console.error(e); }
+      toast.success('Đã khóa tài khoản');
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'Khóa tài khoản thất bại');
+    }
     finally { setBanning(false); }
   };
 
@@ -905,7 +919,11 @@ export default function AdminUsers() {
       await axiosInstance.post(`/user/${unbanTarget.id}/unban`);
       setUsers(prev => prev.map(u => u.id === unbanTarget.id ? { ...u, isActive: true, banReason: null } : u));
       setUnbanTarget(null);
-    } catch (e) { console.error(e); }
+      toast.success('Đã mở khóa tài khoản');
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'Mở khóa thất bại');
+    }
     finally { setUnbanning(false); }
   };
 
@@ -929,10 +947,11 @@ export default function AdminUsers() {
           ? { ...u, subscriptionType: planId, subscriptionExpiredAt: expiredAt } : u));
       }
       setPremiumTarget(null);
+      toast.success(revoke ? 'Đã thu hồi Premium' : 'Đã cập nhật Premium');
     } catch (e) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra';
       console.error('[handlePremium]', msg, e);
-      alert(msg); // hoặc dùng toast nếu có
+      toast.error(msg);
     } finally { setSavingPremium(false); }
   };
 

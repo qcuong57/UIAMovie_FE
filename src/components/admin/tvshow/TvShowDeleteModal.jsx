@@ -4,6 +4,7 @@ import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axiosInstance from '../../../config/axios';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { useToast } from '../common/Toast';
 
 /**
  * Props:
@@ -14,6 +15,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [error,    setError]    = useState('');
+  const toast = useToast();
 
   const handleDelete = async () => {
     if (!show) return;
@@ -21,10 +23,13 @@ export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
     setError('');
     try {
       await axiosInstance.delete(`/tvshows/${show.id}`);
+      toast.success(`Đã xóa "${show.title ?? show.name}"`);
       onDeleted?.(show.id);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa TV show');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa TV show';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setDeleting(false);
     }

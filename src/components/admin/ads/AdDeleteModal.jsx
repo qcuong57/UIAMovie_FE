@@ -3,26 +3,27 @@ import React, { useState } from 'react';
 import { X, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 export default function AdDeleteModal({ ad, onClose, onDeleted }) {
+  const toast = useToast();
   const [deleting, setDeleting] = useState(false);
-  const [error,    setError]    = useState('');
 
   const handleDelete = async () => {
-    setDeleting(true); setError('');
+    setDeleting(true);
     try {
       await adService.deleteAd(ad.id);
+      toast.success(`Đã xóa quảng cáo "${ad.title}"`);
       onDeleted?.(ad.id);
     } catch (err) {
-      setError(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra khi xóa');
+      toast.error(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra khi xóa');
       setDeleting(false);
     }
   };
 
   const handleClose = () => {
     if (deleting) return;
-    setError('');
     onClose();
   };
 
@@ -95,12 +96,6 @@ export default function AdDeleteModal({ ad, onClose, onDeleted }) {
                 Hành động này <strong style={{ color: T.text }}>không thể hoàn tác</strong>.
                 File video trên Cloudinary cũng sẽ bị xóa vĩnh viễn.
               </p>
-
-              {error && (
-                <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', fontFamily: FONT, fontSize: 12.5, color: T.red }}>
-                  {error}
-                </div>
-              )}
             </div>
 
             {/* Footer */}

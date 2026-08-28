@@ -18,6 +18,7 @@ import {
   CalendarRange,
 } from "lucide-react";
 import adService from "../../services/adService";
+import { useToast } from "./common/Toast";
 import {
   T,
   FONT_BODY as FONT,
@@ -189,6 +190,7 @@ export default function AdminAds() {
   const [detailAd, setDetailAd] = useState(null);
   const [scheduleAd, setScheduleAd] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const toast = useToast();
 
   const fetchAds = useCallback(
     async (pg = page) => {
@@ -208,6 +210,7 @@ export default function AdminAds() {
         setTotal(tot);
       } catch (e) {
         console.error(e);
+        toast.error("Không tải được danh sách quảng cáo");
       } finally {
         setLoading(false);
       }
@@ -232,8 +235,12 @@ export default function AdminAds() {
       setAds((prev) =>
         prev.map((a) => (a.id === ad.id ? { ...a, isActive: !a.isActive } : a)),
       );
+      toast.success(
+        ad.isActive ? `Đã tạm dừng "${ad.title}"` : `Đã kích hoạt "${ad.title}"`,
+      );
     } catch (e) {
       console.error(e);
+      toast.error("Không thể đổi trạng thái quảng cáo");
     } finally {
       setTogglingId(null);
     }

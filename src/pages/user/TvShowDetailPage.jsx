@@ -20,6 +20,7 @@ import TvShowSidebar from "../../components/movie/tvshow/TvShowSidebar";
 import TvShowTitleBlock from "../../components/movie/tvshow/TvShowTitleBlock";
 import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import { Crown } from "lucide-react";
+import LoadingScreen from "../../components/ui/LoadingScreen";
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
@@ -312,31 +313,7 @@ export default function TvShowDetailPage() {
     if (ep) handleSelectEpisode(selectedSeason, ep);
   }, [nextEpisode, selectedSeason, seasonEpisodesCache]);
 
-  if (loading)
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: C.bg,
-        }}
-      >
-        <style>{GLOBAL_STYLES}</style>
-        <motion.div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: "50%",
-            border: `3px solid ${C.accent}`,
-            borderTopColor: "transparent",
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
-        />
-      </div>
-    );
+  if (loading) return <LoadingScreen />;
 
   const firstAirYear = tvShow?.firstAirDate
     ? new Date(tvShow.firstAirDate).getFullYear()

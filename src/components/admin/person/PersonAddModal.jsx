@@ -4,6 +4,7 @@ import { Check, X, UserPlus, Plus, ImageOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import personService from '../../../services/personService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { useToast } from '../common/Toast';
 
 const EMPTY_FORM = {
   name: '',
@@ -25,6 +26,7 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   // Reset form mỗi lần mở modal
   useEffect(() => {
@@ -57,10 +59,13 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
       const res = await personService.createPerson(payload);
       const newId = res?.data?.id ?? res?.id;
 
+      toast.success(`Đã tạo "${payload.name}"`);
       onCreated?.({ id: newId, ...payload });
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo mới');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo mới';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

@@ -7,6 +7,7 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, BackdropGalleryField, PosterField, backdropStateToDto } from '../shared/GenreAndImageFields'; // ✅ file dùng chung với TvShow, preview poster/backdrop đã phóng to
 import movieService from '../../../services/movieService';
+import { useToast } from '../common/Toast';
 
 let editUidSeq = 0;
 const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;
@@ -151,6 +152,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
   const [backdrops, setBackdrops] = useState([]); // [{ uid, id?, url }]
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
+  const toast = useToast();
 
   const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
   const [fullMovie, setFullMovie] = useState(null); // chi tiết đầy đủ, fetch riêng vì list item (m) không có description/cast/director/images
@@ -287,8 +289,11 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
         ],
       });
       onClose();
+      toast.success(`Đã lưu thay đổi cho "${form.title.trim()}"`, 'Cập nhật thành công');
     } catch (e) {
-      setError(e?.message ?? 'Có lỗi xảy ra');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu thay đổi';
+      setError(msg);
+      toast.error(msg, 'Cập nhật thất bại');
     } finally { setSaving(false); }
   };
 

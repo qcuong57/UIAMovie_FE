@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import movieService  from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
 import PremiumGateModal from './ui/PremiumGateModal';
+import { useToast } from '../common/Toast';
 
 // ── Route helpers ────────────────────────────────────────────────
 const infoPath   = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
@@ -47,6 +48,7 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
   const [localFav, setLocalFav] = useState(isFavorited);
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
 
@@ -60,13 +62,16 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
         await svc.removeFavorite(movie.id);
         setLocalFav(false);
         onFavoriteToggle?.(movie, false);
+        toast.info(`"${movie.title}" đã được bỏ khỏi Yêu thích`);
       } else {
         await svc.addFavorite(movie.id);
         setLocalFav(true);
         onFavoriteToggle?.(movie, true);
+        toast.success(`Đã thêm "${movie.title}" vào Yêu thích`);
       }
     } catch (err) {
       console.error(err);
+      toast.error('Không thể cập nhật Yêu thích, vui lòng thử lại');
     } finally {
       setFavLoading(false);
     }
@@ -161,6 +166,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const toast = useToast();
 
   useEffect(() => {
     setLocalFav(isFavorited);
@@ -192,13 +198,16 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
         await svc.removeFavorite(movie.id);
         setLocalFav(false);
         onFavoriteToggle?.(movie, false);
+        toast.info(`"${movie.title}" đã được bỏ khỏi Yêu thích`);
       } else {
         await svc.addFavorite(movie.id);
         setLocalFav(true);
         onFavoriteToggle?.(movie, true);
+        toast.success(`Đã thêm "${movie.title}" vào Yêu thích`);
       }
     } catch (err) {
       console.error('Favorite toggle error:', err);
+      toast.error('Không thể cập nhật Yêu thích, vui lòng thử lại');
     } finally {
       setFavLoading(false);
     }
