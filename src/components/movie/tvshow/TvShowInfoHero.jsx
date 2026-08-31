@@ -16,6 +16,8 @@ export default function TvShowInfoHero({
   year,
   genreList,
   firstTrailerKey,
+  firstTrailerVideoUrl,
+  hasTrailer,
   isFav,
   onToggleFav,
   onPlay,
@@ -297,7 +299,8 @@ export default function TvShowInfoHero({
               Phát
             </motion.button>
 
-            {firstTrailerKey && (
+            {/* Fallback: nếu TvShowInfoPage chưa truyền hasTrailer, tự suy ra từ 2 nguồn trailer */}
+            {(hasTrailer ?? (firstTrailerKey || firstTrailerVideoUrl)) && (
               <motion.button
                 whileHover={{ opacity: 0.75 }}
                 whileTap={{ scale: 0.97 }}

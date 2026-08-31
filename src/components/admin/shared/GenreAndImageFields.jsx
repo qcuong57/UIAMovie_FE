@@ -1,193 +1,26 @@
-// src/components/admin/shared/GenreAndImageFields.jsx
-// Ô chọn thể loại (multi-select), ô ảnh đơn (Poster/Backdrop bìa chính) và
-// gallery ảnh backdrop — dùng CHUNG cho cả Movie & TvShow
-// (MovieAddModal / MovieEditModal / TvShowAddModal / TvShowEditModal).
-//
-// Vì Movie và TvShow có service riêng (movieService / tvShowService) nhưng
-// cùng interface getGenres() / uploadImage(file, imageType), mỗi component ở
-// đây nhận thêm prop `service` để biết gọi API nào — thay vì import cứng
-// 1 service cụ thể như 2 bản trùng lặp trước đây.
-//
-// Cách dùng:
-//   import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
-//   <GenrePickerField service={movieService} value={genreIds} onChange={setGenreIds} />
-//   <PosterField service={movieService} label="Poster" imageType="poster" value={posterUrl} onChange={setPosterUrl} />
-//   <BackdropGalleryField service={movieService} value={backdrops} onChange={setBackdrops} />
-//
-// Click vào ảnh preview (poster / backdrop bìa / ảnh trong gallery) sẽ mở
-// ImageLightbox để xem ảnh phóng to (xem component ImageLightbox bên dưới).
+// src/components/admin/movie/GenreAndImageFields.jsx
+// Ô chọn thể loại (multi-select) và gallery ảnh backdrop, dùng chung cho
+// MovieAddModal & MovieEditModal.
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, ImageOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, X, ImageOff, Youtube, FileVideo, Trash2 } from 'lucide-react';
+import movieService from '../../../services/movieService';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
-
-// ── Lightbox xem ảnh phóng to ─────────────────────────────────────────────
-/**
- * Modal xem ảnh phóng to — cùng phong cách với BackdropLightbox dùng ở trang
- * xem phim (src/components/movie/ui/BackdropCarousel.jsx), để trải nghiệm
- * xem ảnh nhất quán giữa trang admin và trang người dùng.
- *
- * Hỗ trợ điều hướng nhiều ảnh (gallery), đóng bằng phím Esc, click ra nền
- * tối, hoặc nút X. Dùng chung cho PosterField & BackdropGalleryField.
- *
- * Props:
- *   images  – Array<string> danh sách URL ảnh
- *   index   – number | null   vị trí ảnh đang xem (null/undefined = đóng)
- *   onClose – () => void
- *   onIndexChange – (nextIndex) => void  (không bắt buộc nếu chỉ có 1 ảnh)
- */
-export function ImageLightbox({ images = [], index, onClose, onIndexChange }) {
-  const total = images.length;
-  const isOpen = index !== null && index !== undefined && !!images[index];
-  const canPrev = isOpen && index > 0;
-  const canNext = isOpen && index < total - 1;
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && canPrev) onIndexChange(index - 1);
-      if (e.key === 'ArrowRight' && canNext) onIndexChange(index + 1);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, index, canPrev, canNext, onClose, onIndexChange]);
-
-  const navBtnStyle = (side) => ({
-    position: 'absolute', [side]: 16, top: '50%', transform: 'translateY(-50%)',
-    width: 44, height: 44, borderRadius: '50%',
-    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#fff', zIndex: 10,
-  });
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.95)',
-            backdropFilter: 'blur(20px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {/* Đóng */}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng"
-            style={{
-              position: 'absolute', top: 20, right: 20,
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', zIndex: 10,
-            }}
-          >
-            <X size={18} />
-          </button>
-
-          {/* Đếm ảnh */}
-          {total > 1 && (
-            <div style={{
-              position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)',
-              fontFamily: FONT, fontSize: 13, color: 'rgba(255,255,255,0.5)',
-            }}>
-              {index + 1} / {total}
-            </div>
-          )}
-
-          {/* Trước */}
-          {canPrev && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onIndexChange(index - 1); }}
-              aria-label="Ảnh trước"
-              style={navBtnStyle('left')}
-            >
-              <ChevronLeft size={22} />
-            </button>
-          )}
-
-          {/* Ảnh */}
-          <motion.img
-            key={images[index]}
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.22 }}
-            src={images[index]}
-            alt=""
-            onClick={e => e.stopPropagation()}
-            style={{
-              maxWidth: '90vw', maxHeight: '85vh',
-              objectFit: 'contain', borderRadius: 8,
-              boxShadow: '0 32px 80px rgba(0,0,0,0.8)',
-            }}
-          />
-
-          {/* Sau */}
-          {canNext && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onIndexChange(index + 1); }}
-              aria-label="Ảnh sau"
-              style={navBtnStyle('right')}
-            >
-              <ChevronRight size={22} />
-            </button>
-          )}
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// Overlay tối nhẹ khi hover lên ảnh preview, gợi ý có thể bấm để phóng to —
-// cùng hiệu ứng hover với card ảnh trong BackdropCarousel.
-function ZoomHint({ visible }) {
-  return (
-    <div
-      style={{
-        position: 'absolute', inset: 0,
-        background: visible ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0)',
-        transition: 'background 0.2s',
-        pointerEvents: 'none',
-      }}
-    />
-  );
-}
 
 // ── Chọn thể loại ────────────────────────────────────────────────────────────
 /**
  * Props:
- *   service  – movieService | tvShowService (bắt buộc, cần có getGenres())
  *   value    – Array<string> (Guid thể loại đang chọn)
  *   onChange – (nextArray) => void
  */
-export function GenrePickerField({ service, value = [], onChange }) {
+export function GenrePickerField({ value = [], onChange }) {
   const [genres, setGenres]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    service.getGenres()
+    movieService.getGenres()
       .then(res => {
         if (cancelled) return;
         const list = res?.data ?? res ?? [];
@@ -196,7 +29,7 @@ export function GenrePickerField({ service, value = [], onChange }) {
       .catch(() => { if (!cancelled) setError('Không tải được danh sách thể loại'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [service]);
+  }, []);
 
   const toggle = (id) => {
     onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id]);
@@ -252,22 +85,19 @@ export function GenrePickerField({ service, value = [], onChange }) {
 
 // ── Ô ảnh đơn (Poster / Backdrop bìa chính) ──────────────────────────────────
 /**
- * Ô ảnh dùng cho "poster" hoặc "backdrop" bìa chính của phim/TV show (không
- * phải gallery). Cho phép dán URL trực tiếp hoặc upload file. Click vào ảnh
- * preview sẽ mở ImageLightbox để xem phóng to.
+ * Ô ảnh dùng cho "poster" hoặc "backdrop" bìa chính của phim (không phải
+ * gallery). Cho phép dán URL trực tiếp hoặc upload file — dùng chung cho
+ * MovieAddModal & MovieEditModal.
  *
  * Props:
- *   service   – movieService | tvShowService (bắt buộc, cần có uploadImage())
  *   label     – nhãn hiển thị, VD: "Poster", "Backdrop (ảnh bìa)"
- *   imageType – "poster" | "backdrop" — truyền cho service.uploadImage
+ *   imageType – "poster" | "backdrop" — truyền cho movieService.uploadImage
  *   value     – string URL hiện tại
  *   onChange  – (nextUrl) => void
  */
-export function PosterField({ service, label, imageType = 'poster', value = '', onChange }) {
+export function PosterField({ label, imageType = 'poster', value = '', onChange }) {
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [hovering, setHovering] = useState(false);
   const fileRef = useRef();
 
   const handleFile = async (file) => {
@@ -275,7 +105,7 @@ export function PosterField({ service, label, imageType = 'poster', value = '', 
     setUploading(true);
     setUploadErr('');
     try {
-      const res = await service.uploadImage(file, imageType);
+      const res = await movieService.uploadImage(file, imageType);
       const url = res?.data?.url ?? res?.url;
       if (url) onChange(url);
       else setUploadErr('Không nhận được URL từ server');
@@ -329,49 +159,11 @@ export function PosterField({ service, label, imageType = 'poster', value = '', 
 
       {uploadErr && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}>{uploadErr}</p>}
 
-      {/* Preview — phóng to rõ ràng hơn: poster theo tỉ lệ 2:3 rộng 160px,
-          backdrop full chiều rộng (tối đa 380px) theo tỉ lệ 16:9.
-          Click vào ảnh để mở lightbox xem full-size. */}
       {value && (
-        <div style={{ marginTop: 2 }}>
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="Xem ảnh phóng to"
-            onClick={() => setLightboxOpen(true)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setLightboxOpen(true); }}
-            onMouseEnter={() => setHovering(true)}
-            onMouseLeave={() => setHovering(false)}
-            style={{
-              position: 'relative', display: 'block',
-              width: imageType === 'backdrop' ? '100%' : 160,
-              maxWidth: imageType === 'backdrop' ? 380 : 160,
-              borderRadius: 10, overflow: 'hidden',
-              border: `1px solid ${T.border}`,
-              cursor: 'zoom-in',
-            }}
-          >
-            <img
-              src={value}
-              alt=""
-              style={{
-                display: 'block', width: '100%',
-                aspectRatio: imageType === 'backdrop' ? '16 / 9' : '2 / 3',
-                objectFit: 'cover',
-              }}
-            />
-            <ZoomHint visible={hovering} />
-          </div>
-          <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, display: 'block', marginTop: 6 }}>Xem trước — bấm để phóng to</span>
+        <div style={{ width: 96, borderRadius: 8, overflow: 'hidden', border: `1px solid ${T.border}`, aspectRatio: imageType === 'poster' ? '2/3' : '16/9' }}>
+          <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         </div>
       )}
-
-      <ImageLightbox
-        images={value ? [value] : []}
-        index={lightboxOpen ? 0 : null}
-        onClose={() => setLightboxOpen(false)}
-        onIndexChange={() => {}}
-      />
     </div>
   );
 }
@@ -382,20 +174,14 @@ const nextBdUid = () => `bd_${Date.now()}_${bdUidSeq++}`;
 
 /**
  * Props:
- *   service  – movieService | tvShowService (bắt buộc, cần có uploadImage())
  *   value    – Array<{ uid, id?, url }>   id chỉ có khi ảnh đã tồn tại trong DB (chế độ edit)
  *   onChange – (nextArray) => void
- *
- * Click vào 1 ảnh trong gallery sẽ mở ImageLightbox, có thể điều hướng
- * qua lại giữa các ảnh (phím mũi tên hoặc nút prev/next).
  */
-export function BackdropGalleryField({ service, value = [], onChange }) {
+export function BackdropGalleryField({ value = [], onChange }) {
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [urlErr, setUrlErr] = useState('');
-  const [lightboxIndex, setLightboxIndex] = useState(null);
-  const [hoveredUid, setHoveredUid] = useState(null);
   const fileRef = useRef();
 
   const handleFiles = async (files) => {
@@ -405,7 +191,7 @@ export function BackdropGalleryField({ service, value = [], onChange }) {
     try {
       const uploaded = [];
       for (const file of Array.from(files)) {
-        const res = await service.uploadImage(file, 'backdrop');
+        const res = await movieService.uploadImage(file, 'backdrop');
         const url = res?.data?.url ?? res?.url;
         if (url) uploaded.push({ uid: nextBdUid(), url });
       }
@@ -442,10 +228,7 @@ export function BackdropGalleryField({ service, value = [], onChange }) {
     }
   };
 
-  const remove = (e, uid) => {
-    e.stopPropagation(); // tránh nổ bubble mở lightbox khi bấm nút xoá
-    onChange(value.filter(v => v.uid !== uid));
-  };
+  const remove = (uid) => onChange(value.filter(v => v.uid !== uid));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -513,28 +296,12 @@ export function BackdropGalleryField({ service, value = [], onChange }) {
 
       {value.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          {value.map((img, idx) => (
-            <div
-              key={img.uid}
-              role="button"
-              tabIndex={0}
-              aria-label="Xem ảnh phóng to"
-              onClick={() => setLightboxIndex(idx)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setLightboxIndex(idx); }}
-              onMouseEnter={() => setHoveredUid(img.uid)}
-              onMouseLeave={() => setHoveredUid(null)}
-              style={{
-                position: 'relative', borderRadius: 8, overflow: 'hidden',
-                border: `1px solid ${T.border}`, aspectRatio: '16/9',
-                cursor: 'zoom-in',
-              }}
-            >
+          {value.map(img => (
+            <div key={img.uid} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: `1px solid ${T.border}`, aspectRatio: '16/9' }}>
               <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              <ZoomHint visible={hoveredUid === img.uid} />
               <button
                 type="button"
-                onClick={(e) => remove(e, img.uid)}
-                aria-label="Xoá ảnh"
+                onClick={() => remove(img.uid)}
                 style={{
                   position: 'absolute', top: 4, right: 4,
                   width: 22, height: 22, borderRadius: '50%',
@@ -558,16 +325,256 @@ export function BackdropGalleryField({ service, value = [], onChange }) {
           <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>Chưa có ảnh backdrop nào</span>
         </div>
       )}
-
-      <ImageLightbox
-        images={value.map(v => v.url)}
-        index={lightboxIndex}
-        onClose={() => setLightboxIndex(null)}
-        onIndexChange={setLightboxIndex}
-      />
     </div>
   );
 }
+
+// ── Trailer (Youtube + video upload Cloudinary) ───────────────────────────────
+/**
+ * Ô trailer, gộp 2 nguồn chạy song song (giống backend: TrailerKey + TrailerVideoUrl):
+ *   1) Link Youtube — sửa trực tiếp, gửi lên khi bấm "Lưu thay đổi".
+ *   2) Video tự upload lên Cloudinary — CHỈ chọn file ở đây (chưa upload ngay),
+ *      việc upload thật sự diễn ra khi modal cha gọi movieService.uploadTrailerVideo
+ *      lúc bấm "Lưu thay đổi" (giữ nguyên hành vi "chờ Lưu mới upload").
+ *
+ * Dùng chung cho MovieAddModal & MovieEditModal.
+ *
+ * Props:
+ *   youtubeUrl        – string, link Youtube hiện tại (rỗng nếu chưa có)
+ *   onYoutubeUrlChange – (nextUrl) => void
+ *
+ *   currentVideoUrl    – string|null, URL trailer đã upload trước đó (chỉ có ở Edit,
+ *                        Add luôn null vì phim chưa tồn tại)
+ *   markedForRemoval   – boolean, user đã bấm xóa video hiện có (chờ Lưu mới xóa thật)
+ *   onRemoveCurrentVideo – () => void, đánh dấu xóa video hiện có
+ *   onUndoRemoveCurrentVideo – () => void, hủy đánh dấu xóa
+ *
+ *   pendingFile        – File|null, file mới user vừa chọn (chưa upload)
+ *   onPendingFileChange – (file|null) => void
+ *
+ *   uploading          – boolean, đang trong lúc Lưu và đang upload trailer (hiển thị %)
+ *   uploadProgress      – number 0-100
+ */
+export function TrailerField({
+  youtubeUrl = '',
+  onYoutubeUrlChange,
+  currentVideoUrl = null,
+  markedForRemoval = false,
+  onRemoveCurrentVideo,
+  onUndoRemoveCurrentVideo,
+  pendingFile = null,
+  onPendingFileChange,
+  uploading = false,
+  uploadProgress = 0,
+}) {
+  const fileRef = useRef();
+  const [fileErr, setFileErr] = useState('');
+
+  const handlePick = (file) => {
+    if (!file) return;
+    setFileErr('');
+    if (!file.type.startsWith('video/')) {
+      setFileErr('Vui lòng chọn file video (mp4, mkv, webm...)');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+    onPendingFileChange?.(file);
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return '';
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
+  };
+
+  const showingExisting = currentVideoUrl && !markedForRemoval && !pendingFile;
+
+  // Trích video ID từ link Youtube để hiển thị ảnh thumbnail preview (nhiều định dạng: watch?v=, youtu.be/, embed/, shorts/)
+  const extractYoutubeId = (url) => {
+    if (!url) return null;
+    const match = url.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    return match ? match[1] : null;
+  };
+  const youtubeId = extractYoutubeId(youtubeUrl);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Trailer
+      </label>
+
+      {/* Youtube URL */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Youtube size={13} color={T.textMuted} />
+          <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, fontWeight: 600 }}>Link Youtube</span>
+        </div>
+        <input
+          value={youtubeUrl}
+          onChange={e => onYoutubeUrlChange?.(e.target.value)}
+          placeholder="https://www.youtube.com/watch?v=..."
+          style={{
+            height: 42, padding: '0 14px',
+            background: T.surface, border: `1px solid ${T.border}`,
+            borderRadius: 10, color: T.text, outline: 'none',
+            fontFamily: FONT, fontSize: 13, boxSizing: 'border-box', width: '100%',
+          }}
+        />
+
+        {/* Thumbnail preview — chỉ hiện khi link Youtube hợp lệ, giúp xác nhận đúng video trước khi lưu */}
+        {youtubeId && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: 8, borderRadius: 9,
+            background: T.surfaceAlt, border: `1px solid ${T.border}`,
+          }}>
+            <img
+              src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`}
+              alt="Xem trước trailer Youtube"
+              style={{ width: 96, height: 54, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
+            />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, fontWeight: 600, margin: 0 }}>
+                Xem trước ảnh thumbnail
+              </p>
+              <a
+                href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer"
+                style={{ fontFamily: FONT, fontSize: 11.5, color: T.accentText, textDecoration: 'none' }}
+              >
+                Mở trên Youtube
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Video upload */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <FileVideo size={13} color={T.textMuted} />
+          <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, fontWeight: 600 }}>Video trailer tự upload</span>
+        </div>
+
+        {/* Video hiện có (Edit) — chưa đánh dấu xóa, chưa chọn file mới */}
+        {showingExisting && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 9,
+            background: T.surfaceAlt, border: `1px solid ${T.border}`,
+          }}>
+            <FileVideo size={15} color={T.textSub} style={{ flexShrink: 0 }} />
+            <a
+              href={currentVideoUrl} target="_blank" rel="noreferrer"
+              style={{ fontFamily: FONT, fontSize: 12.5, color: T.accentText, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+            >
+              Xem video trailer hiện tại
+            </a>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              style={{ padding: '5px 10px', borderRadius: 7, background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: T.textSub }}
+            >
+              Thay video
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemoveCurrentVideo?.()}
+              title="Xóa video trailer"
+              style={{ width: 26, height: 26, borderRadius: 7, background: 'transparent', border: `1px solid ${T.border}`, cursor: 'pointer', color: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* Đã đánh dấu xóa video hiện có, chưa chọn file mới */}
+        {currentVideoUrl && markedForRemoval && !pendingFile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 9,
+            background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.25)',
+          }}>
+            <Trash2 size={14} color={T.red} style={{ flexShrink: 0 }} />
+            <span style={{ fontFamily: FONT, fontSize: 12, color: T.red, flex: 1 }}>
+              Video trailer sẽ bị xóa khi lưu thay đổi
+            </span>
+            <button
+              type="button"
+              onClick={() => onUndoRemoveCurrentVideo?.()}
+              style={{ padding: '5px 10px', borderRadius: 7, background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: T.textSub }}
+            >
+              Hoàn tác
+            </button>
+          </div>
+        )}
+
+        {/* File mới vừa chọn, chưa upload (chờ bấm Lưu) */}
+        {pendingFile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 9,
+            background: goldTint, border: '1px solid rgba(217,119,6,0.3)',
+          }}>
+            <FileVideo size={15} color="#D97706" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.text, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pendingFile.name}
+              </p>
+              <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, margin: '2px 0 0' }}>
+                {formatSize(pendingFile.size)} · sẽ upload khi lưu
+              </p>
+              {uploading && (
+                <div style={{ marginTop: 6, height: 4, borderRadius: 2, background: 'rgba(217,119,6,0.15)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#D97706', transition: 'width 0.2s' }} />
+                </div>
+              )}
+            </div>
+            {!uploading && (
+              <button
+                type="button"
+                onClick={() => { onPendingFileChange?.(null); if (fileRef.current) fileRef.current.value = ''; }}
+                title="Bỏ chọn file"
+                style={{ width: 26, height: 26, borderRadius: 7, background: 'transparent', border: `1px solid ${T.border}`, cursor: 'pointer', color: T.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Chưa có video nào (Add, hoặc Edit mà phim chưa có trailer upload) */}
+        {!currentVideoUrl && !pendingFile && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              height: 42, borderRadius: 10, cursor: 'pointer',
+              background: T.surfaceAlt, border: `1px dashed ${T.border}`,
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: T.textSub,
+            }}
+          >
+            <Upload size={14} /> Chọn file video trailer...
+          </button>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*"
+          style={{ display: 'none' }}
+          onChange={e => handlePick(e.target.files?.[0])}
+        />
+
+        {fileErr && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}>{fileErr}</p>}
+      </div>
+    </div>
+  );
+}
+
+const goldTint = '#FEF3C7';
 
 // ── Helpers chuyển đổi sang shape DTO backend (ImportImageDTO) ────────────────
 export function backdropStateToDto(backdropState) {

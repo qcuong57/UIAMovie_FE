@@ -121,6 +121,12 @@ export default function MovieInfoPage() {
           extractYoutubeKey(
             raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
           ),
+        // Trailer tự upload lên Cloudinary — chạy song song với trailerKey (Youtube).
+        // Youtube được ưu tiên phát trước nếu phim có cả 2 (xem TrailerModal).
+        trailerVideoUrl:
+          raw.trailerVideoUrl ||
+          raw.videos?.find((v) => v.videoType === "trailer_upload")?.videoUrl ||
+          null,
         trailers: raw.trailers || [],
         reviews: raw.reviews || [],
         images: raw.images || [],
@@ -184,6 +190,10 @@ export default function MovieInfoPage() {
 
   const firstTrailerKey =
     movie?.trailerKey || (trailers.length > 0 ? trailers[0]?.key : null);
+
+  const firstTrailerVideoUrl = movie?.trailerVideoUrl || null;
+
+  const hasTrailer = !!(firstTrailerKey || firstTrailerVideoUrl);
 
   const year = movie?.year;
 
@@ -287,6 +297,8 @@ export default function MovieInfoPage() {
         year={year}
         genreList={genreList}
         firstTrailerKey={firstTrailerKey}
+        firstTrailerVideoUrl={firstTrailerVideoUrl}
+        hasTrailer={hasTrailer}
         isFav={isFav}
         onToggleFav={() => setIsFav((v) => !v)}
         onPlay={handlePlay}
@@ -362,9 +374,10 @@ export default function MovieInfoPage() {
 
       {/* Trailer Modal */}
       <AnimatePresence>
-        {showTrailer && firstTrailerKey && (
+        {showTrailer && hasTrailer && (
           <TrailerModal
             trailerKey={firstTrailerKey}
+            trailerVideoUrl={firstTrailerVideoUrl}
             onClose={() => setShowTrailer(false)}
           />
         )}

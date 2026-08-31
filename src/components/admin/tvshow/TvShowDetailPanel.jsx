@@ -244,6 +244,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
         {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (ev) => setProgress(Math.round((ev.loaded * 100) / ev.total)),
+          timeout: 10 * 60 * 1000, // 10 phút — video tập phim có thể lớn, upload lên Cloudinary tốn thời gian
         }
       );
       const data = (res?.data ?? res)?.data ?? (res?.data ?? res);

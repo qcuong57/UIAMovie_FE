@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import movieService from '../../../services/movieService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
-import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
+import { GenrePickerField, PosterField, BackdropGalleryField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields';
 import { useToast } from '../common/Toast';
 
 const gold      = '#D97706';
@@ -142,6 +142,14 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
   const [director, setDirector] = useState(null); // { personId, tmdbPersonId, name, profileUrl } | null
   const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
   const [backdrops, setBackdrops] = useState([]); // [{ uid, url }]
+
+  // Trailer — Youtube URL (gửi trong CreateMovieDTO.trailers) + video tự upload
+  // (chỉ upload được sau khi có movieId, nên chờ tạo phim xong mới gọi API upload)
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [pendingTrailerFile, setPendingTrailerFile] = useState(null);
+  const [trailerUploading, setTrailerUploading] = useState(false);
+  const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
   const toast = useToast();
@@ -155,6 +163,8 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
     setDirector(null);
     setGenreIds([]);
     setBackdrops([]);
+    setYoutubeUrl('');
+    setPendingTrailerFile(null);
     setError('');
     onClose?.();
   };
@@ -188,10 +198,27 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
         cast: castStateToDto(cast),
         director: director ? directorStateToDto(director) : null,
         images: backdropStateToDto(backdrops),
-        trailers: [],
+        trailers: youtubeUrl.trim() ? [{ youtubeUrl: youtubeUrl.trim(), name: form.title.trim() }] : [],
       };
       const res = await movieService.createMovie(dto);
       const movieId = res?.data?.movieId ?? res?.movieId;
+
+      // Video trailer tự upload — chỉ upload được sau khi phim đã có id
+      if (movieId && pendingTrailerFile) {
+        setTrailerUploading(true); setTrailerUploadProgress(0);
+        try {
+          await movieService.uploadTrailerVideo(movieId, pendingTrailerFile, setTrailerUploadProgress);
+        } catch (uploadErr) {
+          // Phim đã tạo thành công — chỉ báo riêng lỗi upload trailer, không rollback việc tạo phim
+          toast.error(
+            uploadErr?.response?.data?.message ?? uploadErr?.message ?? 'Upload video trailer thất bại',
+            'Tạo phim thành công nhưng upload trailer lỗi',
+          );
+        } finally {
+          setTrailerUploading(false);
+        }
+      }
+
       onCreated?.(movieId);
       resetAndClose();
       toast.success(`Đã tạo phim "${dto.title}"`, 'Tạo phim thành công');
@@ -281,12 +308,22 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
               <DirectorPickerField value={director} onChange={setDirector} />
               <CastPickerField value={cast} onChange={setCast} />
 
+              <TrailerField
+                youtubeUrl={youtubeUrl}
+                onYoutubeUrlChange={setYoutubeUrl}
+                currentVideoUrl={null}
+                pendingFile={pendingTrailerFile}
+                onPendingFileChange={setPendingTrailerFile}
+                uploading={trailerUploading}
+                uploadProgress={trailerUploadProgress}
+              />
+
               {error && !/tên|Tên|Rating|Thời lượng/i.test(error) && (
                 <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red, margin: 0 }}>{error}</p>
               )}
 
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.65, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 9, border: `1px solid ${T.border}`, margin: 0 }}>
-                Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới (nếu chưa có). "Backdrop (ảnh bìa)" là ảnh nền hiển thị ở đầu trang chi tiết, còn gallery bên dưới là các ảnh backdrop hiển thị ở tab "Hình ảnh". Video được thêm sau khi lưu phim, ở nút "Upload video".
+                Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới (nếu chưa có). "Backdrop (ảnh bìa)" là ảnh nền hiển thị ở đầu trang chi tiết, còn gallery bên dưới là các ảnh backdrop hiển thị ở tab "Hình ảnh". Video phim chính được thêm sau khi lưu phim, ở nút "Upload video". Trailer (Youtube + video tự upload) có thể thêm luôn tại đây — video trailer sẽ upload ngay sau khi phim được tạo.
               </p>
             </div>
 
@@ -305,7 +342,7 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
                 style={{ padding: '8px 18px', borderRadius: 8, background: saving ? T.accentLight : T.accent, border: `1px solid ${saving ? T.accent + '30' : 'transparent'}`, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: saving ? T.accentText : 'white', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.15s' }}
               >
                 {saving
-                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang lưu...</>
+                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> {trailerUploading ? `Đang upload trailer... ${trailerUploadProgress}%` : 'Đang lưu...'}</>
                   : <><Check size={13} /> Tạo phim</>
                 }
               </button>

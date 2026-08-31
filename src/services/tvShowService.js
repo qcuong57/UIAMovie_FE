@@ -519,6 +519,7 @@ const tvShowService = {
                 onUploadProgress(percent);
               }
             : undefined,
+          timeout: 10 * 60 * 1000, // 10 phút — video chính (main/clip/behind) có thể lớn
         }
       );
       const envelope = response.data ?? response;
@@ -552,6 +553,7 @@ const tvShowService = {
                 onUploadProgress(percent);
               }
             : undefined,
+          timeout: 10 * 60 * 1000, // 10 phút — video tập phim có thể lớn, upload lên Cloudinary tốn thời gian
         }
       );
       const envelope = response.data ?? response;
@@ -586,6 +588,60 @@ const tvShowService = {
       return response.data ?? response;
     } catch (error) {
       console.error('[tvShowService] Error deleting video:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Upload file trailer video lên Cloudinary (song song với trailer Youtube).
+   * Backend tự tạo/ghi đè video có VideoType="trailer_upload" và set TrailerVideoUrl.
+   * POST /api/tvshows/{id}/trailer/upload  (multipart/form-data, field "trailerFile")
+   * @param {string}   tvShowId
+   * @param {File}     trailerFile - File video trailer (mp4, ...)
+   * @param {Function} [onProgress] - callback(percent: number)
+   * @returns {Promise<{trailerVideoUrl: string}>}
+   */
+  uploadTrailerVideo: async (tvShowId, trailerFile, onProgress) => {
+    try {
+      const formData = new FormData();
+      formData.append('trailerFile', trailerFile);
+
+      const response = await axiosInstance.post(
+        `/tvshows/${tvShowId}/trailer/upload`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) {
+              onProgress(Math.round((e.loaded * 100) / e.total));
+            }
+          },
+          timeout: 10 * 60 * 1000, // 10 phút cho file lớn
+        },
+      );
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error uploading trailer video:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Set/đổi link trailer Youtube thủ công (chạy song song với trailer upload,
+   * không cần import lại từ TMDB).
+   * PUT /api/tvshows/{id}/trailer/youtube
+   * @param {string} tvShowId
+   * @param {string} youtubeUrl - Link Youtube đầy đủ, VD: "https://www.youtube.com/watch?v=..."
+   */
+  setTrailerYoutube: async (tvShowId, youtubeUrl) => {
+    try {
+      const response = await axiosInstance.put(
+        `/tvshows/${tvShowId}/trailer/youtube`,
+        { youtubeUrl },
+      );
+      return response.data ?? response;
+    } catch (error) {
+      console.error('[tvShowService] Error setting Youtube trailer:', error);
       throw error;
     }
   },

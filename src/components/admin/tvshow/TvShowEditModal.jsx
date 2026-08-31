@@ -5,7 +5,7 @@ import axiosInstance from '../../../config/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
-import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
+import { GenrePickerField, PosterField, BackdropGalleryField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields';
 import tvShowService from '../../../services/tvShowService';
 import { useToast } from '../common/Toast';
 
@@ -163,6 +163,18 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
   const [director, setDirector] = useState(null); // { personId, tmdbPersonId, name, profileUrl } | null
   const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
   const [backdrops, setBackdrops] = useState([]); // [{ uid, id?, url }]
+
+  // Trailer — Youtube URL + video tự upload (song song, chờ "Lưu thay đổi" mới upload/xóa thật)
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [initialYoutubeUrl, setInitialYoutubeUrl] = useState(''); // để biết có đổi hay không, tránh gọi API thừa
+  const [currentTrailerVideoUrl, setCurrentTrailerVideoUrl] = useState(null); // TrailerVideoUrl hiện có (nếu có)
+  const [trailerVideoId, setTrailerVideoId] = useState(null); // id của TvShowVideoDTO (videoType="trailer_upload"), cần để xóa
+  const [youtubeTrailerVideoId, setYoutubeTrailerVideoId] = useState(null); // id của TvShowVideoDTO (videoType="trailer"), cần để xóa khi xóa link Youtube
+  const [removeTrailerVideo, setRemoveTrailerVideo] = useState(false); // đánh dấu xóa video hiện có
+  const [pendingTrailerFile, setPendingTrailerFile] = useState(null); // File mới chọn, chưa upload
+  const [trailerUploading, setTrailerUploading] = useState(false);
+  const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [error,  setError]  = useState('');
@@ -252,6 +264,19 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
           : null
       );
 
+      // Trailer — backend chỉ trả về trailerKey (video ID Youtube đã tách ra), không phải URL đầy đủ.
+      // Dựng lại URL đầy đủ để hiện trong ô input (khi lưu, gửi URL đầy đủ lên PUT /trailer/youtube).
+      const ytUrl = s.trailerKey ? `https://www.youtube.com/watch?v=${s.trailerKey}` : '';
+      setYoutubeUrl(ytUrl);
+      setInitialYoutubeUrl(ytUrl);
+      const youtubeTrailerVideo = (s.videos ?? []).find(v => v.videoType === 'trailer');
+      setYoutubeTrailerVideoId(youtubeTrailerVideo?.id ?? null);
+      setCurrentTrailerVideoUrl(s.trailerVideoUrl ?? null);
+      const trailerUploadVideo = (s.videos ?? []).find(v => v.videoType === 'trailer_upload');
+      setTrailerVideoId(trailerUploadVideo?.id ?? null);
+      setRemoveTrailerVideo(false);
+      setPendingTrailerFile(null);
+
       setError('');
     }
   }, [fullShow]);
@@ -287,6 +312,32 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
         genreIds,
         backdropImages: backdropStateToDto(backdrops),
       });
+
+      // Trailer Youtube — chỉ gọi API SET khi có URL thật sự và có thay đổi.
+      // Nếu user đã XÓA link Youtube (trước đó có, giờ để trống) → gọi xóa video
+      // videoType="trailer" trực tiếp bằng id, vì endpoint /trailer/youtube chỉ dùng để SET.
+      if (youtubeUrl.trim() && youtubeUrl.trim() !== initialYoutubeUrl.trim()) {
+        await tvShowService.setTrailerYoutube(show.id, youtubeUrl.trim());
+      } else if (!youtubeUrl.trim() && initialYoutubeUrl.trim() && youtubeTrailerVideoId) {
+        await tvShowService.deleteVideo(youtubeTrailerVideoId);
+      }
+
+      // Trailer video tự upload — xóa video cũ nếu bị đánh dấu xóa và không có file mới thay thế
+      if (removeTrailerVideo && !pendingTrailerFile && trailerVideoId) {
+        await tvShowService.deleteVideo(trailerVideoId);
+      }
+      // Upload file trailer mới (nếu có) — ghi đè video trailer_upload hiện có (nếu có)
+      let trailerUploaded = false;
+      if (pendingTrailerFile) {
+        setTrailerUploading(true); setTrailerUploadProgress(0);
+        try {
+          await tvShowService.uploadTrailerVideo(show.id, pendingTrailerFile, setTrailerUploadProgress);
+          trailerUploaded = true;
+        } finally {
+          setTrailerUploading(false);
+        }
+      }
+
       const genreNames = allGenres.filter(g => genreIds.includes(g.id)).map(g => g.name);
       onSaved?.({
         ...show,
@@ -304,7 +355,11 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
           ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
         ],
       });
-      toast.success(`Đã lưu "${form.title.trim()}"`);
+      toast.success(
+        trailerUploaded
+          ? `Đã lưu thay đổi và upload trailer thành công cho "${form.title.trim()}"`
+          : `Đã lưu "${form.title.trim()}"`,
+      );
       onClose();
     } catch (e) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra';
@@ -395,14 +450,40 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
               <DirectorPickerField value={director} onChange={setDirector} />
               <CastPickerField value={cast} onChange={setCast} />
 
+              <TrailerField
+                youtubeUrl={youtubeUrl}
+                onYoutubeUrlChange={setYoutubeUrl}
+                currentVideoUrl={currentTrailerVideoUrl}
+                markedForRemoval={removeTrailerVideo}
+                onRemoveCurrentVideo={() => setRemoveTrailerVideo(true)}
+                onUndoRemoveCurrentVideo={() => setRemoveTrailerVideo(false)}
+                pendingFile={pendingTrailerFile}
+                onPendingFileChange={setPendingTrailerFile}
+                uploading={trailerUploading}
+                uploadProgress={trailerUploadProgress}
+              />
+
               {error && !/tên|Tên|Rating/i.test(error) && (
                 <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</p>
               )}
 
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.65, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 9, border: `1px solid ${T.border}`, margin: 0 }}>
-                Có thể sửa tên, mô tả, rating, loại nội dung, poster, backdrop bìa chính, thể loại, ảnh backdrop (gallery), diễn viên và đạo diễn. Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới. Season/tập phim được quản lý riêng ở trang chi tiết TV show.
+                Có thể sửa tên, mô tả, rating, loại nội dung, poster, backdrop bìa chính, thể loại, ảnh backdrop (gallery), diễn viên, đạo diễn và trailer (link Youtube + video tự upload — 2 loại chạy song song, độc lập nhau). Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới. Video trailer mới chỉ thực sự upload khi bấm "Lưu thay đổi". Season/tập phim được quản lý riêng ở trang chi tiết TV show.
               </p>
             </div>
+
+            {/* Thanh tiến trình upload trailer — hiện rõ ngay trên footer, không cần cuộn lại form */}
+            {trailerUploading && (
+              <div style={{ padding: '10px 20px', background: T.surfaceAlt, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: T.textSub }}>Đang upload video trailer...</span>
+                  <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: gold }}>{trailerUploadProgress}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: 'rgba(217,119,6,0.15)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${trailerUploadProgress}%`, background: 'linear-gradient(90deg, #F59E0B, #D97706)', transition: 'width 0.2s' }} />
+                </div>
+              </div>
+            )}
 
             {/* Footer */}
             <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
@@ -418,7 +499,7 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
                 style={{ padding: '8px 18px', borderRadius: 8, background: saving ? T.accentLight : T.accent, border: `1px solid ${saving ? T.accent + '30' : 'transparent'}`, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: saving ? T.accentText : 'white', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.15s' }}
               >
                 {saving
-                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang lưu...</>
+                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> {trailerUploading ? `Đang upload trailer... ${trailerUploadProgress}%` : 'Đang lưu...'}</>
                   : <><Check size={13} /> Lưu thay đổi</>
                 }
               </button>

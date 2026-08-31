@@ -100,6 +100,12 @@ export default function TvShowInfoPage() {
           extractYoutubeKey(
             raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
           ),
+        // Trailer tự upload lên Cloudinary — chạy song song với trailerKey (Youtube).
+        // Youtube được ưu tiên phát trước nếu show có cả 2 (xem TrailerModal).
+        trailerVideoUrl:
+          raw.trailerVideoUrl ||
+          raw.videos?.find((v) => v.videoType === "trailer_upload")?.videoUrl ||
+          null,
         trailers: raw.trailers ?? [],
         reviews: raw.reviews ?? [],
         images: raw.images ?? [],
@@ -211,6 +217,10 @@ export default function TvShowInfoPage() {
   const firstTrailerKey =
     show?.trailerKey || (trailers.length > 0 ? trailers[0]?.key : null);
 
+  const firstTrailerVideoUrl = show?.trailerVideoUrl || null;
+
+  const hasTrailer = !!(firstTrailerKey || firstTrailerVideoUrl);
+
   const year = show?.year;
 
   const genreList = Array.isArray(show?.genres)
@@ -297,6 +307,8 @@ export default function TvShowInfoPage() {
         year={year}
         genreList={genreList}
         firstTrailerKey={firstTrailerKey}
+        firstTrailerVideoUrl={firstTrailerVideoUrl}
+        hasTrailer={hasTrailer}
         isFav={isFav}
         onToggleFav={() => setIsFav((v) => !v)}
         onPlay={() => navigate(`/tvshow/${id}`)}
@@ -382,9 +394,10 @@ export default function TvShowInfoPage() {
 
       {/* Trailer Modal */}
       <AnimatePresence>
-        {showTrailer && firstTrailerKey && (
+        {showTrailer && hasTrailer && (
           <TrailerModal
             trailerKey={firstTrailerKey}
+            trailerVideoUrl={firstTrailerVideoUrl}
             onClose={() => setShowTrailer(false)}
           />
         )}

@@ -291,6 +291,60 @@ const movieService = {
   },
 
   /**
+   * [Admin] Upload file trailer video lên Cloudinary (song song với trailer Youtube).
+   * Backend tự tạo/ghi đè video có VideoType="trailer_upload" và set TrailerVideoUrl.
+   * POST /api/movies/{id}/trailer/upload  (multipart/form-data, field "trailerFile")
+   * @param {string}   movieId
+   * @param {File}     trailerFile - File video trailer (mp4, ...)
+   * @param {Function} [onProgress] - callback(percent: number)
+   * @returns {Promise<{trailerVideoUrl: string}>}
+   */
+  uploadTrailerVideo: async (movieId, trailerFile, onProgress) => {
+    try {
+      const formData = new FormData();
+      formData.append("trailerFile", trailerFile);
+
+      const response = await axiosInstance.post(
+        `/movies/${movieId}/trailer/upload`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) {
+              onProgress(Math.round((e.loaded * 100) / e.total));
+            }
+          },
+          timeout: 10 * 60 * 1000, // 10 phút cho file lớn
+        },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("[movieService] Error uploading trailer video:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Set/đổi link trailer Youtube thủ công (chạy song song với trailer upload,
+   * không cần import lại từ TMDB).
+   * PUT /api/movies/{id}/trailer/youtube
+   * @param {string} movieId
+   * @param {string} youtubeUrl - Link Youtube đầy đủ, VD: "https://www.youtube.com/watch?v=..."
+   */
+  setTrailerYoutube: async (movieId, youtubeUrl) => {
+    try {
+      const response = await axiosInstance.put(
+        `/movies/${movieId}/trailer/youtube`,
+        { youtubeUrl },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("[movieService] Error setting Youtube trailer:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy stream URL để phát phim (Premium gate)
    * GET /api/movies/{id}/watch
    * @param {string} movieId

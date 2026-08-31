@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import tvShowService from '../../../services/tvShowService';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
-import { GenrePickerField, PosterField, BackdropGalleryField, backdropStateToDto } from '../shared/GenreAndImageFields';
+import { GenrePickerField, PosterField, BackdropGalleryField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields';
 import { SeasonEpisodeBuilderField, seasonsStateToDto } from './SeasonEpisodeFields';
 import { useToast } from '../common/Toast';
 
@@ -184,6 +184,14 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
   const [genreIds, setGenreIds] = useState([]);   // Array<string guid>
   const [backdrops, setBackdrops] = useState([]); // [{ uid, url }]
   const [seasons, setSeasons] = useState([]);     // [{ uid, seasonNumber, name, overview, posterUrl, airDate, episodes: [...] }]
+
+  // Trailer — Youtube URL (gửi trong CreateTvShowDTO.trailers) + video tự upload
+  // (chỉ upload được sau khi có showId, nên chờ tạo TV show xong mới gọi API upload)
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [pendingTrailerFile, setPendingTrailerFile] = useState(null);
+  const [trailerUploading, setTrailerUploading] = useState(false);
+  const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [error,  setError]  = useState('');
@@ -198,6 +206,8 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
     setGenreIds([]);
     setBackdrops([]);
     setSeasons([]);
+    setYoutubeUrl('');
+    setPendingTrailerFile(null);
     setError('');
     onClose?.();
   };
@@ -243,11 +253,28 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
         cast: castStateToDto(cast),
         director: director ? directorStateToDto(director) : null,
         images: backdropStateToDto(backdrops),
-        trailers: [],
+        trailers: youtubeUrl.trim() ? [{ youtubeUrl: youtubeUrl.trim(), name: form.title.trim() }] : [],
         seasons: seasonsStateToDto(seasons),
       };
       const res = await tvShowService.createTvShow(dto);
       const showId = res?.data?.showId ?? res?.showId;
+
+      // Video trailer tự upload — chỉ upload được sau khi TV show đã có id
+      if (showId && pendingTrailerFile) {
+        setTrailerUploading(true); setTrailerUploadProgress(0);
+        try {
+          await tvShowService.uploadTrailerVideo(showId, pendingTrailerFile, setTrailerUploadProgress);
+        } catch (uploadErr) {
+          // TV show đã tạo thành công — chỉ báo riêng lỗi upload trailer, không rollback việc tạo show
+          toast.error(
+            uploadErr?.response?.data?.message ?? uploadErr?.message ?? 'Upload video trailer thất bại',
+            'Tạo TV show thành công nhưng upload trailer lỗi',
+          );
+        } finally {
+          setTrailerUploading(false);
+        }
+      }
+
       toast.success(`Đã tạo TV show "${form.title.trim()}"`);
       onCreated?.(showId);
       resetAndClose();
@@ -347,6 +374,16 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
               <DirectorPickerField value={director} onChange={setDirector} />
               <CastPickerField value={cast} onChange={setCast} />
 
+              <TrailerField
+                youtubeUrl={youtubeUrl}
+                onYoutubeUrlChange={setYoutubeUrl}
+                currentVideoUrl={null}
+                pendingFile={pendingTrailerFile}
+                onPendingFileChange={setPendingTrailerFile}
+                uploading={trailerUploading}
+                uploadProgress={trailerUploadProgress}
+              />
+
               <SeasonEpisodeBuilderField value={seasons} onChange={setSeasons} />
 
               {error && !/tên|Tên|Rating|mỗi tập|Số mùa|Số tập/i.test(error) && (
@@ -354,7 +391,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
               )}
 
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, lineHeight: 1.65, padding: '10px 14px', background: T.surfaceAlt, borderRadius: 9, border: `1px solid ${T.border}`, margin: 0 }}>
-                Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới (nếu chưa có). "Backdrop (ảnh bìa)" là ảnh nền hiển thị ở đầu trang chi tiết, còn gallery bên dưới là các ảnh backdrop hiển thị ở tab "Hình ảnh". Có thể nhập luôn season/tập phim ở trên hoặc để trống rồi đồng bộ từ TMDB sau — video từng tập luôn được upload sau khi lưu TV show, ở trang chi tiết.
+                Diễn viên/đạo diễn có thể chọn từ hệ thống hoặc nhập tên mới (nếu chưa có). "Backdrop (ảnh bìa)" là ảnh nền hiển thị ở đầu trang chi tiết, còn gallery bên dưới là các ảnh backdrop hiển thị ở tab "Hình ảnh". Trailer (Youtube + video tự upload) có thể thêm luôn tại đây — video trailer sẽ upload ngay sau khi TV show được tạo. Có thể nhập luôn season/tập phim ở trên hoặc để trống rồi đồng bộ từ TMDB sau — video từng tập luôn được upload sau khi lưu TV show, ở trang chi tiết.
               </p>
             </div>
 
@@ -373,7 +410,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
                 style={{ padding: '8px 18px', borderRadius: 8, background: saving ? T.accentLight : T.accent, border: `1px solid ${saving ? T.accent + '30' : 'transparent'}`, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: saving ? T.accentText : 'white', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.15s' }}
               >
                 {saving
-                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang lưu...</>
+                  ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> {trailerUploading ? `Đang upload trailer... ${trailerUploadProgress}%` : 'Đang lưu...'}</>
                   : <><Check size={13} /> Tạo TV show</>
                 }
               </button>
