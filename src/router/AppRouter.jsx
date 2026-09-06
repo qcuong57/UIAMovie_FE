@@ -28,7 +28,7 @@ import ProfilePage from "../pages/user/ProfilePage";
 import SecurityPage from "../pages/user/SecurityPage";
 import PersonPage from "../pages/user/PersonPage";
 import FavoritesPage from "../pages/user/FavoritesPage";
-import TrendingPage from "../pages/user/TrendingPage";
+import ComingSoonPage from "../pages/user/ComingSoonPage";
 import WatchHistoryPage from "../pages/user/WatchHistoryPage";
 import AdminPage from "../pages/admin/AdminPage";
 import TvShowInfoPage from "../pages/user/TvShowInfoPage";
@@ -91,7 +91,7 @@ const AppRouter = () => (
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
         <Route path="/tvshow/:id/info" element={<TvShowInfoPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
-        <Route path="/trending" element={<TrendingPage />} />
+        <Route path="/comingsoon" element={<ComingSoonPage />} />
         <Route path="/premium" element={<PremiumPage />} />
 
         {/* Xem phim — KHÔNG bắt buộc đăng nhập nữa. Guard nội dung Premium */}

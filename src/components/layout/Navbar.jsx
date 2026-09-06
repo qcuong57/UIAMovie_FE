@@ -24,7 +24,7 @@ import SearchShimmer from "../ui/SearchShimmer";
 import useDebounce from "../../hooks/useDebounce";
 
 import { useIsMobile } from "../../hooks/useIsMobile";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import * as variants from "../../motion-configs/variants";
 import * as transitions from "../../motion-configs/transitions";
 import authService from "../../services/authService";
@@ -145,6 +145,12 @@ const Navbar = () => {
 
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Chỉ trang chủ mới có HeroBanner (ảnh nền lớn) đủ tối để header trong suốt
+  // trông đẹp lúc chưa cuộn. Các trang khác (Coming Soon, Search, Browse...)
+  // nền tối trơn nên header trong suốt bị "biến mất" → ép luôn hiển thị dạng
+  // nền đặc (giống trạng thái đã cuộn) khi không phải trang chủ.
+  const isHomePage = location.pathname === "/";
   const [searchParams] = useSearchParams();
   const currentTab = searchParams.get("tab") || "movie";
   const dropdownRef = useRef(null);
@@ -176,11 +182,18 @@ const Navbar = () => {
   }, []);
 
   // ── Scroll listener ────────────────────────────────────────────────────────
+  // Trang không phải Home (không có HeroBanner phía sau) → header luôn ở
+  // trạng thái nền đặc, không phụ thuộc scroll.
   useEffect(() => {
+    if (!isHomePage) {
+      setScrolled(true);
+      return;
+    }
     const onScroll = () => setScrolled(window.scrollY > 60);
+    onScroll(); // đồng bộ ngay khi mount (vd. quay lại Home bằng back)
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [isHomePage]);
 
   // ── Click outside user dropdown ────────────────────────────────────────────
   useEffect(() => {
@@ -383,7 +396,7 @@ const Navbar = () => {
           {[
             { label: "Trang chủ", path: "/" },
             { label: "Yêu thích", path: "/favorites" },
-            { label: "Trending", path: "/trending" },
+            { label: "Phim sắp chiếu", path: "/comingsoon" },
           ].map(({ label, path }, i) => (
             <motion.button
               key={label}

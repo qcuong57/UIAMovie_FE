@@ -31,6 +31,7 @@ const movieService = {
     originCountry = "",
     fromReleaseDate = "",
     toReleaseDate = "",
+    isUpcoming,
     sortBy = "rating",
     sortDesc = true,
   } = {}) => {
@@ -46,6 +47,7 @@ const movieService = {
       if (originCountry) params.append("originCountry", originCountry);
       if (fromReleaseDate) params.append("fromReleaseDate", fromReleaseDate);
       if (toReleaseDate) params.append("toReleaseDate", toReleaseDate);
+      if (isUpcoming != null) params.append("isUpcoming", isUpcoming);
       // genreIds là mảng → append nhiều lần để backend nhận List<Guid>
       (genreIds ?? []).forEach((id) => params.append("genreIds", id));
 

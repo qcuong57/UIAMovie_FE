@@ -38,6 +38,7 @@ const tvShowService = {
     fromFirstAirDate = '',
     toFirstAirDate   = '',
     status           = '',
+    isUpcoming,
     sortBy           = 'rating',
     sortDesc         = true,
     ids              = [],
@@ -55,6 +56,7 @@ const tvShowService = {
       if (fromFirstAirDate)  params.append('fromFirstAirDate', fromFirstAirDate);
       if (toFirstAirDate)    params.append('toFirstAirDate', toFirstAirDate);
       if (status)            params.append('status', status);
+      if (isUpcoming != null) params.append('isUpcoming', isUpcoming);
       (genreIds ?? []).forEach(id => params.append('genreIds', id));
       (ids ?? []).forEach(id => params.append('ids', id));
 

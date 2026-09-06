@@ -42,13 +42,14 @@ function ModalPortal({ children }) {
 }
 
 // ── MobileCard ───────────────────────────────────────────────────
-const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)' }) => {
+const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)', variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
   const [imgError, setImgError] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const [localFav, setLocalFav] = useState(isFavorited);
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
+  const isComingSoon = variant === 'comingSoon';
 
   useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
 
@@ -97,15 +98,28 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🎬</div>
         }
-        {/* Rating badge */}
-        {movie.rating > 0 && (
-          <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 99, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}>
-            <Star size={10} fill="#f5c518" color="#f5c518" />
-            <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 11, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
+        {/* Rating badge / Coming Soon badge */}
+        {isComingSoon ? (
+          <div style={{
+            position: 'absolute', top: 6, left: 6,
+            padding: '4px 10px 0px 10px', borderRadius: 99,
+            fontFamily: "'Nunito',sans-serif", fontSize: 9, fontWeight: 700,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            background: `${accentColor}2e`, border: `1px solid ${accentColor}66`,
+            color: accentColor, backdropFilter: 'blur(4px)',
+          }}>
+            Sắp Chiếu
           </div>
+        ) : (
+          movie.rating > 0 && (
+            <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 99, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}>
+              <Star size={10} fill="#f5c518" color="#f5c518" />
+              <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 11, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
+            </div>
+          )
         )}
         {/* Premium badge */}
-        {movie.isPremium && (
+        {!isComingSoon && movie.isPremium && (
           <div style={{
             position: 'absolute', top: 6, right: 6,
             display: 'flex', alignItems: 'center', gap: 3,
@@ -117,32 +131,37 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
             <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 9, fontWeight: 800, color: '#1c1400', letterSpacing: '0.04em' }}>PREMIUM</span>
           </div>
         )}
-        {/* Fav button */}
-        <button
-          onClick={handleFav}
-          disabled={favLoading}
-          style={{
-            position: 'absolute', bottom: 6, right: 6,
-            width: 30, height: 30, borderRadius: '50%',
-            background: localFav ? '#e5181e' : 'rgba(0,0,0,0.6)',
-            border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`,
-            backdropFilter: 'blur(6px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: favLoading ? 'not-allowed' : 'pointer',
-            opacity: favLoading ? 0.7 : 1,
-          }}
-        >
-          {favLoading
-            ? <Loader size={12} color="white" style={{ animation: 'spin 0.7s linear infinite' }} />
-            : <Heart size={14} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
-          }
-        </button>
+        {/* Fav button — ẩn khi phim chưa chiếu */}
+        {!isComingSoon && (
+          <button
+            onClick={handleFav}
+            disabled={favLoading}
+            style={{
+              position: 'absolute', bottom: 6, right: 6,
+              width: 30, height: 30, borderRadius: '50%',
+              background: localFav ? '#e5181e' : 'rgba(0,0,0,0.6)',
+              border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`,
+              backdropFilter: 'blur(6px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: favLoading ? 'not-allowed' : 'pointer',
+              opacity: favLoading ? 0.7 : 1,
+            }}
+          >
+            {favLoading
+              ? <Loader size={12} color="white" style={{ animation: 'spin 0.7s linear infinite' }} />
+              : <Heart size={14} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
+            }
+          </button>
+        )}
       </div>
 
-      {/* Title + year */}
+      {/* Title + year/release date */}
       <div style={{ paddingTop: 6 }} onClick={handleCardClick}>
         <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 1, cursor: 'pointer' }}>{movie.title}</p>
-        {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>}
+        {isComingSoon
+          ? (releaseLabel && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: accentColor, fontWeight: 600 }}>{releaseLabel}</p>)
+          : (movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#525868' }}>{movie.year}</p>)
+        }
       </div>
 
       {/* FIX: Portal để modal không bị stacking context của card kẹp */}
@@ -158,7 +177,7 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
 };
 
 // ── Desktop MovieCard ─────────────────────────────────────────────
-const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, cardWidth }) => {
+const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, cardWidth, variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
@@ -167,6 +186,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const toast = useToast();
+  const isComingSoon = variant === 'comingSoon';
 
   useEffect(() => {
     setLocalFav(isFavorited);
@@ -223,6 +243,9 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
         isFavorited={localFav}
         onFavoriteToggle={onFavoriteToggle}
         cardWidth={cardWidth || 'calc(50vw - 20px)'}
+        variant={variant}
+        accentColor={accentColor}
+        releaseLabel={releaseLabel}
       />
     );
   }
@@ -266,21 +289,37 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
           </div>
         )}
 
-        {/* ── Rating badge top-left ── */}
-        {movie.rating && (
+        {/* ── Rating badge top-left / Coming Soon badge ── */}
+        {isComingSoon ? (
           <div
-            className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full"
-            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+            className="absolute top-2 left-2 z-10"
+            style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '4px 10px 0px 10px', borderRadius: 99,
+              fontFamily: "'DM Sans', sans-serif", fontSize: 9, fontWeight: 700,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              background: `${accentColor}2e`, border: `1px solid ${accentColor}66`,
+              color: accentColor, backdropFilter: 'blur(4px)',
+            }}
           >
-            <Star size={11} className="fill-yellow-400 text-yellow-400" />
-            <span className="text-yellow-400 font-bold text-[11px]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              {movie.rating.toFixed(1)}
-            </span>
+            Sắp Chiếu
           </div>
+        ) : (
+          movie.rating && (
+            <div
+              className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+            >
+              <Star size={11} className="fill-yellow-400 text-yellow-400" />
+              <span className="text-yellow-400 font-bold text-[11px]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                {movie.rating.toFixed(1)}
+              </span>
+            </div>
+          )
         )}
 
         {/* ── Premium badge top-right ── */}
-        {movie.isPremium && (
+        {!isComingSoon && movie.isPremium && (
           <div
             className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full"
             style={{
@@ -317,56 +356,76 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
               <div className="px-4 pb-4 pt-3 flex flex-col gap-2.5">
                 {/* Buttons */}
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {/* Play */}
-                  <button
-                    onClick={handlePlay}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
-                    style={{ background: isPremiumLocked ? 'rgba(250,204,21,0.9)' : '#fff' }}
-                    title={isPremiumLocked ? 'Nội dung Premium' : 'Phát'}
-                  >
-                    {isPremiumLocked
-                      ? <Crown size={14} fill="#1c1400" color="#1c1400" />
-                      : <Play size={15} fill="#000" color="#000" className="ml-0.5" />
-                    }
-                  </button>
+                  {isComingSoon ? (
+                    <>
+                      {movie.trailerVideoUrl && (
+                        <div className="flex items-center gap-1 text-[10px]" style={{ color: '#ccc', fontFamily: "'DM Sans', sans-serif" }}>
+                          <Play size={11} color="#ccc" /> Có trailer
+                        </div>
+                      )}
+                      {/* More info */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(infoPath(movie)); }}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0 ml-auto"
+                        style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
+                      >
+                        <ChevronDown size={15} color="white" strokeWidth={2.5} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Play */}
+                      <button
+                        onClick={handlePlay}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
+                        style={{ background: isPremiumLocked ? 'rgba(250,204,21,0.9)' : '#fff' }}
+                        title={isPremiumLocked ? 'Nội dung Premium' : 'Phát'}
+                      >
+                        {isPremiumLocked
+                          ? <Crown size={14} fill="#1c1400" color="#1c1400" />
+                          : <Play size={15} fill="#000" color="#000" className="ml-0.5" />
+                        }
+                      </button>
 
-                  {/* Add / Favourite */}
-                  <button
-                    onClick={handleFavoriteClick}
-                    disabled={favLoading}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
-                    style={{
-                      background: localFav ? '#e5181e' : 'transparent',
-                      border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.4)'}`,
-                      opacity: favLoading ? 0.7 : 1,
-                      cursor: favLoading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {favLoading
-                      ? <Loader size={14} color="white" className="animate-spin" />
-                      : localFav
-                        ? <Heart size={14} fill="white" color="white" />
-                        : <Plus size={15} color="white" strokeWidth={2.5} />
-                    }
-                  </button>
+                      {/* Add / Favourite */}
+                      <button
+                        onClick={handleFavoriteClick}
+                        disabled={favLoading}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
+                        style={{
+                          background: localFav ? '#e5181e' : 'transparent',
+                          border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.4)'}`,
+                          opacity: favLoading ? 0.7 : 1,
+                          cursor: favLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {favLoading
+                          ? <Loader size={14} color="white" className="animate-spin" />
+                          : localFav
+                            ? <Heart size={14} fill="white" color="white" />
+                            : <Plus size={15} color="white" strokeWidth={2.5} />
+                        }
+                      </button>
 
-                  {/* Thumbs up */}
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
-                    style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
-                  >
-                    <ThumbsUp size={13} color="white" strokeWidth={2.5} />
-                  </button>
+                      {/* Thumbs up */}
+                      <button
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0"
+                        style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
+                      >
+                        <ThumbsUp size={13} color="white" strokeWidth={2.5} />
+                      </button>
 
-                  {/* More info */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); navigate(infoPath(movie)); }}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0 ml-auto"
-                    style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
-                  >
-                    <ChevronDown size={15} color="white" strokeWidth={2.5} />
-                  </button>
+                      {/* More info */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(infoPath(movie)); }}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform flex-shrink-0 ml-auto"
+                        style={{ border: '1.5px solid rgba(255,255,255,0.4)' }}
+                      >
+                        <ChevronDown size={15} color="white" strokeWidth={2.5} />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* Title */}
@@ -379,23 +438,33 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
 
                 {/* Meta */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {matchPct && (
-                    <span className="text-[11px] font-bold" style={{ color: '#46d369' }}>
-                      {matchPct}% Match
-                    </span>
-                  )}
-                  {movie.year && (
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 rounded-sm"
-                      style={{ color: '#999', border: '1px solid rgba(255,255,255,0.2)', fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                      {movie.year}
-                    </span>
-                  )}
-                  {movie.genres?.[0] && (
-                    <span className="text-[10px] truncate" style={{ color: '#666', fontFamily: "'DM Sans', sans-serif" }}>
-                      {movie.genres[0]}
-                    </span>
+                  {isComingSoon ? (
+                    releaseLabel && (
+                      <span className="text-[11px] font-bold" style={{ color: accentColor, fontFamily: "'DM Sans', sans-serif" }}>
+                        {releaseLabel}
+                      </span>
+                    )
+                  ) : (
+                    <>
+                      {matchPct && (
+                        <span className="text-[11px] font-bold" style={{ color: '#46d369' }}>
+                          {matchPct}% Match
+                        </span>
+                      )}
+                      {movie.year && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded-sm"
+                          style={{ color: '#999', border: '1px solid rgba(255,255,255,0.2)', fontFamily: "'DM Sans', sans-serif" }}
+                        >
+                          {movie.year}
+                        </span>
+                      )}
+                      {movie.genres?.[0] && (
+                        <span className="text-[10px] truncate" style={{ color: '#666', fontFamily: "'DM Sans', sans-serif" }}>
+                          {movie.genres[0]}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

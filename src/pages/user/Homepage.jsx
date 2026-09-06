@@ -31,6 +31,7 @@ import GenreSection from "../../components/home/GenreSection";
 import TopRankedRow from "../../components/home/TopRankedRow";
 import MovieRow from "../../components/home/MovieRow";
 import CountryMovieRows from "../../components/home/CountryMovieRows";
+import TrailerShowcaseSection from "../../components/home/TrailerShowcaseSection";
 import UserReviewsSection from "../../components/home/UserReviewsSection";
 import RecommendSection from "../../components/home/RecommendSection";
 import SectionReveal from "../../motion-configs/SectionReveal";
@@ -49,6 +50,7 @@ const normalizeMovie = (m) => ({
   description: m.description || "",
   duration: m.duration || null,
   isPremium: m.isPremium ?? false, // ← FIX: map field premium
+  trailerVideoUrl: m.trailerVideoUrl || null, // trailer tự upload lên Cloudinary
   isTvShow: false,
 });
 
@@ -62,6 +64,7 @@ const normalizeTvShow = (s) => ({
   genres: s.genres || [],
   description: s.description || s.overview || "",
   isPremium: s.isPremium ?? false, // ← FIX: map field premium
+  trailerVideoUrl: s.trailerVideoUrl || null, // trailer tự upload lên Cloudinary
   isTvShow: true,
 });
 
@@ -206,6 +209,9 @@ export default function HomePage() {
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
 
+  const [trailerSourceMovies, setTrailerSourceMovies] = useState([]);
+  const [trailerSourceTvShows, setTrailerSourceTvShows] = useState([]);
+
   const [forYou, setForYou] = useState([]);
   const [forYouLabel, setForYouLabel] = useState("Khám phá thêm");
   const [forYouLoading, setForYouLoading] = useState(false);
@@ -250,6 +256,8 @@ export default function HomePage() {
         favsData,
         tvFavsData,
         historyData,
+        trailerMoviesData,
+        trailerTvShowsData,
       ] = await Promise.all([
         movieService.getTrendingMovies(),
         tvShowService
@@ -259,6 +267,26 @@ export default function HomePage() {
         movieService.getFavorites().catch(() => []),
         tvShowService.getFavorites?.().catch(() => []) ?? Promise.resolve([]),
         movieService.getWatchHistory().catch(() => []),
+        // ⚠️ Nguồn RIÊNG cho Trailer section: getTrendingMovies() bị cache server 30'
+        // nên trailer mới upload không lên kịp. getMovies() (list thường) KHÔNG cache
+        // → luôn thấy trailer mới ngay sau khi upload. pageSize lớn để không bị giới
+        // hạn trong top trending/top rated như 2 nguồn phía trên.
+        movieService
+          .getMovies({
+            page: 1,
+            pageSize: 100,
+            sortBy: "releaseDate",
+            sortDesc: true,
+          })
+          .catch(() => []),
+        tvShowService
+          .getTvShows({
+            page: 1,
+            pageSize: 100,
+            sortBy: "firstAirDate",
+            sortDesc: true,
+          })
+          .catch(() => []),
       ]);
 
       const rawMovies = Array.isArray(moviesData)
@@ -299,6 +327,20 @@ export default function HomePage() {
         ? historyData
         : historyData?.data || historyData?.history || [];
       setWatchHistory(rawHistory);
+
+      // Nguồn riêng cho Trailer section — xem comment ở fetchData phía trên
+      const rawTrailerMovies = Array.isArray(trailerMoviesData)
+        ? trailerMoviesData
+        : trailerMoviesData?.items || trailerMoviesData?.movies || [];
+      const rawTrailerTvShows = Array.isArray(trailerTvShowsData)
+        ? trailerTvShowsData
+        : (trailerTvShowsData?.items ??
+          trailerTvShowsData?.tvShows ??
+          trailerTvShowsData?.data?.items ??
+          trailerTvShowsData?.data ??
+          []);
+      setTrailerSourceMovies(rawTrailerMovies.map(normalizeMovie));
+      setTrailerSourceTvShows(rawTrailerTvShows.map(normalizeTvShow));
 
       fetchForYou(normalized, normalizedTv, rawHistory);
     } catch (err) {
@@ -364,6 +406,28 @@ export default function HomePage() {
 
   const tvTopRated = useMemo(() => byRating(tvShows).slice(0, 20), [tvShows]);
   const tvNewest = useMemo(() => byNewest(tvShows).slice(0, 20), [tvShows]);
+
+  // ── Trailer tự upload (Cloudinary) — movie + tvshow gộp chung, mới nhất trước ──
+  // Gộp cả 2 nguồn: (trending/top-rated hiện có) + (nguồn riêng không cache, xem fetchData)
+  // rồi khử trùng lặp theo id+loại, để không bỏ lỡ trailer chỉ vì phim chưa lọt top trending.
+  const uploadedTrailers = useMemo(() => {
+    const all = [
+      ...movies,
+      ...tvShows,
+      ...trailerSourceMovies,
+      ...trailerSourceTvShows,
+    ].filter((i) => i.trailerVideoUrl);
+
+    const seen = new Set();
+    const deduped = all.filter((item) => {
+      const key = `${item.isTvShow ? "tv" : "movie"}-${item.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return byNewest(deduped).slice(0, 15);
+  }, [movies, tvShows, trailerSourceMovies, trailerSourceTvShows]);
 
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={handleRetry} />;
@@ -434,6 +498,18 @@ export default function HomePage() {
 
             <SectionDivider />
             <div style={{ height: 40 }} />
+
+            {/* ── Trailer Mới Cập Nhật (tự upload lên Cloudinary) ── */}
+            {uploadedTrailers.length > 0 && (
+              <>
+                <SectionReveal variant="scale-fade">
+                  <TrailerShowcaseSection items={uploadedTrailers} />
+                </SectionReveal>
+
+                <SectionDivider />
+                <div style={{ height: 40 }} />
+              </>
+            )}
 
             <CountryMovieRows
               favIds={favorites}
