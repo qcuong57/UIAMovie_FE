@@ -1,14 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  IconMovie,
-  IconRefresh,
-  IconX,
-  IconMoodSmile,
-  IconChevronDown,
-  IconSend2,
-} from "@tabler/icons-react";
+import { IconChevronDown } from "@tabler/icons-react";
 import aiService from "../../services/aiService";
 import { FONT_BODY, FONT_DISPLAY } from "../../context/homeTokens";
 
@@ -20,15 +13,9 @@ import {
   INTENT_CHIPS,
   PROACTIVE_MESSAGES,
 } from "./config/aiChatConfig";
-import {
-  ProactiveBubble,
-  FabIcon,
-  HeaderIconBtn,
-  MoodPicker,
-} from "./ui/AiChatUI";
+import { ProactiveBubble, FabIcon, MoodPicker } from "./ui/AiChatUI";
 import AiChatMessageBubble from "./AiChatMessageBubble";
 
-// Expressive easing — "comes to rest" naturally, like Linear/Vercel panels
 const EASE_EXP = [0.16, 1, 0.3, 1];
 
 export default function AiChatWidget() {
@@ -54,9 +41,7 @@ export default function AiChatWidget() {
   const proactiveShownRef = useRef(false);
 
   const scrollToBottom = useCallback((smooth = true) => {
-    bottomRef.current?.scrollIntoView({
-      behavior: smooth ? "smooth" : "instant",
-    });
+    bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
   }, []);
 
   useEffect(() => {
@@ -76,13 +61,9 @@ export default function AiChatWidget() {
 
   useEffect(() => {
     const last = messages[messages.length - 1];
-    if (
-      !open &&
-      last?.role === "assistant" &&
-      messages.length > 1 &&
-      !last._typing
-    )
+    if (!open && last?.role === "assistant" && messages.length > 1 && !last._typing) {
       setHasUnread(true);
+    }
   }, [messages, open]);
 
   useEffect(() => {
@@ -92,9 +73,8 @@ export default function AiChatWidget() {
       if (!open) {
         const path = location.pathname;
         const key =
-          Object.keys(PROACTIVE_MESSAGES).find(
-            (k) => path.startsWith(k) && k !== "/",
-          ) ?? (path === "/" ? "/" : "default");
+          Object.keys(PROACTIVE_MESSAGES).find((k) => path.startsWith(k) && k !== "/") ??
+          (path === "/" ? "/" : "default");
         setProactive(PROACTIVE_MESSAGES[key] ?? PROACTIVE_MESSAGES.default);
         proactiveShownRef.current = true;
       }
@@ -146,15 +126,14 @@ export default function AiChatWidget() {
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: "", _typing: true },
-    ]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "", _typing: true }]);
     setLoading(true);
 
     try {
-      const { reply, movies, tvshows, intent, compareTable } =
-        await aiService.chat(trimmed, buildHistory(nextMsgs));
+      const { reply, movies, tvshows, intent, compareTable } = await aiService.chat(
+        trimmed,
+        buildHistory(nextMsgs),
+      );
       setLastIntent(intent || "movie");
       setMessages((prev) => [
         ...prev.filter((m) => !m._typing),
@@ -170,10 +149,7 @@ export default function AiChatWidget() {
     } catch {
       setMessages((prev) => [
         ...prev.filter((m) => !m._typing),
-        {
-          role: "assistant",
-          content: "Xin lỗi, không thể kết nối tới AI. Vui lòng thử lại sau.",
-        },
+        { role: "assistant", content: "Xin lỗi, không thể kết nối tới AI. Vui lòng thử lại sau." },
       ]);
     } finally {
       setLoading(false);
@@ -183,9 +159,7 @@ export default function AiChatWidget() {
 
   const handleMoodSelect = async (mood) => {
     setShowMoodPicker(false);
-    await sendMessage(
-      `Tôi đang cảm thấy ${mood}, gợi ý phim phù hợp cho tôi nhé!`,
-    );
+    await sendMessage(`Tôi đang cảm thấy ${mood.toLowerCase()}, gợi ý phim phù hợp cho tôi nhé!`);
   };
 
   const handleKeyDown = (e) => {
@@ -212,7 +186,6 @@ export default function AiChatWidget() {
 
   return (
     <>
-      {/* Proactive bubble */}
       <AnimatePresence>
         {proactive && !open && (
           <ProactiveBubble
@@ -223,161 +196,98 @@ export default function AiChatWidget() {
         )}
       </AnimatePresence>
 
-      {/* ─── Main chat panel ─── */}
       <AnimatePresence>
         {open && (
           <motion.div
             key="chat-panel"
-            initial={{ opacity: 0, y: 24, scale: 0.97 }}
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: EASE_EXP }}
+            exit={{ opacity: 0, y: 14, scale: 0.98 }}
+            transition={{ duration: 0.26, ease: EASE_EXP }}
             style={{
               position: "fixed",
               bottom: 92,
               top: 72,
               right: 24,
-              width: 372,
+              width: 368,
               zIndex: 9998,
-              borderRadius: 20,
+              borderRadius: 18,
               background: W.bg,
               border: `1px solid ${W.border}`,
-              // 4-layer shadow: ambient + depth + blur + red bottom-glow
-              boxShadow: [
-                "0 2px 6px rgba(0,0,0,0.3)",
-                "0 12px 40px rgba(0,0,0,0.55)",
-                "0 40px 100px rgba(0,0,0,0.75)",
-                "0 56px 80px rgba(229,24,30,0.07)",
-              ].join(", "),
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.35)",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
             }}
           >
-            {/* Header */}
+            {/* Header — wordmark + status, no logo box, no badge chrome */}
             <div
               style={{
-                padding: "12px 13px 11px",
+                padding: "15px 16px 13px",
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
+                justifyContent: "space-between",
                 borderBottom: `1px solid ${W.border}`,
                 flexShrink: 0,
-                background: W.surfaceUp,
-                backdropFilter: "blur(10px)",
-                WebkitBackdropFilter: "blur(10px)",
               }}
             >
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 11,
-                  background: `linear-gradient(145deg, rgba(229,24,30,0.18), rgba(229,24,30,0.06))`,
-                  border: `1px solid rgba(229,24,30,0.22)`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  boxShadow: "0 0 20px rgba(229,24,30,0.14)",
-                }}
-              >
-                <IconMovie size={16} color={W.accent} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontFamily: FONT_DISPLAY,
-                    fontWeight: 800,
-                    fontSize: 13.5,
-                    color: "#fff",
-                    letterSpacing: "0.01em",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                  }}
-                >
-                  UIAMovie AI
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      background: "rgba(34,197,94,0.08)",
-                      border: "1px solid rgba(34,197,94,0.18)",
-                      borderRadius: 99,
-                      padding: "1px 7px",
-                    }}
-                  >
-                    <motion.span
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: "50%",
-                        background: W.green,
-                        display: "block",
-                      }}
-                      animate={{ opacity: [1, 0.35, 1] }}
-                      transition={{
-                        repeat: Infinity,
-                        duration: 2.2,
-                        ease: "easeInOut",
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontFamily: FONT_BODY,
-                        fontSize: 8.5,
-                        fontWeight: 600,
-                        color: W.green,
-                      }}
-                    >
-                      Live
-                    </span>
-                  </span>
+              <div>
+                <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 14, color: "#fff", letterSpacing: "0.01em" }}>
+                  UIAMovie Trợ lý
                 </div>
-                <div
-                  style={{
-                    fontFamily: FONT_BODY,
-                    fontSize: 10,
-                    color: W.textDim,
-                    marginTop: 1,
-                  }}
-                >
-                  Trợ lý tìm phim & series thông minh
+                <div style={{ fontFamily: FONT_BODY, fontSize: 10.5, color: W.textDim, marginTop: 2 }}>
+                  Đang hoạt động
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-                <HeaderIconBtn
-                  onClick={() => setShowMoodPicker((v) => !v)}
-                  title="Gợi ý theo tâm trạng"
-                  active={showMoodPicker}
-                  accentActive
-                >
-                  <IconMoodSmile size={15} />
-                </HeaderIconBtn>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {messages.length > 1 && (
-                  <HeaderIconBtn
+                  <button
                     onClick={clearChat}
-                    title="Cuộc trò chuyện mới"
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: FONT_BODY,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: W.textDim,
+                      padding: "4px 2px",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = W.textSub)}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = W.textDim)}
                   >
-                    <IconRefresh size={14} />
-                  </HeaderIconBtn>
+                    Trò chuyện mới
+                  </button>
                 )}
-                <HeaderIconBtn onClick={() => setOpen(false)} title="Đóng">
-                  <IconX size={15} />
-                </HeaderIconBtn>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Đóng"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: FONT_BODY,
+                    fontSize: 18,
+                    lineHeight: 1,
+                    color: W.textDim,
+                    padding: "2px 2px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = W.textSub)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = W.textDim)}
+                >
+                  ×
+                </button>
               </div>
             </div>
 
-            {/* Mood picker — smooth max-height collapse (no "height: auto" jank) */}
+            {/* Mood picker */}
             <AnimatePresence>
               {showMoodPicker && (
                 <motion.div
                   initial={{ maxHeight: 0, opacity: 0 }}
-                  animate={{ maxHeight: 220, opacity: 1 }}
+                  animate={{ maxHeight: 200, opacity: 1 }}
                   exit={{ maxHeight: 0, opacity: 0 }}
-                  transition={{ duration: 0.26, ease: EASE_EXP }}
+                  transition={{ duration: 0.24, ease: EASE_EXP }}
                   style={{ overflow: "hidden", flexShrink: 0 }}
                 >
                   <MoodPicker onSelect={handleMoodSelect} loading={loading} />
@@ -394,8 +304,9 @@ export default function AiChatWidget() {
                 minHeight: 0,
                 overflowY: "auto",
                 overflowX: "hidden",
-                padding: "16px 13px 8px",
+                padding: "16px 14px 8px",
                 scrollbarWidth: "none",
+                position: "relative",
               }}
             >
               {messages.map((msg, i) => (
@@ -410,34 +321,31 @@ export default function AiChatWidget() {
                   onTvShowClick={handleTvShowClick}
                   compareTable={msg.compareTable}
                   intent={msg.intent}
+                  showLabel={i === 0 || messages[i - 1].role !== msg.role}
                 />
               ))}
               <div ref={bottomRef} />
             </div>
 
-            {/* Scroll-down button with hover lift */}
+            {/* Scroll-down control */}
             <AnimatePresence>
               {showScrollDown && (
                 <motion.button
-                  initial={{ opacity: 0, y: 8, scale: 0.88 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.88 }}
-                  transition={{ duration: 0.2, ease: EASE_EXP }}
-                  whileHover={{
-                    y: -2,
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.65)",
-                  }}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.18 }}
                   onClick={() => scrollToBottom()}
                   style={{
                     position: "absolute",
-                    bottom: 86,
+                    bottom: 130,
                     left: "50%",
                     transform: "translateX(-50%)",
                     zIndex: 10,
                     background: W.surfaceMid,
                     border: `1px solid ${W.borderHi}`,
                     borderRadius: 99,
-                    padding: "5px 13px",
+                    padding: "5px 12px",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -445,9 +353,8 @@ export default function AiChatWidget() {
                     color: W.textSub,
                     fontFamily: FONT_BODY,
                     fontSize: 10.5,
-                    fontWeight: 600,
+                    fontWeight: 500,
                     boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
-                    transition: "box-shadow 0.18s",
                   }}
                 >
                   <IconChevronDown size={12} /> Xuống dưới
@@ -455,7 +362,7 @@ export default function AiChatWidget() {
               )}
             </AnimatePresence>
 
-            {/* Quick-reply chips — staggered slide-up on mount */}
+            {/* Quick-reply chips — only on first turn */}
             <AnimatePresence>
               {isFirst && (
                 <motion.div
@@ -463,26 +370,16 @@ export default function AiChatWidget() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.22, ease: EASE_EXP }}
-                  style={{
-                    padding: "0 13px 8px",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 5,
-                    flexShrink: 0,
-                  }}
+                  transition={{ duration: 0.2, ease: EASE_EXP }}
+                  style={{ padding: "0 14px 8px", display: "flex", flexWrap: "wrap", gap: 5, flexShrink: 0 }}
                 >
                   {currentChips.map((s, idx) => (
                     <motion.button
                       key={s.label}
-                      initial={{ opacity: 0, y: 8 }}
+                      initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        duration: 0.18,
-                        delay: idx * 0.05,
-                        ease: EASE_EXP,
-                      }}
-                      whileHover={{ y: -1, transition: { duration: 0.12 } }}
+                      transition={{ duration: 0.16, delay: idx * 0.04 }}
+                      whileHover={{ y: -1 }}
                       whileTap={{ scale: 0.96 }}
                       onClick={() => sendMessage(s.label)}
                       style={{
@@ -495,12 +392,8 @@ export default function AiChatWidget() {
                         fontFamily: FONT_BODY,
                         fontSize: 11,
                         fontWeight: 500,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 5,
                         whiteSpace: "nowrap",
-                        transition:
-                          "color 0.15s, background 0.15s, border-color 0.15s",
+                        transition: "color 0.15s, background 0.15s, border-color 0.15s",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.color = W.text;
@@ -520,14 +413,27 @@ export default function AiChatWidget() {
               )}
             </AnimatePresence>
 
-            {/* Input area */}
-            <div
-              style={{
-                padding: "8px 12px 13px",
-                flexShrink: 0,
-                borderTop: `1px solid ${W.border}`,
-              }}
-            >
+            {/* Mood toggle — plain text link, sits just above the composer */}
+            <div style={{ padding: "0 14px 6px", flexShrink: 0 }}>
+              <button
+                onClick={() => setShowMoodPicker((v) => !v)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: FONT_BODY,
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  color: showMoodPicker ? W.accent : W.textDim,
+                  padding: "2px 0",
+                }}
+              >
+                Gợi ý theo tâm trạng
+              </button>
+            </div>
+
+            {/* Composer */}
+            <div style={{ padding: "0 12px 13px", flexShrink: 0, borderTop: `1px solid ${W.border}`, paddingTop: 10 }}>
               <div
                 style={{
                   display: "flex",
@@ -535,23 +441,15 @@ export default function AiChatWidget() {
                   gap: 8,
                   background: W.surfaceUp,
                   border: `1px solid ${overLimit ? W.warn : W.border}`,
-                  borderRadius: 15,
+                  borderRadius: 14,
                   padding: "7px 7px 7px 14px",
-                  transition: "border-color 0.18s, box-shadow 0.18s",
+                  transition: "border-color 0.18s",
                 }}
                 onFocusCapture={(e) => {
-                  e.currentTarget.style.borderColor = overLimit
-                    ? W.warn
-                    : W.borderHi;
-                  e.currentTarget.style.boxShadow = overLimit
-                    ? "0 0 0 3px rgba(245,158,11,0.08)"
-                    : "0 0 0 3px rgba(229,24,30,0.06)";
+                  e.currentTarget.style.borderColor = overLimit ? W.warn : W.borderHi;
                 }}
                 onBlurCapture={(e) => {
-                  e.currentTarget.style.borderColor = overLimit
-                    ? W.warn
-                    : W.border;
-                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.borderColor = overLimit ? W.warn : W.border;
                 }}
               >
                 <textarea
@@ -561,8 +459,7 @@ export default function AiChatWidget() {
                   onChange={(e) => {
                     setInput(e.target.value);
                     e.target.style.height = "auto";
-                    e.target.style.height =
-                      Math.min(e.target.scrollHeight, 90) + "px";
+                    e.target.style.height = Math.min(e.target.scrollHeight, 90) + "px";
                   }}
                   onKeyDown={handleKeyDown}
                   placeholder="Hỏi về phim, tâm trạng, so sánh..."
@@ -583,83 +480,37 @@ export default function AiChatWidget() {
                     maxHeight: 90,
                   }}
                 />
-                {/* Send button — gradient active state + spring tap */}
                 <motion.button
                   onClick={() => sendMessage(input)}
                   disabled={!canSend}
                   animate={{
-                    background: canSend
-                      ? `linear-gradient(135deg, ${W.accent} 0%, #b8111a 100%)`
-                      : "rgba(255,255,255,0.04)",
-                    boxShadow: canSend
-                      ? "0 3px 16px rgba(229,24,30,0.38)"
-                      : "none",
+                    background: canSend ? W.accent : "rgba(255,255,255,0.04)",
                   }}
-                  transition={{ duration: 0.2 }}
-                  whileHover={canSend ? { scale: 1.06 } : {}}
-                  whileTap={
-                    canSend
-                      ? {
-                          scale: 0.88,
-                          transition: {
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 18,
-                          },
-                        }
-                      : {}
-                  }
+                  transition={{ duration: 0.18 }}
+                  whileTap={canSend ? { scale: 0.92 } : {}}
                   style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
+                    height: 32,
+                    padding: "0 13px",
+                    borderRadius: 9,
                     border: "none",
                     cursor: canSend ? "pointer" : "default",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    fontFamily: FONT_BODY,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: canSend ? "#fff" : W.textDim,
                     flexShrink: 0,
                   }}
                 >
-                  <IconSend2
-                    size={14}
-                    color={canSend ? "#fff" : W.textDim}
-                    style={{ transform: "translateX(1px)" }}
-                  />
+                  Gửi
                 </motion.button>
               </div>
 
-              <div
-                style={{
-                  marginTop: 7,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: FONT_BODY,
-                    fontSize: 9.5,
-                    color: W.textDim,
-                    letterSpacing: "0.02em",
-                    margin: 0,
-                  }}
-                >
-                  AI có thể mắc sai sót · Chỉ gợi ý phim có trong thư viện
+              <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ fontFamily: FONT_BODY, fontSize: 9.5, color: W.textDim, margin: 0 }}>
+                  AI có thể mắc sai sót
                 </p>
                 {nearLimit && (
-                  <span
-                    style={{
-                      fontFamily: FONT_BODY,
-                      fontSize: 9.5,
-                      fontWeight: 600,
-                      color: overLimit ? W.warn : W.textDim,
-                      flexShrink: 0,
-                      marginLeft: 8,
-                      transition: "color 0.15s",
-                    }}
-                  >
+                  <span style={{ fontFamily: FONT_BODY, fontSize: 9.5, fontWeight: 600, color: overLimit ? W.warn : W.textDim }}>
                     {inputLength}/{MAX_CHAT_LENGTH}
                   </span>
                 )}
@@ -669,34 +520,27 @@ export default function AiChatWidget() {
         )}
       </AnimatePresence>
 
-      {/* ─── FAB ─── */}
+      {/* FAB — single word mark, no icon library glyph */}
       <motion.button
         onClick={() => setOpen((v) => !v)}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{
-          scale: 0.88,
-          transition: { type: "spring", stiffness: 380, damping: 18 },
-        }}
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.9 }}
         style={{
           position: "fixed",
           bottom: 24,
           right: 24,
-          width: 54,
-          height: 54,
+          width: 52,
+          height: 52,
           borderRadius: 16,
-          background: open
-            ? W.surfaceMid
-            : `linear-gradient(145deg, #e8191f, #b01015)`,
+          background: open ? W.surfaceMid : W.accent,
           border: open ? `1px solid ${W.borderHi}` : "none",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           zIndex: 9999,
-          boxShadow: open
-            ? "0 4px 20px rgba(0,0,0,0.5)"
-            : "0 6px 28px rgba(229,24,30,0.5), 0 2px 10px rgba(0,0,0,0.5)",
-          transition: "background 0.22s, border 0.22s, box-shadow 0.22s",
+          boxShadow: open ? "0 4px 20px rgba(0,0,0,0.5)" : "0 6px 24px rgba(229,24,30,0.4)",
+          transition: "background 0.2s, border 0.2s, box-shadow 0.2s",
         }}
       >
         <FabIcon isOpen={open} />
@@ -709,14 +553,13 @@ export default function AiChatWidget() {
               transition={{ type: "spring", stiffness: 350, damping: 18 }}
               style={{
                 position: "absolute",
-                top: -3,
-                right: -3,
-                width: 12,
-                height: 12,
+                top: -2,
+                right: -2,
+                width: 10,
+                height: 10,
                 borderRadius: "50%",
                 background: W.green,
                 border: "2px solid #080809",
-                boxShadow: "0 0 8px rgba(34,197,94,0.5)",
               }}
             />
           )}

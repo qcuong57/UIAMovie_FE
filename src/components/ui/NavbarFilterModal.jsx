@@ -210,6 +210,16 @@ const NavbarFilterModal = ({ isOpen, onClose, onApply, anchorRef, currentTab = "
     return () => document.removeEventListener("mousedown", handler);
   }, [isOpen, onClose, anchorRef]);
 
+  // ── Escape → close ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   const toggleGenre = useCallback((id) => {
@@ -338,11 +348,11 @@ const NavbarFilterModal = ({ isOpen, onClose, onApply, anchorRef, currentTab = "
               style={{
                 pointerEvents: "all",
                 width: "100%",
-                maxWidth: 960,
-                background: "rgba(10,10,10,0.97)",
-                border: "1px solid rgba(255,255,255,0.09)",
+                maxWidth: 1000,
+                background: "rgba(10,10,10,0.96)",
+                border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: 16,
-                boxShadow: "0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(229,24,30,0.08)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
                 backdropFilter: "blur(24px)",
                 padding: "20px 24px 24px",
               }}

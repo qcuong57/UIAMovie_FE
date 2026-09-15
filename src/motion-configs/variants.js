@@ -263,7 +263,9 @@ export const heroButtonContainerVariants = {
     opacity: 1,
     transition: {
       staggerChildren: 0.1,
-      delayChildren: 0.4,
+      // ✅ giảm từ 0.4 → 0.25: nút CTA là điểm tương tác đầu tiên của trang,
+      // để người dùng bấm được sớm hơn ~150ms mà vẫn giữ cảm giác "cinematic"
+      delayChildren: 0.25,
     }
   }
 };
@@ -645,4 +647,75 @@ export const shimmerVariants = {
       ease: "linear",
     }
   }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎥 CINEMATIC / GODLY-STYLE — thêm mới, không sửa các export ở trên.
+// Dùng cho bản refactor IntroPage theo hướng "editorial scroll" kiểu
+// godly.website: split-text theo dòng, mask-wipe, sticky scale, marquee.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Container cho split-text theo DÒNG (mỗi dòng là 1 motion.div con)
+export const textLinesContainerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.09, delayChildren: 0.05 },
+  },
+};
+
+// Từng dòng: trượt lên từ sau một mask overflow:hidden + skew nhẹ
+export const textLineVariants = {
+  hidden: { y: "110%", rotate: 1.5 },
+  visible: {
+    y: "0%",
+    rotate: 0,
+    transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
+// Mask-wipe full-bleed (thay cho "màn nhung") — 1 panel quét từ dưới lên
+export const maskWipeVariants = {
+  hidden: { scaleY: 0 },
+  visible: {
+    scaleY: 1,
+    transition: { duration: 0.7, ease: [0.83, 0, 0.17, 1] },
+  },
+  exit: {
+    scaleY: 0,
+    transition: { duration: 0.7, ease: [0.83, 0, 0.17, 1], delay: 0.05 },
+  },
+};
+
+// Sticky/pinned scroll card — scale nhẹ khi tiến vào trung tâm viewport
+export const stickyScaleVariants = {
+  hidden: { opacity: 0, scale: 0.92, y: 40 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
+// Chip/tag bay vào theo hàng ngang, dùng cho genre marquee dừng lại lúc hover
+export const chipRowVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04, delayChildren: 0.1 } },
+};
+
+export const chipVariants = {
+  hidden: { opacity: 0, y: 10, scale: 0.9 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.4, ease: "easeOut" },
+  },
+};
+
+// Underline vẽ ra dưới link/nav khi hover (dùng pathLength nếu là SVG,
+// hoặc scaleX nếu là div — component tự chọn)
+export const underlineDrawVariants = {
+  rest: { scaleX: 0 },
+  hover: { scaleX: 1, transition: { duration: 0.35, ease: "easeOut" } },
 };

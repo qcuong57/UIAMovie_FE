@@ -24,6 +24,7 @@ import SearchShimmer from "../ui/SearchShimmer";
 import useDebounce from "../../hooks/useDebounce";
 
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import * as variants from "../../motion-configs/variants";
 import * as transitions from "../../motion-configs/transitions";
@@ -145,6 +146,7 @@ const Navbar = () => {
 
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const guardedNav = useAuthGuard();
   const location = useLocation();
   // Chỉ trang chủ mới có HeroBanner (ảnh nền lớn) đủ tối để header trong suốt
   // trông đẹp lúc chưa cuộn. Các trang khác (Coming Soon, Search, Browse...)
@@ -372,19 +374,30 @@ const Navbar = () => {
           onClick={goHome}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
+          style={{
+            // Font-size gốc của cụm logo — UIA = 1em, MOVIE ăn theo tỉ lệ em
+            // nên luôn nhỏ hơn UIA đúng 1 tỉ lệ ở mọi breakpoint, không cần
+            // khai báo 2 bộ class riêng cho từng chữ nữa.
+            fontSize: "clamp(1.35rem, 1.05rem + 1vw, 1.875rem)",
+          }}
         >
           <span
-            className="text-2xl md:text-3xl font-black leading-none"
-            style={{ color: ACCENT, letterSpacing: "-0.02em" }}
+            className="font-black leading-none"
+            style={{ color: ACCENT, letterSpacing: "-0.02em", fontSize: "1em" }}
           >
             UIA
           </span>
           <span
-            className="text-xl md:text-2xl font-bold leading-none"
+            className="font-bold"
             style={{
               color: scrolled ? "#ffffff" : "#f0f0f0",
               letterSpacing: "0.06em",
               transition: "color 0.3s",
+              // Nhỏ hơn UIA một chút; nhờ flex items-center của div cha mà
+              // nó tự căn giữa theo chiều dọc so với UIA, không lệch trên/dưới.
+              fontSize: "0.62em",
+              lineHeight: 1,
+              alignSelf: "center",
             }}
           >
             MOVIE
@@ -395,38 +408,71 @@ const Navbar = () => {
         <div className="hidden md:flex items-center gap-1">
           {[
             { label: "Trang chủ", path: "/" },
-            { label: "Yêu thích", path: "/favorites" },
-            { label: "Phim sắp chiếu", path: "/comingsoon" },
-          ].map(({ label, path }, i) => (
-            <motion.button
-              key={label}
-              onClick={() => (path === "/" ? goHome() : navigate(path))}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ ...transitions.TRANSITION_NORMAL, delay: i * 0.07 }}
-              className="relative px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 group"
-              style={{
-                color: scrolled
-                  ? "rgba(255,255,255,0.75)"
-                  : "rgba(255,255,255,0.7)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-              }}
-              whileHover={{ color: "#ffffff" }}
-            >
-              <span
-                className="relative z-10"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
+            { label: "Yêu thích", path: "/favorites", protected: true },
+            { label: "Phim sắp chiếu", path: "/coming-soon" },
+            { label: "Về chúng tôi", path: "/about-us" },
+          ].map(({ label, path, protected: isProtected }, i) => {
+            const isActive =
+              path === "/"
+                ? location.pathname === "/"
+                : location.pathname === path ||
+                  location.pathname.startsWith(path + "/");
+
+            return (
+              <motion.button
+                key={label}
+                onClick={() =>
+                  path === "/"
+                    ? goHome()
+                    : isProtected
+                    ? guardedNav(path)
+                    : navigate(path)
+                }
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  ...transitions.TRANSITION_NORMAL,
+                  delay: i * 0.07,
+                }}
+                className="relative px-3 py-2 text-sm group"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
               >
-                {label}
-              </span>
-              <motion.span
-                className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                style={{ background: "rgba(255,255,255,0.08)" }}
-              />
-            </motion.button>
-          ))}
+                <span
+                  className="relative z-10 transition-colors duration-300"
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontWeight: isActive ? 700 : 600,
+                    letterSpacing: "0.015em",
+                    color: isActive
+                      ? "#ffffff"
+                      : scrolled
+                      ? "rgba(255,255,255,0.6)"
+                      : "rgba(255,255,255,0.55)",
+                  }}
+                >
+                  {label}
+                </span>
+
+                {/* Gạch chân mảnh — cố định khi active, kéo ra mượt khi hover */}
+                <span
+                  className={`absolute left-3 right-3 bottom-[3px] h-[1px] origin-center transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                    isActive
+                      ? "scale-x-100"
+                      : "scale-x-0 group-hover:scale-x-100"
+                  }`}
+                  style={{
+                    background: isActive
+                      ? `linear-gradient(90deg, ${ACCENT}, #ff5a5f)`
+                      : "rgba(255,255,255,0.85)",
+                  }}
+                />
+              </motion.button>
+            );
+          })}
         </div>
 
         {/* ── Right actions ── */}
@@ -1148,6 +1194,7 @@ const Navbar = () => {
                     { label: "Lịch sử xem", path: "/watch-history" },
                   ]
                 : []),
+              { label: "Về chúng tôi", path: "/intro" },
             ].map(({ label, path }) => (
               <button
                 key={label}

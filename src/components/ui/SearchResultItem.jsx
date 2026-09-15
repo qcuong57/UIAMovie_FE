@@ -1,164 +1,373 @@
 // src/components/ui/SearchResultItem.jsx
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Film, User } from "lucide-react";
-import { C, FONT_DISPLAY, FONT_BODY, GENRE_VI, GENRE_COLOR } from "../../context/homeTokens";
+import { Film, User, ArrowUpRight, Star } from "lucide-react";
+import {
+  C,
+  FONT_DISPLAY,
+  FONT_BODY,
+  GENRE_VI,
+  GENRE_COLOR,
+} from "../../context/homeTokens";
 
-/**
- * SearchResultItem — một hàng kết quả tìm kiếm phim trong dropdown.
- *
- * @param {{ id, title, posterUrl, releaseDate, rating, imdbRating, genres }} movie
- * @param {() => void} onClick
- */
+/* =========================================================
+   Shared animation
+========================================================= */
+
+const itemVariants = {
+  hidden: {
+    opacity: 0,
+    y: 8,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.28,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
+const imageVariants = {
+  rest: {
+    scale: 1,
+  },
+  hover: {
+    scale: 1.055,
+    transition: {
+      duration: 0.45,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
+/* =========================================================
+   Small utility
+========================================================= */
+
+const getYear = (date) => {
+  if (!date) return null;
+
+  const year = new Date(date).getFullYear();
+
+  return Number.isFinite(year) ? year : null;
+};
+
+const getGenres = (genres = []) => {
+  if (!Array.isArray(genres)) return [];
+
+  return genres
+    .slice(0, 2)
+    .map((genre) => (typeof genre === "string" ? genre : genre?.name))
+    .filter(Boolean);
+};
+
+/* =========================================================
+   Poster
+========================================================= */
+
+const MoviePoster = ({ movie, hovered, genreColor }) => {
+  return (
+    <motion.div
+      variants={imageVariants}
+      initial="rest"
+      animate={hovered ? "hover" : "rest"}
+      style={{
+        position: "relative",
+        width: 48,
+        height: 68,
+        minWidth: 48,
+        borderRadius: 8,
+        overflow: "hidden",
+        flexShrink: 0,
+        background: C.surfaceHigh,
+        border: `1px solid ${
+          hovered ? `${genreColor}66` : C.border
+        }`,
+        boxShadow: hovered
+          ? `0 8px 24px rgba(0,0,0,0.28)`
+          : "0 3px 12px rgba(0,0,0,0.16)",
+        transition:
+          "border-color 320ms ease, box-shadow 320ms ease",
+      }}
+    >
+      {movie.posterUrl ? (
+        <img
+          src={movie.posterUrl}
+          alt={movie.title || "Movie poster"}
+          loading="lazy"
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Film size={18} strokeWidth={1.4} color={C.textDim} />
+        </div>
+      )}
+
+      {/* Cinematic bottom gradient */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.42) 100%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Tiny genre accent */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          bottom: 0,
+          width: hovered ? "100%" : "0%",
+          height: 2,
+          background: genreColor,
+          transition: "width 360ms cubic-bezier(.22,1,.36,1)",
+        }}
+      />
+    </motion.div>
+  );
+};
+
+/* =========================================================
+   Movie result
+========================================================= */
+
 export const MovieResultItem = ({ movie, onClick }) => {
-  const [hov, setHov] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
-  const year   = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
-  const rating = movie.rating ?? movie.imdbRating;
-  const genres = Array.isArray(movie.genres)
-    ? movie.genres
-        .slice(0, 2)
-        .map((g) => (typeof g === "string" ? g : g?.name))
-        .filter(Boolean)
-    : [];
+  const year = getYear(movie?.releaseDate);
+  const rating = movie?.rating ?? movie?.imdbRating;
+  const genres = getGenres(movie?.genres);
 
   const primaryGenre = genres[0];
-  const genreColor   = primaryGenre ? (GENRE_COLOR[primaryGenre] ?? C.accent) : C.accent;
+
+  const genreColor =
+    (primaryGenre && GENRE_COLOR?.[primaryGenre]) || C.accent;
 
   return (
     <motion.button
+      type="button"
       onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      whileTap={{ scale: 0.98 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      whileTap={{ scale: 0.992 }}
+      variants={itemVariants}
+      initial="hidden"
+      animate="visible"
       style={{
+        position: "relative",
         width: "100%",
         display: "flex",
-        alignItems: "flex-start",
-        gap: 12,
-        padding: "8px 16px",
-        background: hov ? C.surfaceHigh : "transparent",
+        alignItems: "center",
+        gap: 14,
+        padding: "10px 18px",
+        background: hovered
+          ? `linear-gradient(
+              90deg,
+              rgba(255,255,255,0.055),
+              rgba(255,255,255,0.025)
+            )`
+          : "transparent",
         border: "none",
+        borderLeft: `1px solid ${
+          hovered ? `${genreColor}55` : "transparent"
+        }`,
         cursor: "pointer",
         textAlign: "left",
-        transition: "background 0.15s ease",
-        position: "relative",
         boxSizing: "border-box",
         overflow: "hidden",
+        transition:
+          "background 320ms ease, border-color 320ms ease",
       }}
     >
-      {/* Left accent line on hover */}
-      <div style={{
-        position: "absolute",
-        left: 0, top: "50%",
-        transform: "translateY(-50%)",
-        width: 2,
-        height: hov ? "70%" : 0,
-        background: genreColor,
-        borderRadius: 2,
-        transition: "height 0.2s ease",
-        opacity: 0.8,
-      }} />
+      {/* Subtle hover sweep */}
+      <motion.div
+        animate={{
+          opacity: hovered ? 1 : 0,
+          x: hovered ? 0 : -12,
+        }}
+        transition={{
+          duration: 0.3,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 2,
+          background: genreColor,
+          boxShadow: `0 0 14px ${genreColor}44`,
+        }}
+      />
 
-      {/* Poster */}
-      <div style={{
-        width: 38,
-        height: 54,
-        minWidth: 38,
-        minHeight: 54,
-        borderRadius: 6,
-        overflow: "hidden",
-        flexShrink: 0,
-        alignSelf: "flex-start",
-        background: C.surfaceHigh,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        border: `1px solid ${hov ? C.borderMid : C.border}`,
-        transition: "border-color 0.15s",
-        position: "relative",
-      }}>
-        {movie.posterUrl ? (
-          <img
-            src={movie.posterUrl}
-            alt={movie.title}
+      <MoviePoster
+        movie={movie}
+        hovered={hovered}
+        genreColor={genreColor}
+      />
+
+      {/* Information */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          paddingRight: 4,
+        }}
+      >
+        {/* Title */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            minWidth: 0,
+            marginBottom: 7,
+          }}
+        >
+          <p
             style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
+              flex: 1,
+              minWidth: 0,
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontFamily: FONT_DISPLAY,
+              fontSize: 14,
+              fontWeight: 650,
+              lineHeight: 1.25,
+              letterSpacing: "-0.015em",
+              color: hovered
+                ? C.text
+                : "rgba(245,245,245,0.92)",
+              transition: "color 250ms ease",
             }}
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
-          />
-        ) : (
-          <Film size={15} color={C.textDim} />
-        )}
-      </div>
+          >
+            {movie?.title || "Untitled"}
+          </p>
 
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{
-          fontFamily: FONT_DISPLAY,
-          fontSize: 13,
-          color: hov ? C.text : "rgba(240,240,240,0.88)",
-          marginBottom: 4,
-          transition: "color 0.15s",
-          letterSpacing: "-0.01em",
-          lineHeight: 1.35,
-          wordBreak: "break-word",
-        }}>
-          {movie.title}
-        </p>
-
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-          overflow: "hidden",
-          whiteSpace: "nowrap",
-        }}>
-          {year && (
-            <span style={{
-              fontFamily: FONT_BODY,
-              fontSize: 11,
-              color: C.textSub,
+          <motion.div
+            animate={{
+              opacity: hovered ? 1 : 0,
+              x: hovered ? 0 : -4,
+            }}
+            transition={{ duration: 0.22 }}
+            style={{
               flexShrink: 0,
-            }}>
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: C.textDim,
+            }}
+          >
+            <ArrowUpRight size={13} strokeWidth={1.7} />
+          </motion.div>
+        </div>
+
+        {/* Metadata */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            minWidth: 0,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            fontFamily: FONT_BODY,
+          }}
+        >
+          {year && (
+            <span
+              style={{
+                flexShrink: 0,
+                fontSize: 10.5,
+                fontWeight: 500,
+                color: C.textSub,
+              }}
+            >
               {year}
             </span>
           )}
 
-          {rating != null && rating > 0 && (
+          {rating != null && Number(rating) > 0 && (
             <>
-              <span style={{ color: C.textDim, fontSize: 10, flexShrink: 0 }}>•</span>
-              <span style={{
-                fontFamily: FONT_BODY,
-                fontSize: 11,
-                color: C.gold,
-                fontWeight: 700,
-                flexShrink: 0,
-              }}>
-                ★ {Number(rating).toFixed(1)}
+              <span
+                style={{
+                  color: C.textDim,
+                  opacity: 0.55,
+                  fontSize: 9,
+                }}
+              >
+                /
+              </span>
+
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                  flexShrink: 0,
+                  fontSize: 10.5,
+                  fontWeight: 650,
+                  color: C.gold,
+                }}
+              >
+                <Star size={10} fill="currentColor" strokeWidth={0} />
+                {Number(rating).toFixed(1)}
               </span>
             </>
           )}
 
           {genres.length > 0 && (
             <>
-              <span style={{ color: C.textDim, fontSize: 10, flexShrink: 0 }}>•</span>
-              <span style={{
-                fontFamily: FONT_BODY,
-                fontSize: 11,
-                color: C.textSub,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                flexShrink: 1,
-                minWidth: 0,
-              }}>
-                {genres.map((g) => GENRE_VI[g] ?? g).join(" · ")}
+              <span
+                style={{
+                  color: C.textDim,
+                  opacity: 0.45,
+                  fontSize: 9,
+                }}
+              >
+                /
+              </span>
+
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontSize: 10.5,
+                  color: C.textSub,
+                }}
+              >
+                {genres
+                  .map((genre) => GENRE_VI?.[genre] ?? genre)
+                  .join(" · ")}
               </span>
             </>
           )}
@@ -168,145 +377,276 @@ export const MovieResultItem = ({ movie, onClick }) => {
   );
 };
 
-/**
- * ActorResultItem — một hàng kết quả diễn viên trong dropdown.
- *
- * @param {{ id, name, profileUrl, character, birthday, placeOfBirth, knownMovies }} actor
- * @param {() => void} onClick
- */
-export const ActorResultItem = ({ actor, onClick }) => {
-  const [hov, setHov] = useState(false);
+/* =========================================================
+   Actor avatar
+========================================================= */
 
-  // knownMovies có thể là mảng string tên phim hoặc mảng objects
-  const knownTitles = Array.isArray(actor.knownMovies)
+const ActorAvatar = ({ actor, hovered }) => {
+  return (
+    <motion.div
+      animate={{
+        scale: hovered ? 1.035 : 1,
+      }}
+      transition={{
+        duration: 0.35,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      style={{
+        position: "relative",
+        width: 46,
+        height: 46,
+        minWidth: 46,
+        borderRadius: "50%",
+        overflow: "hidden",
+        flexShrink: 0,
+        background: C.surfaceHigh,
+        border: `1px solid ${
+          hovered ? `${C.accent}66` : C.border
+        }`,
+        boxShadow: hovered
+          ? "0 7px 20px rgba(0,0,0,0.24)"
+          : "0 2px 10px rgba(0,0,0,0.12)",
+        transition:
+          "border-color 300ms ease, box-shadow 300ms ease",
+      }}
+    >
+      {actor?.profileUrl ? (
+        <img
+          src={actor.profileUrl}
+          alt={actor.name || "Actor"}
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <User
+            size={18}
+            strokeWidth={1.35}
+            color={C.textDim}
+          />
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+/* =========================================================
+   Actor result
+========================================================= */
+
+export const ActorResultItem = ({ actor, onClick }) => {
+  const [hovered, setHovered] = useState(false);
+
+  const knownTitles = Array.isArray(actor?.knownMovies)
     ? actor.knownMovies
         .slice(0, 2)
-        .map((m) => (typeof m === "string" ? m : m?.title))
+        .map((movie) =>
+          typeof movie === "string" ? movie : movie?.title
+        )
         .filter(Boolean)
     : [];
 
   return (
     <motion.button
+      type="button"
       onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      whileTap={{ scale: 0.98 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      whileTap={{ scale: 0.992 }}
+      variants={itemVariants}
+      initial="hidden"
+      animate="visible"
       style={{
+        position: "relative",
         width: "100%",
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "8px 16px",
-        background: hov ? C.surfaceHigh : "transparent",
+        gap: 14,
+        padding: "10px 18px",
+        background: hovered
+          ? `linear-gradient(
+              90deg,
+              rgba(255,255,255,0.055),
+              rgba(255,255,255,0.025)
+            )`
+          : "transparent",
         border: "none",
+        borderLeft: `1px solid ${
+          hovered ? `${C.accent}55` : "transparent"
+        }`,
         cursor: "pointer",
         textAlign: "left",
-        transition: "background 0.15s ease",
-        position: "relative",
+        boxSizing: "border-box",
+        overflow: "hidden",
+        transition:
+          "background 320ms ease, border-color 320ms ease",
       }}
     >
-      {/* Left accent — red accent matching homeTokens */}
-      <div style={{
-        position: "absolute",
-        left: 0, top: "50%",
-        transform: "translateY(-50%)",
-        width: 2,
-        height: hov ? "70%" : 0,
-        background: C.accent,
-        borderRadius: 2,
-        transition: "height 0.2s ease",
-        opacity: 0.8,
-      }} />
+      {/* Accent */}
+      <motion.div
+        animate={{
+          opacity: hovered ? 1 : 0,
+          x: hovered ? 0 : -12,
+        }}
+        transition={{
+          duration: 0.3,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 2,
+          background: C.accent,
+          boxShadow: `0 0 14px ${C.accent}44`,
+        }}
+      />
 
-      {/* Avatar circle */}
-      <div style={{
-        width: 38,
-        height: 38,
-        borderRadius: "50%",
-        overflow: "hidden",
-        flexShrink: 0,
-        background: C.surfaceHigh,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        border: `1px solid ${hov ? C.borderMid : C.border}`,
-        transition: "border-color 0.15s",
-      }}>
-        {actor.profileUrl ? (
-          <img
-            src={actor.profileUrl}
-            alt={actor.name}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={(e) => { e.target.style.display = "none"; }}
-          />
-        ) : (
-          <User size={15} color={C.textDim} />
-        )}
-      </div>
+      <ActorAvatar actor={actor} hovered={hovered} />
 
       {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-          <p style={{
-            fontFamily: FONT_DISPLAY,
-            fontSize: 13,
-            fontWeight: 700,
-            color: hov ? C.text : "rgba(240,240,240,0.88)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            transition: "color 0.15s",
-            letterSpacing: "-0.01em",
-          }}>
-            {actor.name}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 0,
+            marginBottom: 5,
+          }}
+        >
+          <p
+            style={{
+              minWidth: 0,
+              flex: 1,
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontFamily: FONT_DISPLAY,
+              fontSize: 14,
+              fontWeight: 650,
+              lineHeight: 1.25,
+              letterSpacing: "-0.015em",
+              color: hovered
+                ? C.text
+                : "rgba(245,245,245,0.92)",
+              transition: "color 250ms ease",
+            }}
+          >
+            {actor?.name || "Unknown actor"}
           </p>
-          {/* Actor badge — red accent */}
-          <span style={{
-            fontFamily: FONT_BODY,
-            fontSize: 9,
-            fontWeight: 700,
-            color: C.accent,
-            background: C.accentSoft,
-            padding: "1px 5px",
-            borderRadius: 3,
-            flexShrink: 0,
-            letterSpacing: "0.04em",
-          }}>
+
+          <span
+            style={{
+              flexShrink: 0,
+              padding: "3px 6px",
+              borderRadius: 4,
+              fontFamily: FONT_BODY,
+              fontSize: 8.5,
+              lineHeight: 1,
+              fontWeight: 750,
+              letterSpacing: "0.075em",
+              color: C.accent,
+              background: C.accentSoft,
+              border: `1px solid ${C.accent}18`,
+            }}
+          >
             DIỄN VIÊN
           </span>
         </div>
 
-        {knownTitles.length > 0 && (
-          <p style={{
-            fontFamily: FONT_BODY,
-            fontSize: 11,
-            color: C.textSub,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+        {knownTitles.length > 0 ? (
+          <p
+            style={{
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontFamily: FONT_BODY,
+              fontSize: 10.5,
+              lineHeight: 1.35,
+              color: C.textSub,
+            }}
+          >
             {knownTitles.join(" · ")}
           </p>
-        )}
-
-        {knownTitles.length === 0 && actor.character && (
-          <p style={{
-            fontFamily: FONT_BODY,
-            fontSize: 11,
-            color: C.textSub,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+        ) : actor?.character ? (
+          <p
+            style={{
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontFamily: FONT_BODY,
+              fontSize: 10.5,
+              lineHeight: 1.35,
+              color: C.textSub,
+            }}
+          >
             vai {actor.character}
+          </p>
+        ) : (
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT_BODY,
+              fontSize: 10.5,
+              color: C.textDim,
+            }}
+          >
+            Khám phá hồ sơ diễn viên
           </p>
         )}
       </div>
+
+      {/* Arrow */}
+      <motion.div
+        animate={{
+          opacity: hovered ? 1 : 0.25,
+          x: hovered ? 0 : -3,
+        }}
+        transition={{ duration: 0.22 }}
+        style={{
+          flexShrink: 0,
+          display: "flex",
+          color: C.textDim,
+        }}
+      >
+        <ArrowUpRight size={14} strokeWidth={1.6} />
+      </motion.div>
     </motion.button>
   );
 };
 
-// Default export giữ nguyên tương thích cũ (chỉ movie)
+/* =========================================================
+   Default export
+========================================================= */
+
 const SearchResultItem = ({ movie, onClick }) => (
   <MovieResultItem movie={movie} onClick={onClick} />
 );

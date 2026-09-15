@@ -1,666 +1,922 @@
 // src/components/home/RecommendSection.jsx
-// ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
-  Sparkles, TrendingUp, CalendarDays, Star,
-  Play, Plus, ChevronDown, Heart, Loader,
-  ChevronLeft, ChevronRight, Crown,
+  Sparkles,
+  Star,
+  Play,
+  Plus,
+  Heart,
+  Crown,
+  Loader,
+  Info,
+  Flame,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
+import { useToast } from "../common/Toast";
 import movieService from "../../services/movieService";
-import MovieCardHorizontal from "../movie/tvshow/MovieCardHorizontal";
+import tvShowService from "../../services/tvShowService";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
 
-// ── Premium helpers ──────────────────────────────────────────────
+// ── Auth & Premium Helpers ─────────────────────────────────────────
 function getCurrentUser() {
-  try { return JSON.parse(localStorage.getItem("currentUser") || "null"); }
-  catch { return null; }
+  try {
+    const raw = localStorage.getItem("currentUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
+
 function userHasPremium(user) {
   if (!user) return false;
-  return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
+  return (
+    user.isPremium === true ||
+    user.plan === "premium" ||
+    user.subscription?.active === true
+  );
 }
 
-// ── Constants ─────────────────────────────────────────────────────
-const AUTO_PLAY_INTERVAL = 5000;
-const GAP_DESKTOP = 4;
-const GRID_COLS = 3;
-const GRID_ROWS = 3;
-const GRID_TOTAL = GRID_COLS * GRID_ROWS; // 9
-
-const ACCENT      = C.accent;
-const ACCENT_GLOW = C.accentGlow;
-const GOLD        = C.gold;
-const GREEN       = C.green;
-
-const AI_ACCENT        = "#a78bfa";
-const AI_ACCENT_SOFT   = "rgba(167,139,250,0.12)";
-const AI_ACCENT_BORDER = "rgba(167,139,250,0.35)";
-
-const T_FAST   = { duration: 0.25, ease: "easeOut" };
-const T_NORMAL = { duration: 0.5, ease: [0.4, 0, 0.2, 1] };
-const T_SPRING = { type: "spring", stiffness: 280, damping: 26 };
-
-// ── Route helper ──────────────────────────────────────────────────
-const getRoute     = (item) => item?.isTvShow ? `/tvshow/${item.id}`      : `/movie/${item.id}`;
-const getInfoRoute = (item) => item?.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
-
-// ── Badge ──────────────────────────────────────────────────────────
-const getBadgeInfo = (subtitle = "") => {
-  const s = subtitle.toLowerCase();
-  if (s.includes("lịch sử") || s.includes("history"))
-    return { icon: TrendingUp, text: "Dựa trên sở thích" };
-  if (s.includes("ai") || s.includes("gợi ý ai"))
-    return { icon: Sparkles, text: "AI gợi ý" };
-  if (s.includes("mới") || s.includes("release"))
-    return { icon: CalendarDays, text: "Mới nhất" };
-  return { icon: Star, text: "Đánh giá cao" };
-};
-
-// ── Favorite logic ─────────────────────────────────────────────────
-function useFavorite(itemId, isFavorited, onFavoriteToggle, itemObj) {
-  const [favLoading, setFavLoading] = useState(false);
-  const [localFav, setLocalFav] = useState(isFavorited);
-  useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
-
-  const handleFavoriteClick = async (e) => {
-    e.stopPropagation();
-    if (favLoading) return;
-    // TV show: chỉ toggle local, chưa có favorite API
-    if (itemObj?.isTvShow) {
-      setLocalFav(v => !v);
-      onFavoriteToggle?.(itemObj, !localFav);
-      return;
-    }
-    setFavLoading(true);
-    try {
-      if (localFav) {
-        await movieService.removeFavorite(itemId);
-        setLocalFav(false);
-        onFavoriteToggle?.(itemObj, false);
-      } else {
-        await movieService.addFavorite(itemId);
-        setLocalFav(true);
-        onFavoriteToggle?.(itemObj, true);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setFavLoading(false);
-    }
-  };
-  return { localFav, favLoading, handleFavoriteClick };
+function isUnauthorizedError(err) {
+  const status = err?.response?.status ?? err?.status;
+  return status === 401 || status === 403;
 }
 
-// ── ProgressDot ────────────────────────────────────────────────────
-const ProgressDot = ({ isActive, onClick }) => (
-  <button
-    onClick={onClick}
-    style={{
-      position: "relative", overflow: "hidden", borderRadius: 999,
-      border: "none", padding: 0, cursor: "pointer",
-      width: isActive ? 24 : 6, height: 6,
-      background: isActive ? AI_ACCENT : C.borderBright,
-      transition: "width 0.3s ease, background 0.3s ease",
-      flexShrink: 0,
-    }}
-  >
-    {isActive && (
-      <motion.div
-        key="progress"
-        style={{
-          position: "absolute", inset: 0, borderRadius: 999,
-          background: "rgba(255,255,255,0.4)", originX: 0,
-        }}
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ duration: AUTO_PLAY_INTERVAL / 1000, ease: "linear" }}
-      />
-    )}
-  </button>
-);
-
-// ── FeaturedCard ───────────────────────────────────────────────────
-const FeaturedCard = ({ movie: item, isFavorited, onFavoriteToggle, direction }) => {
-  const navigate = useNavigate();
-  const [isHovered, setIsHovered] = useState(false);
-  const [showGate, setShowGate] = useState(false);
-  const { localFav, favLoading, handleFavoriteClick } = useFavorite(
-    item?.id, isFavorited, onFavoriteToggle, item,
-  );
-  if (!item) return null;
-  const matchPct = item.rating ? Math.round(item.rating * 10) : null;
-  const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
-
-  const slideVariants = {
-    enter:  (dir) => ({ opacity: 0, x: dir > 0 ? 32 : -32, scale: 1.03 }),
-    center: { opacity: 1, x: 0, scale: 1 },
-    exit:   (dir) => ({ opacity: 0, x: dir > 0 ? -32 : 32, scale: 0.98 }),
-  };
-
+function getErrorMessage(err, fallback) {
   return (
-    <motion.div
-      key={item.id}
-      custom={direction}
-      variants={slideVariants}
-      initial="enter" animate="center" exit="exit"
-      transition={T_NORMAL}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      style={{
-        position: "relative", borderRadius: 14, overflow: "hidden",
-        cursor: "default", background: C.surfaceMid, width: "100%",
-        border: `1px solid ${C.border}`, boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
-      }}
-    >
-      {/* Image */}
-      <motion.div animate={{ scale: isHovered ? 1.04 : 1 }} transition={T_NORMAL} style={{ width: "100%", lineHeight: 0 }}>
-        <img
-          src={item.posterUrl || item.backdropUrl}
-          alt={item.title}
-          draggable={false} loading="lazy"
-          style={{ width: "100%", height: "auto", display: "block", opacity: isHovered ? 0.5 : 0.88, transition: "opacity 0.3s" }}
-        />
-      </motion.div>
-
-      {/* Rating */}
-      {item.rating > 0 && (
-        <div style={{
-          position: "absolute", top: 12, right: 12,
-          display: "flex", alignItems: "center", gap: 3,
-          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)",
-          border: `1px solid rgba(245,197,24,0.35)`, borderRadius: 999, padding: "3px 8px",
-        }}>
-          <Star size={10} fill={GOLD} color={GOLD} />
-          <span style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: GOLD }}>
-            {Number(item.rating).toFixed(1)}
-          </span>
-        </div>
-      )}
-
-      {/* TV badge */}
-      {item.isTvShow && (
-        <div style={{
-          position: "absolute", top: 12, left: 12,
-          display: "flex", alignItems: "center", gap: 3,
-          background: "rgba(99,102,241,0.85)", backdropFilter: "blur(4px)",
-          borderRadius: 99, padding: "2px 8px",
-        }}>
-          <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 700, color: "white", letterSpacing: "0.04em" }}>
-            TV SHOW
-          </span>
-        </div>
-      )}
-
-      {/* Premium badge */}
-      {item.isPremium && (
-        <div style={{
-          position: "absolute", top: item.isTvShow ? 40 : 12, left: 12,
-          display: "flex", alignItems: "center", gap: 3,
-          background: "linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))",
-          backdropFilter: "blur(6px)", borderRadius: 99, padding: "2px 8px",
-        }}>
-          <Crown size={9} fill="#1c1400" color="#1c1400" />
-          <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, color: "#1c1400", letterSpacing: "0.04em" }}>
-            PREMIUM
-          </span>
-        </div>
-      )}
-
-      {/* Bottom overlay */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.5) 35%, rgba(0,0,0,0.08) 65%, transparent 100%)",
-        display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "16px 14px",
-      }}>
-        <h3 style={{
-          fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 800, color: C.text,
-          margin: "0 0 4px", lineHeight: 1.25, textShadow: "0 2px 10px rgba(0,0,0,0.9)",
-        }}>
-          {item.title}
-        </h3>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          {item.year && (
-            <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: C.textSub }}>
-              {item.year}
-            </span>
-          )}
-          {matchPct && (
-            <span style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: GREEN }}>
-              {matchPct}% Match
-            </span>
-          )}
-          {(item.genres?.[0] || item.genre) && (
-            <span style={{
-              fontFamily: FONT_BODY, fontSize: 10, color: C.textSub,
-              border: `1px solid ${C.borderMid}`, borderRadius: 4, padding: "1px 6px",
-            }}>
-              {item.genres?.[0] ?? (Array.isArray(item.genre) ? item.genre[0] : item.genre)}
-            </span>
-          )}
-        </div>
-
-        {/* Hover buttons */}
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }} transition={T_FAST}
-              style={{ display: "flex", alignItems: "center", gap: 7 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isPremiumLocked) { setShowGate(true); return; }
-                  navigate(getRoute(item));
-                }}
-                style={{
-                  height: 34, padding: "0 16px", borderRadius: 999, border: "none",
-                  background: isPremiumLocked ? "rgba(250,204,21,0.9)" : "#fff",
-                  display: "flex", alignItems: "center", gap: 6,
-                  cursor: "pointer", fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700,
-                  color: isPremiumLocked ? "#1c1400" : "#000",
-                }}
-              >
-                {isPremiumLocked
-                  ? <><Crown size={12} fill="#1c1400" color="#1c1400" /> Premium</>
-                  : <><Play size={12} fill="#000" color="#000" style={{ marginLeft: 1 }} /> Xem ngay</>
-                }
-              </button>
-              <button
-                onClick={handleFavoriteClick} disabled={favLoading}
-                style={{
-                  width: 34, height: 34, borderRadius: "50%",
-                  background: localFav ? ACCENT : "transparent",
-                  border: `1.5px solid ${localFav ? ACCENT : "rgba(255,255,255,0.45)"}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: favLoading ? "not-allowed" : "pointer", flexShrink: 0, opacity: favLoading ? 0.7 : 1,
-                }}
-              >
-                {favLoading
-                  ? <Loader size={13} color="white" style={{ animation: "spin 0.7s linear infinite" }} />
-                  : localFav
-                    ? <Heart size={13} fill="white" color="white" />
-                    : <Plus size={14} color="white" strokeWidth={2.5} />}
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); navigate(getInfoRoute(item)); }}
-                style={{
-                  width: 34, height: 34, borderRadius: "50%", background: "transparent",
-                  border: `1.5px solid rgba(255,255,255,0.45)`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", flexShrink: 0, marginLeft: "auto",
-                }}
-              >
-                <ChevronDown size={14} color="white" strokeWidth={2.5} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      {/* Premium Gate Modal */}
-      <PremiumGateModal
-        open={showGate}
-        onClose={() => setShowGate(false)}
-        movieTitle={item.title}
-      />
-    </motion.div>
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.data?.message ||
+    (typeof err?.message === "string" && err.message) ||
+    fallback
   );
-};
+}
 
-// ── SmallCard ──────────────────────────────────────────────────────
-const SmallCard = ({ movie: item, onClick, isFavorited, onFavoriteToggle, isActive = false }) => {
-  const navigate = useNavigate();
-  const [isHovered, setIsHovered] = useState(false);
-  const [showGate, setShowGate] = useState(false);
-  const { localFav, favLoading, handleFavoriteClick } = useFavorite(
-    item?.id, isFavorited, onFavoriteToggle, item,
-  );
-  if (!item) return null;
+function ModalPortal({ children }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
-  const matchPct = item.rating ? Math.round(item.rating * 10) : null;
-  const showHoverState = isHovered || isActive;
-  const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
+const getPlayerRoute = (item) => (item?.isTvShow ? `/tvshow/${item.id}` : `/movie/${item.id}`);
+const getInfoRoute   = (item) => (item?.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`);
 
-  return (
-    <motion.div
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      onClick={onClick}
-      animate={
-        showHoverState
-          ? { scale: 1.04, boxShadow: `0 16px 40px -8px rgba(0,0,0,0.9)` }
-          : { scale: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }
-      }
-      transition={T_SPRING}
-      style={{
-        position: "relative", borderRadius: 8, overflow: "hidden",
-        width: "100%", background: C.surfaceMid, border: `1px solid ${C.border}`,
-        cursor: "pointer", zIndex: showHoverState ? 10 : 1,
-      }}
-    >
-      <motion.img
-        src={item.backdropUrl || item.posterUrl}
-        alt={item.title}
-        draggable={false} loading="lazy"
-        animate={{ scale: showHoverState ? 1.05 : 1 }}
-        transition={T_NORMAL}
-        style={{ width: "100%", height: "auto", display: "block", opacity: showHoverState ? 0.5 : 0.85 }}
-      />
+const ACCENT_COLOR = "#a78bfa";
 
-      {/* Vignette */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 55%)",
-        pointerEvents: "none",
-      }} />
-
-      {/* TV badge — góc trên trái */}
-      {item.isTvShow && !showHoverState && (
-        <div style={{
-          position: "absolute", top: 6, left: 6,
-          background: "rgba(99,102,241,0.85)", borderRadius: 99, padding: "1px 6px",
-        }}>
-          <span style={{ fontFamily: FONT_BODY, fontSize: 8, fontWeight: 700, color: "white" }}>TV</span>
-        </div>
-      )}
-
-      {/* Rating */}
-      <AnimatePresence>
-        {!showHoverState && item.rating > 0 && (
-          <motion.div
-            initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
-            style={{
-              position: "absolute", top: 8, right: 8,
-              display: "flex", alignItems: "center", gap: 3,
-              background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
-              border: `1px solid rgba(245,197,24,0.3)`, borderRadius: 999, padding: "2px 7px",
-            }}
-          >
-            <Star size={9} fill={GOLD} color={GOLD} />
-            <span style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700, color: GOLD }}>
-              {Number(item.rating).toFixed(1)}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Hover overlay */}
-      <AnimatePresence>
-        {showHoverState && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{
-              position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end",
-              background: "linear-gradient(to top, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.78) 30%, rgba(0,0,0,0.18) 60%, transparent 100%)",
-            }}
-          >
-            <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }} onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isPremiumLocked) { setShowGate(true); return; }
-                    navigate(getRoute(item));
-                  }}
-                  style={{
-                    width: 26, height: 26, borderRadius: "50%", border: "none",
-                    background: isPremiumLocked ? "rgba(250,204,21,0.9)" : "#fff",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.12)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                  title={isPremiumLocked ? "Nội dung Premium" : "Phát"}
-                >
-                  {isPremiumLocked
-                    ? <Crown size={10} fill="#1c1400" color="#1c1400" />
-                    : <Play size={10} fill="#000" color="#000" style={{ marginLeft: 1 }} />
-                  }
-                </button>
-                <button
-                  onClick={handleFavoriteClick} disabled={favLoading}
-                  style={{
-                    width: 26, height: 26, borderRadius: "50%",
-                    background: localFav ? ACCENT : "transparent",
-                    border: `1.5px solid ${localFav ? ACCENT : "rgba(255,255,255,0.4)"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: favLoading ? "not-allowed" : "pointer", flexShrink: 0, opacity: favLoading ? 0.7 : 1,
-                  }}
-                  onMouseEnter={(e) => { if (!favLoading) e.currentTarget.style.transform = "scale(1.12)"; }}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                >
-                  {favLoading
-                    ? <Loader size={11} color="white" style={{ animation: "spin 0.7s linear infinite" }} />
-                    : localFav ? <Heart size={11} fill="white" color="white" /> : <Plus size={12} color="white" strokeWidth={2.5} />}
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigate(getInfoRoute(item)); }}
-                  style={{
-                    width: 26, height: 26, borderRadius: "50%", background: "transparent",
-                    border: `1.5px solid rgba(255,255,255,0.4)`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", flexShrink: 0, marginLeft: "auto",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.12)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                >
-                  <ChevronDown size={12} color="white" strokeWidth={2.5} />
-                </button>
-              </div>
-
-              <p style={{
-                fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: C.text,
-                margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                {item.title}
-              </p>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                {matchPct && (
-                  <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 700, color: GREEN }}>
-                    {matchPct}% Match
-                  </span>
-                )}
-                {item.year && (
-                  <span style={{
-                    fontFamily: FONT_BODY, fontSize: 9, color: C.textSub,
-                    border: `1px solid ${C.borderMid}`, borderRadius: 3, padding: "1px 4px",
-                  }}>
-                    {item.year}
-                  </span>
-                )}
-                {item.isTvShow && (
-                  <span style={{
-                    fontFamily: FONT_BODY, fontSize: 9, color: "#818cf8",
-                    border: "1px solid rgba(129,140,248,0.35)", borderRadius: 3, padding: "1px 4px",
-                  }}>
-                    TV
-                  </span>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Premium Gate Modal */}
-      <PremiumGateModal
-        open={showGate}
-        onClose={() => setShowGate(false)}
-        movieTitle={item.title}
-      />
-    </motion.div>
-  );
-};
-
-// ── Main ───────────────────────────────────────────────────────────
 export default function RecommendSection({
-  movies = [],        // backward-compat
-  tvShows = [],       // ← prop mới
-  items,              // ← mixed array (ưu tiên)
+  movies = [],
+  tvShows = [],
+  items,
   subtitle = "",
   onFavoriteToggle,
   isFavorited,
   favoritedIds = [],
 }) {
-  const checkFav = typeof isFavorited === "function"
-    ? isFavorited
-    : (id) => favoritedIds?.includes(id) ?? false;
-
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const badge = getBadgeInfo(subtitle);
-  const BadgeIcon = badge.icon;
+  const toast = useToast();
 
-  // Merge items
-  const allItems = items ?? [...movies, ...tvShows];
+  // Chuẩn 10 phim (2 lượt carousel, mỗi lượt đúng 5 phim)
+  const list = useMemo(() => {
+    const raw = items ?? [...movies, ...tvShows];
+    return (raw || []).filter(Boolean).slice(0, 10);
+  }, [items, movies, tvShows]);
 
-  const gridItems = useMemo(() => allItems.slice(0, GRID_TOTAL), [allItems]);
-  const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [carouselPage, setCarouselPage] = useState(0); // 0 (phim 1-5) hoặc 1 (phim 6-10)
+  const [showGate, setShowGate] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
+  const [gateTitle, setGateTitle] = useState("");
 
-  // Auto-play
-  useEffect(() => {
-    if (gridItems.length <= 1 || isMobile) return;
-    const timer = setInterval(() => {
-      setDirection(1);
-      setFeaturedIndex((prev) => (prev + 1) % gridItems.length);
-    }, AUTO_PLAY_INTERVAL);
-    return () => clearInterval(timer);
-  }, [gridItems.length, isMobile]);
+  const activeItem = list[activeIndex] || list[0] || null;
 
-  const goTo = useCallback((idx) => {
-    setDirection(idx > featuredIndex ? 1 : -1);
-    setFeaturedIndex(idx);
-  }, [featuredIndex]);
+  const checkFav = useCallback(
+    (id) => {
+      if (typeof isFavorited === "function") return isFavorited(id);
+      return favoritedIds?.includes(id) ?? false;
+    },
+    [isFavorited, favoritedIds]
+  );
 
-  const goPrev = useCallback(() => {
-    setDirection(-1);
-    setFeaturedIndex((p) => (p - 1 + gridItems.length) % gridItems.length);
-  }, [gridItems.length]);
+  const handleTogglePage = () => {
+    setCarouselPage((prev) => (prev === 0 ? 1 : 0));
+  };
 
-  const goNext = useCallback(() => {
-    setDirection(1);
-    setFeaturedIndex((p) => (p + 1) % gridItems.length);
-  }, [gridItems.length]);
+  const handleFavoriteClick = async (e, item) => {
+    e.stopPropagation();
+    if (!item || favLoading) return;
 
-  const featuredItem = gridItems[featuredIndex] ?? null;
+    if (!getCurrentUser()) {
+      toast.warning("Bạn cần đăng nhập để thêm vào Yêu thích");
+      return;
+    }
 
-  if (!allItems.length) return null;
+    setFavLoading(true);
+    const isFav = checkFav(item.id);
+    const svc = item.isTvShow ? tvShowService : movieService;
+
+    try {
+      if (isFav) {
+        await svc.removeFavorite(item.id);
+        onFavoriteToggle?.(item, false);
+        toast.info(`Đã bỏ "${item.title}" khỏi Yêu thích`);
+      } else {
+        await svc.addFavorite(item.id);
+        onFavoriteToggle?.(item, true);
+        toast.success(`Đã thêm "${item.title}" vào Yêu thích`);
+      }
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        toast.warning("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại");
+      } else {
+        toast.error(getErrorMessage(err, "Không thể cập nhật danh sách yêu thích"));
+      }
+    } finally {
+      setFavLoading(false);
+    }
+  };
+
+  const handlePlay = (e, item) => {
+    e.stopPropagation();
+    if (!item) return;
+    const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
+    if (isLocked) {
+      setGateTitle(item.title);
+      setShowGate(true);
+      return;
+    }
+    navigate(getPlayerRoute(item));
+  };
+
+  if (!list.length || !activeItem) return null;
+
+  const isCurrentFav = checkFav(activeItem.id);
+  const isCurrentPremium = activeItem.isPremium && !userHasPremium(getCurrentUser());
+  const matchPct = activeItem.rating ? Math.round(activeItem.rating * 10) : 96;
+  const displayGenre =
+    activeItem.genres?.[0] ||
+    (Array.isArray(activeItem.genre) ? activeItem.genre[0] : activeItem.genre);
+
+  // 5 phim tương ứng cho carousel hiện tại
+  const currentFiveMovies = list.slice(carouselPage * 5, carouselPage * 5 + 5);
 
   return (
-    <section style={{ marginBottom: 44 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h2 style={{
-            fontFamily: FONT_DISPLAY, fontSize: isMobile ? 15 : 20, fontWeight: 700, color: C.text,
-            letterSpacing: "-0.01em", lineHeight: 1,
-            borderLeft: `2.5px solid ${AI_ACCENT}`, paddingLeft: 11, margin: 0,
-          }}>
-            Dành Cho Bạn
+    <section
+      style={{
+        marginBottom: 56,
+        position: "relative",
+      }}
+    >
+      {/* ── Tiêu đề Section (Không viền) ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 20,
+          padding: "0 4px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              background: "rgba(167, 139, 250, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Sparkles size={15} color={ACCENT_COLOR} />
+          </div>
+          <h2
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: isMobile ? 18 : 22,
+              fontWeight: 800,
+              color: C.text,
+              lineHeight: 1.2,
+              margin: 0,
+            }}
+          >
+            Gợi Ý Dành Riêng Cho Bạn
           </h2>
-          {!isMobile && (
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              background: AI_ACCENT_SOFT, border: `1px solid ${AI_ACCENT_BORDER}`,
-              borderRadius: 999, padding: "3px 10px",
-            }}>
-              <BadgeIcon size={10} color={AI_ACCENT} strokeWidth={2.5} />
-              <span style={{
-                fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700,
-                color: AI_ACCENT, letterSpacing: "0.06em", textTransform: "uppercase",
-              }}>
-                {badge.text}
-              </span>
-            </div>
-          )}
         </div>
+
+        <span
+          style={{
+            fontFamily: FONT_BODY,
+            fontSize: 12,
+            color: "rgba(255,255,255,0.45)",
+            fontWeight: 600,
+          }}
+        >
+          {subtitle || "Dựa trên sở thích xem phim của bạn"}
+        </span>
       </div>
 
-      {/* Desktop */}
+      {/* ── SHOWCASE STUDIO LAYOUT (KHÔNG DÙNG VIỀN) ── */}
       {!isMobile ? (
-        <div style={{ display: "flex", gap: GAP_DESKTOP, alignItems: "flex-start" }}>
-          {/* Left: Featured ~28% */}
-          <div style={{ flex: "0 0 calc(28% - 2px)" }}>
-            <AnimatePresence mode="wait" custom={direction}>
-              {featuredItem && (
-                <FeaturedCard
-                  key={featuredItem.id}
-                  movie={featuredItem}
-                  direction={direction}
-                  isFavorited={checkFav(featuredItem.id)}
-                  onFavoriteToggle={onFavoriteToggle}
-                />
-              )}
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            borderRadius: 24,
+            background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
+            backdropFilter: "blur(24px)",
+            boxShadow: "0 24px 60px -10px rgba(0,0,0,0.75)",
+            padding: "36px 36px 30px 36px",
+            display: "grid",
+            gridTemplateColumns: "300px 1fr",
+            gap: 40,
+            alignItems: "stretch",
+            overflow: "hidden",
+          }}
+        >
+          {/* Ambient Glow nhẹ phía sau */}
+          <div
+            style={{
+              position: "absolute",
+              top: "-20%",
+              left: "-10%",
+              width: "45%",
+              height: "140%",
+              background: `radial-gradient(circle, ${ACCENT_COLOR}16 0%, transparent 65%)`,
+              filter: "blur(60px)",
+              pointerEvents: "none",
+            }}
+          />
+
+          {/* 1. CỘT TRÁI: Poster Phim Đứng (2:3) */}
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              aspectRatio: "2 / 3",
+              borderRadius: 20,
+              overflow: "hidden",
+              boxShadow: "0 20px 45px rgba(0,0,0,0.9)",
+              cursor: "pointer",
+            }}
+            onClick={() => navigate(getInfoRoute(activeItem))}
+          >
+            <AnimatePresence mode="wait">
+              <motion.img
+                key={`poster-${activeItem.id}`}
+                src={activeItem.posterUrl || activeItem.backdropUrl}
+                alt={activeItem.title}
+                initial={{ opacity: 0, scale: 1.05 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35 }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
             </AnimatePresence>
 
-            {gridItems.length > 1 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  {gridItems.map((_, i) => (
-                    <ProgressDot key={i} isActive={i === featuredIndex} onClick={() => goTo(i)} />
-                  ))}
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                left: 12,
+                right: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: FONT_BODY,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: "#fff",
+                  background: "rgba(0,0,0,0.7)",
+                  backdropFilter: "blur(8px)",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                }}
+              >
+                {activeItem.isTvShow ? "SERIES" : "MOVIE"}
+              </span>
+
+              {activeItem.isPremium && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    background: "linear-gradient(135deg, #facc15, #f59e0b)",
+                  }}
+                >
+                  <Crown size={10} fill="#1c1400" color="#1c1400" />
+                  <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 900, color: "#1c1400" }}>
+                    PREMIUM
+                  </span>
                 </div>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[{ fn: goPrev, Icon: ChevronLeft }, { fn: goNext, Icon: ChevronRight }].map(({ fn, Icon }, i) => (
-                    <button
-                      key={i} onClick={fn}
-                      style={{
-                        width: 24, height: 24, borderRadius: "50%",
-                        background: "rgba(0,0,0,0.6)", border: `1px solid ${C.borderMid}`,
-                        backdropFilter: "blur(6px)", color: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", transition: "transform 0.15s, background 0.15s",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.12)"; e.currentTarget.style.background = `rgba(167,139,250,0.3)`; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.background = "rgba(0,0,0,0.6)"; }}
-                    >
-                      <Icon size={13} strokeWidth={2.5} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Right: 3×3 grid ~72% */}
-          <div style={{
-            flex: "1 1 0", display: "grid",
-            gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-            gridTemplateRows: "auto", gap: GAP_DESKTOP, alignContent: "start",
-          }}>
-            {gridItems.map((item, idx) => (
-              <SmallCard
-                key={item ? `${item.isTvShow ? "tv" : "mv"}-${item.id}-${idx}` : `empty-${idx}`}
-                movie={item}
-                onClick={() => item && goTo(idx)}
-                isActive={idx === featuredIndex}
-                isFavorited={item ? checkFav(item.id) : false}
-                onFavoriteToggle={onFavoriteToggle}
-              />
-            ))}
+          {/* 2. CỘT PHẢI: Khối Thông Tin + Carousel 5 Phim (2 Lần Scroll) */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minWidth: 0,
+            }}
+          >
+            {/* Cụm thông tin chi tiết */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`info-${activeItem.id}`}
+                initial={{ opacity: 0, x: 14 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -14 }}
+                transition={{ duration: 0.28 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      background: "rgba(70, 211, 105, 0.14)",
+                    }}
+                  >
+                    <Flame size={12} color={C.green} />
+                    <span style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 800, color: C.green }}>
+                      {matchPct}% Phù hợp với gu của bạn
+                    </span>
+                  </div>
+
+                  <span
+                    style={{
+                      fontFamily: FONT_BODY,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: ACCENT_COLOR,
+                      background: "rgba(167, 139, 250, 0.12)",
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    Đề xuất hàng đầu hôm nay
+                  </span>
+                </div>
+
+                <h3
+                  style={{
+                    fontFamily: FONT_DISPLAY,
+                    fontSize: 32,
+                    fontWeight: 900,
+                    color: "#ffffff",
+                    lineHeight: 1.15,
+                    margin: "0 0 10px 0",
+                  }}
+                >
+                  {activeItem.title}
+                </h3>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  {activeItem.rating > 0 && (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        background: "rgba(245, 197, 24, 0.15)",
+                      }}
+                    >
+                      <Star size={12} fill={C.gold} color={C.gold} />
+                      <span style={{ fontFamily: FONT_BODY, fontSize: 11.5, fontWeight: 800, color: C.gold }}>
+                        {Number(activeItem.rating).toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+
+                  {activeItem.year && (
+                    <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+                      {activeItem.year}
+                    </span>
+                  )}
+
+                  {displayGenre && (
+                    <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+                      • {displayGenre}
+                    </span>
+                  )}
+                </div>
+
+                <p
+                  style={{
+                    fontFamily: FONT_BODY,
+                    fontSize: 13.5,
+                    color: "rgba(255,255,255,0.7)",
+                    lineHeight: 1.6,
+                    margin: "0 0 20px 0",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    maxWidth: 620,
+                  }}
+                >
+                  {activeItem.description || "Nội dung phim được đề xuất dựa trên mức độ tương đồng về diễn viên, đạo diễn và thể loại yêu thích của bạn."}
+                </p>
+
+                {/* Dàn nút hành động */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={(e) => handlePlay(e, activeItem)}
+                    style={{
+                      height: 42,
+                      padding: "0 24px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: isCurrentPremium
+                        ? "linear-gradient(135deg, #facc15, #f59e0b)"
+                        : "#ffffff",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      cursor: "pointer",
+                      fontFamily: FONT_BODY,
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                      color: "#000000",
+                      boxShadow: isCurrentPremium
+                        ? "0 6px 20px rgba(250,204,21,0.3)"
+                        : "0 6px 20px rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    {isCurrentPremium ? (
+                      <>
+                        <Crown size={15} fill="#000" color="#000" />
+                        <span>Mở khóa Premium</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={15} fill="#000" color="#000" style={{ marginLeft: 2 }} />
+                        <span>Xem ngay</span>
+                      </>
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={(e) => handleFavoriteClick(e, activeItem)}
+                    disabled={favLoading}
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: isCurrentFav ? C.accent : "rgba(255,255,255,0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: favLoading ? "not-allowed" : "pointer",
+                    }}
+                    title={isCurrentFav ? "Bỏ yêu thích" : "Thêm vào danh sách"}
+                  >
+                    {favLoading ? (
+                      <Loader size={15} color="white" style={{ animation: "spin 0.7s linear infinite" }} />
+                    ) : isCurrentFav ? (
+                      <Heart size={16} fill="white" color="white" />
+                    ) : (
+                      <Plus size={18} color="white" strokeWidth={2.5} />
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => navigate(getInfoRoute(activeItem))}
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: "rgba(255,255,255,0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                    title="Xem chi tiết"
+                  >
+                    <Info size={16} color="white" />
+                  </motion.button>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+
+            {/* ── DÀN CAROUSEL 5 PHIM (TỔNG 2 LẦN SCROLL) ── */}
+            <div style={{ paddingTop: 24 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      fontFamily: FONT_BODY,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "rgba(255,255,255,0.45)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Các phim khác cùng gu
+                  </span>
+
+                  {/* Dot phân trang hiển thị 2 lượt cuộn */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div
+                      style={{
+                        width: carouselPage === 0 ? 16 : 5,
+                        height: 5,
+                        borderRadius: 999,
+                        background: carouselPage === 0 ? ACCENT_COLOR : "rgba(255,255,255,0.2)",
+                        transition: "all 0.3s ease",
+                      }}
+                    />
+                    <div
+                      style={{
+                        width: carouselPage === 1 ? 16 : 5,
+                        height: 5,
+                        borderRadius: 999,
+                        background: carouselPage === 1 ? ACCENT_COLOR : "rgba(255,255,255,0.2)",
+                        transition: "all 0.3s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Nút lật 2 lượt cuộn */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button
+                    onClick={handleTogglePage}
+                    disabled={carouselPage === 0}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: carouselPage === 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.08)",
+                      color: carouselPage === 0 ? "rgba(255,255,255,0.2)" : "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: carouselPage === 0 ? "default" : "pointer",
+                      transition: "all 0.2s",
+                    }}
+                    title="Trang trước"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={handleTogglePage}
+                    disabled={carouselPage === 1}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: carouselPage === 1 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.08)",
+                      color: carouselPage === 1 ? "rgba(255,255,255,0.2)" : "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: carouselPage === 1 ? "default" : "pointer",
+                      transition: "all 0.2s",
+                    }}
+                    title="Trang tiếp theo"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Dàn 5 Card hiển thị cùng lúc (Không viền tím đáy) */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`carousel-page-${carouselPage}`}
+                  initial={{ opacity: 0, x: carouselPage === 1 ? 16 : -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: carouselPage === 1 ? -16 : 16 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {currentFiveMovies.map((item, idx) => {
+                    const globalIdx = carouselPage * 5 + idx;
+                    const isSelected = globalIdx === activeIndex;
+                    const itemMatch = item.rating ? Math.round(item.rating * 10) : 92;
+
+                    return (
+                      <motion.div
+                        key={`card-${item.id}-${globalIdx}`}
+                        onClick={() => setActiveIndex(globalIdx)}
+                        whileHover={{ y: -3 }}
+                        transition={{ duration: 0.2 }}
+                        style={{
+                          position: "relative",
+                          height: 104,
+                          borderRadius: 14,
+                          overflow: "hidden",
+                          cursor: "pointer",
+                          background: "#16161a",
+                          border: "none",
+                          opacity: isSelected ? 1 : 0.5,
+                          transform: isSelected ? "scale(1.02)" : "scale(1)",
+                          boxShadow: isSelected
+                            ? "0 12px 30px rgba(0,0,0,0.85)"
+                            : "0 4px 14px rgba(0,0,0,0.35)",
+                          transition: "opacity 0.2s, transform 0.2s, box-shadow 0.2s",
+                        }}
+                      >
+                        <img
+                          src={item.backdropUrl || item.posterUrl}
+                          alt={item.title}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+
+                        {/* Gradient che tối để đọc chữ rõ ràng */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            background:
+                              "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 45%, rgba(0,0,0,0.95) 100%)",
+                          }}
+                        />
+
+                        {/* Điểm % phù hợp */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 6,
+                            left: 6,
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: FONT_BODY,
+                              fontSize: 9.5,
+                              fontWeight: 800,
+                              color: C.green,
+                              background: "rgba(0,0,0,0.75)",
+                              backdropFilter: "blur(4px)",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            {itemMatch}%
+                          </span>
+                        </div>
+
+                        {/* Tên phim */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 8,
+                            left: 8,
+                            right: 8,
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontFamily: FONT_BODY,
+                              fontSize: 11.5,
+                              fontWeight: isSelected ? 800 : 700,
+                              color: "#ffffff",
+                              margin: 0,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              lineHeight: 1.25,
+                              textShadow: "0 2px 6px rgba(0,0,0,0.9)",
+                            }}
+                          >
+                            {item.title}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       ) : (
-        /* Mobile — danh sách dọc */
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {allItems.slice(0, 10).map((item) => (
-            <MovieCardHorizontal
-              key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`}
-              movie={item}
-              isFavorited={checkFav(item.id)}
-              onFavoriteToggle={onFavoriteToggle}
-            />
-          ))}
+        /* ── BỐ CỤC MOBILE: CARD VUỐT NGANG ── */
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            overflowX: "auto",
+            padding: "2px 2px 14px 2px",
+            scrollSnapType: "x mandatory",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+          }}
+        >
+          {list.map((item) => {
+            const isFav = checkFav(item.id);
+            const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
+            const matchPct = item.rating ? Math.round(item.rating * 10) : 95;
+
+            return (
+              <div
+                key={`mob-curated-${item.id}`}
+                onClick={() => navigate(getInfoRoute(item))}
+                style={{
+                  position: "relative",
+                  flexShrink: 0,
+                  width: "86vw",
+                  maxWidth: 340,
+                  borderRadius: 16,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "none",
+                  padding: 12,
+                  display: "flex",
+                  gap: 12,
+                  scrollSnapAlign: "start",
+                }}
+              >
+                <div
+                  style={{
+                    width: 90,
+                    aspectRatio: "2 / 3",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    flexShrink: 0,
+                    position: "relative",
+                  }}
+                >
+                  <img
+                    src={item.posterUrl || item.backdropUrl}
+                    alt={item.title}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                  {item.isPremium && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        background: "linear-gradient(135deg, #facc15, #f59e0b)",
+                        borderRadius: 4,
+                        padding: "2px 4px",
+                      }}
+                    >
+                      <Crown size={8} fill="#1c1400" color="#1c1400" />
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <div>
+                    <span
+                      style={{
+                        fontFamily: FONT_BODY,
+                        fontSize: 10,
+                        fontWeight: 800,
+                        color: C.green,
+                        display: "block",
+                        marginBottom: 3,
+                      }}
+                    >
+                      {matchPct}% Phù hợp
+                    </span>
+
+                    <h4
+                      style={{
+                        fontFamily: FONT_DISPLAY,
+                        fontSize: 14,
+                        fontWeight: 800,
+                        color: "#fff",
+                        margin: "0 0 4px 0",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {item.title}
+                    </h4>
+
+                    <span
+                      style={{
+                        fontFamily: FONT_BODY,
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.5)",
+                      }}
+                    >
+                      {item.isTvShow ? "Series" : "Phim"} • {item.year || "Mới"}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                    <button
+                      onClick={(e) => handlePlay(e, item)}
+                      style={{
+                        flex: 1,
+                        height: 32,
+                        borderRadius: 8,
+                        border: "none",
+                        background: isLocked ? "#facc15" : "#fff",
+                        color: "#000",
+                        fontFamily: FONT_BODY,
+                        fontSize: 12,
+                        fontWeight: 800,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Play size={12} fill="#000" />
+                      <span>Xem</span>
+                    </button>
+
+                    <button
+                      onClick={(e) => handleFavoriteClick(e, item)}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        border: "none",
+                        background: isFav ? C.accent : "rgba(255,255,255,0.1)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isFav ? <Heart size={13} fill="white" color="white" /> : <Plus size={14} color="white" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {/* Modal Premium Gate */}
+      <ModalPortal>
+        <PremiumGateModal
+          open={showGate}
+          onClose={() => setShowGate(false)}
+          movieTitle={gateTitle}
+        />
+      </ModalPortal>
     </section>
   );
 }

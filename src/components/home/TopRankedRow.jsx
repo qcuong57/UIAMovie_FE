@@ -29,6 +29,7 @@ import {
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
+import { useToast } from "../common/Toast";
 
 // ── Premium helpers ──────────────────────────────────────────────
 function getCurrentUser() {
@@ -38,6 +39,23 @@ function getCurrentUser() {
 function userHasPremium(user) {
   if (!user) return false;
   return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
+}
+
+// ── Lỗi xác thực (chưa đăng nhập / hết phiên) ─────────────────────
+function isUnauthorizedError(err) {
+  const status = err?.response?.status ?? err?.status;
+  return status === 401 || status === 403;
+}
+
+// Lấy message lỗi thật từ server trả về (nếu có), fallback nếu không có
+function getErrorMessage(err, fallback) {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.data?.message ||
+    (typeof err?.message === "string" && err.message) ||
+    fallback
+  );
 }
 
 // Portal để modal thoát khỏi stacking context của motion.div (transform+zIndex)
@@ -81,6 +99,7 @@ const RankCard = ({
   );
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
   const matchPct = item.rating ? Math.round(item.rating * 10) : null;
   const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
 
@@ -94,6 +113,12 @@ const RankCard = ({
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
     if (favLoading) return;
+
+    // Chưa đăng nhập → chặn ngay, không optimistic update, không gọi API
+    if (!getCurrentUser()) {
+      toast.warning("Bạn cần đăng nhập để thêm vào Yêu thích");
+      return;
+    }
 
     const prevFav = localFav;
     const newFav = !localFav;
@@ -119,11 +144,20 @@ const RankCard = ({
           await movieService.removeFavorite(item.id);
         }
       }
+      toast[newFav ? "success" : "info"](
+        newFav ? `Đã thêm "${item.title}" vào Yêu thích` : `"${item.title}" đã được bỏ khỏi Yêu thích`,
+      );
     } catch (err) {
       console.error("Favorite toggle error:", err);
       // Rollback nếu API lỗi
       setLocalFav(prevFav);
       onFavoriteToggle?.(item, prevFav);
+
+      if (isUnauthorizedError(err)) {
+        toast.warning("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại");
+      } else {
+        toast.error(getErrorMessage(err, "Không thể cập nhật Yêu thích, vui lòng thử lại"));
+      }
     } finally {
       setFavLoading(false);
     }

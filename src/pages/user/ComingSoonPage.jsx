@@ -330,12 +330,19 @@ export default function ComingSoonPage() {
     return Array.from(map.entries());
   }, [rest]);
 
-  // ── Loading ───────────────────────────────────────────────────────────────
-  if (status === "loading") return <LoadingScreen />;
-
   return (
     <>
-      <style>{GOOGLE_FONTS}</style>
+      {/* Loader ở lại nguyên vẹn cho đến khi status rời khỏi "loading" —
+          bọc trong AnimatePresence để hiệu ứng exit (trượt lên) của
+          LoadingScreen thực sự chạy được, thay vì bị unmount ngay lập tức
+          như early-return trước đây. */}
+      <AnimatePresence>
+        {status === "loading" && <LoadingScreen key="loading-screen" />}
+      </AnimatePresence>
+
+      {status !== "loading" && (
+        <>
+          <style>{GOOGLE_FONTS}</style>
 
       <div style={{ minHeight: "100vh", background: C.bg, color: C.text }}>
         <div
@@ -436,6 +443,8 @@ export default function ComingSoonPage() {
           )}
         </div>
       </div>
+        </>
+      )}
     </>
   );
 }

@@ -1,7 +1,4 @@
 // src/pages/home/HomePage.jsx
-// v2 — bỏ ScrollProgressBar (JS overhead) → dùng CSS scrollbar kiểu Netflix
-// Import NetflixScrollbar.css vào index.css hoặc App.css là xong
-
 import React, {
   useState,
   useEffect,
@@ -9,6 +6,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, CalendarDays, Tv } from "lucide-react";
 import HeroBanner from "../../components/layout/HeroBanner";
@@ -19,6 +17,7 @@ import genreService from "../../services/genreService";
 import aiService from "../../services/aiService";
 import authService from "../../services/authService";
 import AiChatWidget from "../../components/ai/AiChatWidget";
+import ContinueWatchingSection from "../../components/home/ContinueWatchingSection";
 
 import {
   C,
@@ -36,7 +35,6 @@ import UserReviewsSection from "../../components/home/UserReviewsSection";
 import RecommendSection from "../../components/home/RecommendSection";
 import SectionReveal from "../../motion-configs/SectionReveal";
 import { LoadingScreen } from "../../components/ui";
-// ✅ ScrollProgressBar đã bỏ → dùng CSS scrollbar trong NetflixScrollbar.css
 
 // ─── Normalize movie ──────────────────────────────────────────────────────────
 const normalizeMovie = (m) => ({
@@ -49,8 +47,8 @@ const normalizeMovie = (m) => ({
   genres: m.genres || [],
   description: m.description || "",
   duration: m.duration || null,
-  isPremium: m.isPremium ?? false, // ← FIX: map field premium
-  trailerVideoUrl: m.trailerVideoUrl || null, // trailer tự upload lên Cloudinary
+  isPremium: m.isPremium ?? false,
+  trailerVideoUrl: m.trailerVideoUrl || null,
   isTvShow: false,
 });
 
@@ -63,8 +61,8 @@ const normalizeTvShow = (s) => ({
   backdropUrl: s.backdropUrl || null,
   genres: s.genres || [],
   description: s.description || s.overview || "",
-  isPremium: s.isPremium ?? false, // ← FIX: map field premium
-  trailerVideoUrl: s.trailerVideoUrl || null, // trailer tự upload lên Cloudinary
+  isPremium: s.isPremium ?? false,
+  trailerVideoUrl: s.trailerVideoUrl || null,
   isTvShow: true,
 });
 
@@ -133,7 +131,6 @@ const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
 };
 
 // ─── Error screen ───────────────────────────────────────────────────────────
-// (LoadingScreen giờ nằm ở src/components/ui/LoadingScreen.jsx, import ở trên)
 const ErrorScreen = ({ message, onRetry }) => (
   <div
     style={{
@@ -186,21 +183,11 @@ const ErrorScreen = ({ message, onRetry }) => (
   </div>
 );
 
-const SectionDivider = () => (
-  <div
-    style={{
-      margin: "0 48px",
-      height: 1,
-      background:
-        "linear-gradient(to right, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 60%, transparent 100%)",
-    }}
-  />
-);
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Main HomePage ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function HomePage() {
+  const navigate = useNavigate();
   const [movies, setMovies] = useState([]);
   const [tvShows, setTvShows] = useState([]);
   const [genres, setGenres] = useState([]);
@@ -222,8 +209,18 @@ export default function HomePage() {
   const [pastBanner, setPastBanner] = useState(false);
 
   useEffect(() => {
-    const onScroll = () =>
-      setPastBanner(window.scrollY > window.innerHeight * 0.8);
+    let ticking = false;
+    const check = () => {
+      const next = window.scrollY > window.innerHeight * 0.8;
+      setPastBanner((prev) => (prev === next ? prev : next));
+      ticking = false;
+    };
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(check);
+      }
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -246,7 +243,6 @@ export default function HomePage() {
       setLoading(true);
       setError(null);
 
-      // Đồng bộ trạng thái Premium từ server vào localStorage trước khi render
       await authService.refreshPremiumStatus();
 
       const [
@@ -256,6 +252,7 @@ export default function HomePage() {
         favsData,
         tvFavsData,
         historyData,
+        tvHistoryData,
         trailerMoviesData,
         trailerTvShowsData,
       ] = await Promise.all([
@@ -267,10 +264,8 @@ export default function HomePage() {
         movieService.getFavorites().catch(() => []),
         tvShowService.getFavorites?.().catch(() => []) ?? Promise.resolve([]),
         movieService.getWatchHistory().catch(() => []),
-        // ⚠️ Nguồn RIÊNG cho Trailer section: getTrendingMovies() bị cache server 30'
-        // nên trailer mới upload không lên kịp. getMovies() (list thường) KHÔNG cache
-        // → luôn thấy trailer mới ngay sau khi upload. pageSize lớn để không bị giới
-        // hạn trong top trending/top rated như 2 nguồn phía trên.
+        tvShowService.getWatchHistory?.().catch(() => []) ??
+          Promise.resolve([]),
         movieService
           .getMovies({
             page: 1,
@@ -323,12 +318,27 @@ export default function HomePage() {
         ]),
       );
 
-      const rawHistory = Array.isArray(historyData)
+      // BUG CŨ: chỉ lấy lịch sử xem phim lẻ (movieService.getWatchHistory),
+      // bỏ sót toàn bộ lịch sử xem phim bộ (tvShowService.getWatchHistory) —
+      // vì đây là 2 bảng/endpoint tách biệt ở backend (WatchHistory vs
+      // TvShowWatchHistory), không tự gộp cho FE.
+      const rawMovieHistory = Array.isArray(historyData)
         ? historyData
         : historyData?.data || historyData?.history || [];
-      setWatchHistory(rawHistory);
+      const rawTvHistory = Array.isArray(tvHistoryData)
+        ? tvHistoryData
+        : tvHistoryData?.data || tvHistoryData?.history || [];
 
-      // Nguồn riêng cho Trailer section — xem comment ở fetchData phía trên
+      // Gắn cờ isTvShow ngay từ đây vì 2 DTO có field hoàn toàn khác nhau
+      // (MovieTitle/ProgressMinutes vs TvShowTitle/ProgressSeconds) và không
+      // có field isTvShow / object lồng "movie"/"tvShow" nào cả.
+      const combinedHistory = [
+        ...rawMovieHistory.map((h) => ({ ...h, isTvShow: false })),
+        ...rawTvHistory.map((h) => ({ ...h, isTvShow: true })),
+      ].sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt));
+
+      setWatchHistory(combinedHistory);
+
       const rawTrailerMovies = Array.isArray(trailerMoviesData)
         ? trailerMoviesData
         : trailerMoviesData?.items || trailerMoviesData?.movies || [];
@@ -342,7 +352,7 @@ export default function HomePage() {
       setTrailerSourceMovies(rawTrailerMovies.map(normalizeMovie));
       setTrailerSourceTvShows(rawTrailerTvShows.map(normalizeTvShow));
 
-      fetchForYou(normalized, normalizedTv, rawHistory);
+      fetchForYou(normalized, normalizedTv, combinedHistory);
     } catch (err) {
       setError(err.message || "Không thể tải dữ liệu");
     } finally {
@@ -359,6 +369,7 @@ export default function HomePage() {
         if (Array.isArray(aiRec?.movies) && aiRec.movies.length > 0) {
           setForYou(aiRec.movies.map(normalizeMovie));
           setForYouLabel(aiRec.message || "Gợi ý AI cho bạn");
+          setForYouLoading(false);
           return;
         }
       } catch {
@@ -374,6 +385,7 @@ export default function HomePage() {
           ? "Dựa trên lịch sử xem của bạn"
           : "Khám phá thêm",
       );
+      setForYouLoading(false);
     },
     [],
   );
@@ -399,6 +411,115 @@ export default function HomePage() {
     [favorites],
   );
 
+  // ── Chuẩn hóa danh sách xem tiếp ──────────────────────────────────────────
+  // Backend trả 2 DTO phẳng, KHÔNG có object "movie"/"tvShow" lồng bên trong,
+  // KHÔNG có field currentTime/duration/progress/remainingMinutes/title/isTvShow
+  // như code cũ giả định — nên trước đây item.title luôn undefined và bị
+  // filter loại hết (section không bao giờ hiện).
+  //   WatchHistoryDTO (phim lẻ):  movieId, movieTitle, posterUrl, progressMinutes
+  //   TvShowWatchHistoryDTO (bộ): tvShowId, tvShowTitle, posterUrl,
+  //                               seasonNumber, episodeNumber, episodeRuntime (phút),
+  //                               progressSeconds
+  const continueWatchingList = useMemo(() => {
+    const movieMap = new Map(movies.map((m) => [String(m.id), m]));
+    const tvMap = new Map(tvShows.map((s) => [String(s.id), s]));
+
+    const mapped = (watchHistory || [])
+      .map((item) => {
+        const isTv = Boolean(item.isTvShow);
+        const id = isTv ? item.tvShowId : item.movieId;
+        const meta = isTv ? tvMap.get(String(id)) : movieMap.get(String(id));
+
+        // Quy về cùng đơn vị giây, vì phim lẻ lưu progressMinutes còn phim
+        // bộ lưu progressSeconds.
+        const currentTime = isTv
+          ? item.progressSeconds ?? 0
+          : (item.progressMinutes ?? 0) * 60;
+
+        // Tổng thời lượng: phim bộ có sẵn episodeRuntime (phút) trong chính
+        // history DTO; phim lẻ phải tra chéo qua danh sách movies đã fetch
+        // vì WatchHistoryDTO không trả Duration.
+        const durationMinutes = isTv
+          ? item.episodeRuntime
+          : meta?.duration;
+        const duration = durationMinutes ? durationMinutes * 60 : null;
+
+        const progress = duration
+          ? Math.min(100, Math.round((currentTime / duration) * 100))
+          : null;
+        const remainingMinutes = duration
+          ? Math.max(0, Math.round((duration - currentTime) / 60))
+          : null;
+
+        return {
+          id,
+          historyId: item.id,
+          title: isTv ? item.tvShowTitle : item.movieTitle,
+          posterUrl: item.posterUrl || meta?.posterUrl,
+          backdropUrl: meta?.backdropUrl || item.posterUrl || meta?.posterUrl,
+          isTvShow: isTv,
+          episodeId: item.episodeId,
+          season: item.seasonNumber,
+          episode: item.episodeNumber,
+          currentTime,
+          duration,
+          progress,
+          remainingMinutes,
+          watchedAt: item.watchedAt,
+        };
+      })
+      .filter((i) => Boolean(i.id && i.title));
+
+    // TvShowWatchHistory trả 1 dòng / tập đã xem, không phải 1 dòng / show —
+    // nên 1 show xem nhiều tập sẽ tạo nhiều item trùng tvShowId, gây trùng
+    // key "tv-{id}" khi ContinueWatchingSection render. Dedupe theo
+    // (isTvShow, id), giữ bản ghi đầu tiên vì watchHistory đã được sort mới
+    // nhất trước (combinedHistory sort theo watchedAt desc).
+    const seenKeys = new Set();
+    return mapped.filter((item) => {
+      const dedupeKey = `${item.isTvShow ? "tv" : "mv"}-${item.id}`;
+      if (seenKeys.has(dedupeKey)) return false;
+      seenKeys.add(dedupeKey);
+      return true;
+    });
+  }, [watchHistory, movies, tvShows]);
+
+  const handleRemoveHistory = useCallback(async (item) => {
+    // Xóa lạc quan khỏi UI trước, rollback nếu API lỗi.
+    setWatchHistory((prev) =>
+      prev.filter((h) => String(h.id) !== String(item.historyId))
+    );
+
+    try {
+      if (item.isTvShow) {
+        await tvShowService.deleteWatchHistory(item.historyId);
+      } else {
+        await movieService.deleteWatchHistory(item.historyId);
+      }
+    } catch (err) {
+      console.error("Error deleting watch history:", err);
+      // Rollback: tải lại lịch sử xem thật từ server thay vì tự chèn lại
+      // item cũ (tránh lệch dữ liệu nếu có thay đổi khác xảy ra song song).
+      const [historyData, tvHistoryData] = await Promise.all([
+        movieService.getWatchHistory().catch(() => []),
+        tvShowService.getWatchHistory?.().catch(() => []) ??
+          Promise.resolve([]),
+      ]);
+      const rawMovieHistory = Array.isArray(historyData)
+        ? historyData
+        : historyData?.data || historyData?.history || [];
+      const rawTvHistory = Array.isArray(tvHistoryData)
+        ? tvHistoryData
+        : tvHistoryData?.data || tvHistoryData?.history || [];
+      setWatchHistory(
+        [
+          ...rawMovieHistory.map((h) => ({ ...h, isTvShow: false })),
+          ...rawTvHistory.map((h) => ({ ...h, isTvShow: true })),
+        ].sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt))
+      );
+    }
+  }, []);
+
   // ── Derived data ─────────────────────────────────────────────────────────────
   const highlyRated = useMemo(() => byRating(movies).slice(0, 20), [movies]);
   const newest = useMemo(() => byNewest(movies).slice(0, 20), [movies]);
@@ -407,9 +528,6 @@ export default function HomePage() {
   const tvTopRated = useMemo(() => byRating(tvShows).slice(0, 20), [tvShows]);
   const tvNewest = useMemo(() => byNewest(tvShows).slice(0, 20), [tvShows]);
 
-  // ── Trailer tự upload (Cloudinary) — movie + tvshow gộp chung, mới nhất trước ──
-  // Gộp cả 2 nguồn: (trending/top-rated hiện có) + (nguồn riêng không cache, xem fetchData)
-  // rồi khử trùng lặp theo id+loại, để không bỏ lỡ trailer chỉ vì phim chưa lọt top trending.
   const uploadedTrailers = useMemo(() => {
     const all = [
       ...movies,
@@ -429,253 +547,455 @@ export default function HomePage() {
     return byNewest(deduped).slice(0, 15);
   }, [movies, tvShows, trailerSourceMovies, trailerSourceTvShows]);
 
-  if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={handleRetry} />;
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: C.bg,
-        color: C.text,
-        overflowX: "hidden",
-        position: "relative",
-      }}
-    >
-      {/*
-        ✅ SCROLLBAR: Không cần component gì thêm.
-        Import NetflixScrollbar.css vào index.css hoặc App.css là xong:
-          @import './NetflixScrollbar.css';
-        CSS thuần → zero JS → mượt hơn ScrollProgressBar
-      */}
+    <>
+      <AnimatePresence>
+        {loading && <LoadingScreen key="loading-screen" />}
+      </AnimatePresence>
 
-      <style>{GOOGLE_FONTS}</style>
-
-      {/* Noise texture */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: "none",
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-          backgroundSize: "256px 256px",
-          opacity: 0.028,
-          mixBlendMode: "overlay",
-        }}
-      />
-
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <HeroBanner movie={movies[0]} movies={movies.slice(0, 5)} />
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.15, duration: 0.5 }}
+      {!loading && (
+        <div
+          style={{
+            minHeight: "100vh",
+            background: C.bg,
+            color: C.text,
+            overflowX: "hidden",
+            position: "relative",
+          }}
         >
-          <GenreSection
-            genres={genres}
-            selectedGenre={null}
-            onGenreSelect={() => {}}
-            movies={movies}
-            tvShows={tvShows}
+          <style>{GOOGLE_FONTS}</style>
+
+          {/* Noise texture */}
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 0,
+              pointerEvents: "none",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+              backgroundSize: "256px 256px",
+              opacity: 0.028,
+              mixBlendMode: "overlay",
+            }}
           />
 
-          <div
-            style={{ padding: isMobile ? "8px 16px 40px" : "8px 48px 56px" }}
-          >
-            {/* ── Top 10 ── */}
-            {/* ✅ Fix: đổi variant="tilt-up" → "bounce" (cinematic hơn cho Top 10) */}
-            <SectionReveal variant="bounce">
-              <TopRankedRow
-                title="Top 10 Hôm Nay"
-                movies={highlyRated}
-                tvShows={tvTopRated}
-                onFavoriteToggle={toggleFavorite}
-                isFavorited={isFavorited}
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <HeroBanner movie={movies[0]} movies={movies.slice(0, 5)} />
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.15, duration: 0.5 }}
+            >
+              <GenreSection
+                genres={genres}
+                selectedGenre={null}
+                onGenreSelect={() => {}}
+                movies={movies}
+                tvShows={tvShows}
               />
-            </SectionReveal>
+            </motion.div>
 
-            <SectionDivider />
-            <div style={{ height: 40 }} />
+            <>
+              <div
+                style={{
+                  padding: isMobile ? "8px 16px 40px" : "8px 48px 56px",
+                }}
+              >
+                {/* ── Tiếp tục xem (Ưu tiên đầu bảng khi có lịch sử xem dở) ── */}
+                {continueWatchingList.length > 0 && (
+                  <SectionReveal variant="slide-right" divider>
+                    <ContinueWatchingSection
+                      items={continueWatchingList}
+                      onRemoveItem={handleRemoveHistory}
+                      onSeeAll={() => navigate("/watch-history")}
+                    />
+                  </SectionReveal>
+                )}
 
-            {/* ── Trailer Mới Cập Nhật (tự upload lên Cloudinary) ── */}
-            {uploadedTrailers.length > 0 && (
-              <>
-                <SectionReveal variant="scale-fade">
-                  <TrailerShowcaseSection items={uploadedTrailers} />
-                </SectionReveal>
-
-                <SectionDivider />
-                <div style={{ height: 40 }} />
-              </>
-            )}
-
-            <CountryMovieRows
-              favIds={favorites}
-              onFavToggle={(item, isNowFav) => {
-                setFavorites((prev) => {
-                  const next = new Set(prev);
-                  isNowFav
-                    ? next.add(String(item.id))
-                    : next.delete(String(item.id));
-                  return next;
-                });
-              }}
-            />
-
-            {/* ── Được Đánh Giá Cao ── */}
-            <SectionReveal variant="slide-right">
-              <MovieRow
-                title="Phim Được Đánh Giá Cao"
-                movies={highlyRated}
-                onFavoriteToggle={toggleFavorite}
-                isFavorited={isFavorited}
-                accentColor="#f5c518"
-                seeAllSort="rating"
-                badge={{ icon: Star, text: "Đánh giá cao" }}
-              />
-            </SectionReveal>
-
-            <SectionDivider />
-            <div style={{ height: 40 }} />
-
-            {/* ── TV Series Nổi Bật ── */}
-            {tvTopRated.length > 0 && (
-              <>
-                <SectionReveal variant="slide-left">
-                  <MovieRow
-                    title="TV Series Nổi Bật"
-                    items={tvTopRated}
+                {/* ── Top 10 ── */}
+                <SectionReveal variant="bounce" margin="-120px" divider>
+                  <TopRankedRow
+                    title="Top 10 Hôm Nay"
+                    movies={highlyRated}
+                    tvShows={tvTopRated}
                     onFavoriteToggle={toggleFavorite}
                     isFavorited={isFavorited}
-                    accentColor="#818cf8"
-                    seeAllPath="/browse/tvshows?sort=rating"
-                    badge={{ icon: Tv, text: "TV Show" }}
                   />
                 </SectionReveal>
 
-                <SectionDivider />
-                <div style={{ height: 40 }} />
-              </>
-            )}
+                {/* ── Trailer Mới Cập Nhật ── */}
+                {uploadedTrailers.length > 0 && (
+                  <SectionReveal variant="scale-fade" margin="-100px" divider>
+                    <TrailerShowcaseSection items={uploadedTrailers} />
+                  </SectionReveal>
+                )}
 
-            {/* ── Phim Mới Ra Mắt ── */}
-            <SectionReveal variant="slide-right">
-              <MovieRow
-                title="Phim Mới Ra Mắt"
-                movies={newest}
-                onFavoriteToggle={toggleFavorite}
-                isFavorited={isFavorited}
-                accentColor="#38bdf8"
-                seeAllSort="releaseDate"
-                badge={{ icon: CalendarDays, text: "Mới nhất" }}
-              />
-            </SectionReveal>
+                <CountryMovieRows
+                  favIds={favorites}
+                  onFavToggle={(item, isNowFav) => {
+                    setFavorites((prev) => {
+                      const next = new Set(prev);
+                      isNowFav
+                        ? next.add(String(item.id))
+                        : next.delete(String(item.id));
+                      return next;
+                    });
+                  }}
+                />
 
-            <SectionDivider />
-            <div style={{ height: 40 }} />
-
-            {/* ── Series Mới Nhất ── */}
-            {tvNewest.length > 0 && (
-              <>
-                <SectionReveal variant="slide-left">
+                {/* ── Được Đánh Giá Cao ── */}
+                <SectionReveal variant="slide-right" divider>
                   <MovieRow
-                    title="Series Mới Nhất"
-                    items={tvNewest}
+                    title="Phim Được Đánh Giá Cao"
+                    movies={highlyRated}
                     onFavoriteToggle={toggleFavorite}
                     isFavorited={isFavorited}
-                    accentColor="#34d399"
-                    seeAllPath="/browse/tvshows?sort=firstAirDate"
+                    accentColor="#f5c518"
+                    seeAllSort="rating"
+                    badge={{ icon: Star, text: "Đánh giá cao" }}
+                  />
+                </SectionReveal>
+
+                {/* ── TV Series Nổi Bật ── */}
+                {tvTopRated.length > 0 && (
+                  <SectionReveal variant="slide-left" divider>
+                    <MovieRow
+                      title="TV Series Nổi Bật"
+                      items={tvTopRated}
+                      onFavoriteToggle={toggleFavorite}
+                      isFavorited={isFavorited}
+                      accentColor="#818cf8"
+                      seeAllPath="/browse/tvshows?sort=rating"
+                      badge={{ icon: Tv, text: "TV Show" }}
+                    />
+                  </SectionReveal>
+                )}
+
+                {/* ── Phim Mới Ra Mắt ── */}
+                <SectionReveal variant="slide-right" divider>
+                  <MovieRow
+                    title="Phim Mới Ra Mắt"
+                    movies={newest}
+                    onFavoriteToggle={toggleFavorite}
+                    isFavorited={isFavorited}
+                    accentColor="#38bdf8"
+                    seeAllSort="releaseDate"
                     badge={{ icon: CalendarDays, text: "Mới nhất" }}
                   />
                 </SectionReveal>
 
-                <SectionDivider />
-                <div style={{ height: 40 }} />
-              </>
-            )}
-
-            {/* ── Dành Cho Bạn ── */}
-            {forYouLoading && forYou.length === 0 ? (
-              <div style={{ marginBottom: 44 }}>
-                <div
-                  style={{
-                    height: 22,
-                    width: 180,
-                    borderRadius: 4,
-                    background: "rgba(255,255,255,0.06)",
-                    marginBottom: 16,
-                  }}
-                />
-                <div style={{ display: "flex", gap: 8 }}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        flexShrink: 0,
-                        width: 160,
-                        height: 240,
-                        borderRadius: 8,
-                        background: "rgba(255,255,255,0.04)",
-                        animation: "pulse 1.5s ease-in-out infinite",
-                        animationDelay: `${i * 0.1}s`,
-                      }}
+                {/* ── Series Mới Nhất ── */}
+                {tvNewest.length > 0 && (
+                  <SectionReveal variant="slide-left" divider>
+                    <MovieRow
+                      title="Series Mới Nhất"
+                      items={tvNewest}
+                      onFavoriteToggle={toggleFavorite}
+                      isFavorited={isFavorited}
+                      accentColor="#34d399"
+                      seeAllPath="/browse/tvshows?sort=firstAirDate"
+                      badge={{ icon: CalendarDays, text: "Mới nhất" }}
                     />
-                  ))}
-                </div>
+                  </SectionReveal>
+                )}
+
+                {/* ── Dành Cho Bạn (Showcase Studio Layout) ── */}
+                {forYouLoading && forYou.length === 0 ? (
+                  <div style={{ marginBottom: 56 }}>
+                    {/* Header Skeleton */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        marginBottom: 20,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          background: "rgba(255,255,255,0.06)",
+                        }}
+                      />
+                      <div
+                        style={{
+                          height: 24,
+                          width: 220,
+                          borderRadius: 6,
+                          background: "rgba(255,255,255,0.06)",
+                        }}
+                      />
+                    </div>
+
+                    {/* Showcase Container Skeleton */}
+                    {!isMobile ? (
+                      <div
+                        style={{
+                          borderRadius: 24,
+                          background: "rgba(255,255,255,0.02)",
+                          padding: "36px 36px 30px 36px",
+                          display: "grid",
+                          gridTemplateColumns: "300px 1fr",
+                          gap: 40,
+                          animation: "pulse 1.6s ease-in-out infinite",
+                        }}
+                      >
+                        {/* Cột trái: Poster đứng 2:3 */}
+                        <div
+                          style={{
+                            width: "100%",
+                            aspectRatio: "2 / 3",
+                            borderRadius: 20,
+                            background: "rgba(255,255,255,0.04)",
+                          }}
+                        />
+
+                        {/* Cột phải: Content + 5 Card bên dưới */}
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                marginBottom: 14,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  height: 22,
+                                  width: 150,
+                                  borderRadius: 999,
+                                  background: "rgba(255,255,255,0.05)",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  height: 22,
+                                  width: 170,
+                                  borderRadius: 999,
+                                  background: "rgba(255,255,255,0.05)",
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                height: 36,
+                                width: "65%",
+                                borderRadius: 8,
+                                background: "rgba(255,255,255,0.06)",
+                                marginBottom: 16,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: 18,
+                                width: "35%",
+                                borderRadius: 6,
+                                background: "rgba(255,255,255,0.04)",
+                                marginBottom: 16,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: 14,
+                                width: "85%",
+                                borderRadius: 4,
+                                background: "rgba(255,255,255,0.03)",
+                                marginBottom: 8,
+                              }}
+                            />
+                            <div
+                              style={{
+                                height: 14,
+                                width: "70%",
+                                borderRadius: 4,
+                                background: "rgba(255,255,255,0.03)",
+                                marginBottom: 24,
+                              }}
+                            />
+                            <div style={{ display: "flex", gap: 12 }}>
+                              <div
+                                style={{
+                                  height: 42,
+                                  width: 130,
+                                  borderRadius: 999,
+                                  background: "rgba(255,255,255,0.08)",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  width: 42,
+                                  height: 42,
+                                  borderRadius: "50%",
+                                  background: "rgba(255,255,255,0.05)",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  width: 42,
+                                  height: 42,
+                                  borderRadius: "50%",
+                                  background: "rgba(255,255,255,0.05)",
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Hàng 5 Card mini bên dưới */}
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(5, 1fr)",
+                              gap: 12,
+                              marginTop: 24,
+                            }}
+                          >
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  height: 104,
+                                  borderRadius: 14,
+                                  background: "rgba(255,255,255,0.04)",
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Mobile Skeleton */
+                      <div
+                        style={{
+                          borderRadius: 16,
+                          background: "rgba(255,255,255,0.03)",
+                          padding: 12,
+                          display: "flex",
+                          gap: 12,
+                          animation: "pulse 1.6s ease-in-out infinite",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 90,
+                            aspectRatio: "2 / 3",
+                            borderRadius: 10,
+                            background: "rgba(255,255,255,0.05)",
+                          }}
+                        />
+                        <div
+                          style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: 16,
+                              width: "45%",
+                              borderRadius: 4,
+                              background: "rgba(255,255,255,0.05)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              height: 20,
+                              width: "80%",
+                              borderRadius: 6,
+                              background: "rgba(255,255,255,0.06)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              height: 14,
+                              width: "60%",
+                              borderRadius: 4,
+                              background: "rgba(255,255,255,0.04)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              height: 32,
+                              width: "100%",
+                              borderRadius: 8,
+                              background: "rgba(255,255,255,0.06)",
+                              marginTop: "auto",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <SectionReveal variant="scale-fade" divider>
+                    <RecommendSection
+                      subtitle={forYouLabel}
+                      items={forYou}
+                      onFavoriteToggle={toggleFavorite}
+                      isFavorited={isFavorited}
+                      favoritedIds={Array.from(favorites)}
+                    />
+                  </SectionReveal>
+                )}
+
+                {/* ── User Reviews ── */}
+                <SectionReveal variant="fade" margin="-60px">
+                  <UserReviewsSection
+                    movies={reviewMovies}
+                    onMovieClick={(movie) => {
+                      window.location.href = `/movie/${movie.id}`;
+                    }}
+                  />
+                </SectionReveal>
               </div>
-            ) : (
-              <SectionReveal variant="scale-fade">
-                <RecommendSection
-                  subtitle={forYouLabel}
-                  items={forYou}
-                  onFavoriteToggle={toggleFavorite}
-                  isFavorited={isFavorited}
-                  accentColor="#a78bfa"
-                  seeAllSort="rating"
-                />
-              </SectionReveal>
-            )}
 
-            <SectionDivider />
-            <div style={{ height: 40 }} />
-
-            {/* ── User Reviews ── */}
-            <SectionReveal variant="fade" margin="-60px">
-              <UserReviewsSection
-                movies={reviewMovies}
-                onMovieClick={(movie) => {
-                  window.location.href = `/movie/${movie.id}`;
-                }}
-              />
-            </SectionReveal>
+              <AnimatePresence>
+                {pastBanner && (
+                  <motion.div
+                    key="ai-chat"
+                    initial={{ opacity: 0, scale: 0.85, y: 16 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.85, y: 16 }}
+                    transition={{
+                      duration: 0.35,
+                      ease: [0.215, 0.61, 0.355, 1],
+                    }}
+                    style={{
+                      position: "fixed",
+                      bottom: 0,
+                      right: 0,
+                      zIndex: 50,
+                    }}
+                  >
+                    <AiChatWidget />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <Footer />
+            </>
           </div>
 
-          <AnimatePresence>
-            {pastBanner && (
-              <motion.div
-                key="ai-chat"
-                initial={{ opacity: 0, scale: 0.85, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.85, y: 16 }}
-                transition={{ duration: 0.35, ease: [0.215, 0.61, 0.355, 1] }}
-                style={{ position: "fixed", bottom: 0, right: 0, zIndex: 50 }}
-              >
-                <AiChatWidget />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <Footer />
-        </motion.div>
-      </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.4; }
-          50%       { opacity: 0.8; }
-        }
-      `}</style>
-    </div>
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { opacity: 0.4; }
+              50%       { opacity: 0.8; }
+            }
+          `}</style>
+        </div>
+      )}
+    </>
   );
 }

@@ -33,6 +33,23 @@ function userHasPremium(user) {
   );
 }
 
+// ── Lỗi xác thực (chưa đăng nhập / hết phiên) ─────────────────────
+function isUnauthorizedError(err) {
+  const status = err?.response?.status ?? err?.status;
+  return status === 401 || status === 403;
+}
+
+// Lấy message lỗi thật từ server trả về (nếu có), fallback nếu không có
+function getErrorMessage(err, fallback) {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.data?.message ||
+    (typeof err?.message === 'string' && err.message) ||
+    fallback
+  );
+}
+
 // ── Portal wrapper — render modal ra ngoài stacking context của card ──
 // Đây là fix chính: motion.div của card tạo ra một stacking context mới
 // (vì có transform + zIndex), khiến modal bị kẹp bên trong dù zIndex=9999.
@@ -56,6 +73,13 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
   const handleFav = async (e) => {
     e.stopPropagation();
     if (favLoading) return;
+
+    // Chưa đăng nhập → chặn ngay, không gọi API
+    if (!getCurrentUser()) {
+      toast.warning('Bạn cần đăng nhập để thêm vào Yêu thích');
+      return;
+    }
+
     setFavLoading(true);
     const svc = movie.isTvShow ? tvShowService : movieService;
     try {
@@ -72,7 +96,11 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
       }
     } catch (err) {
       console.error(err);
-      toast.error('Không thể cập nhật Yêu thích, vui lòng thử lại');
+      if (isUnauthorizedError(err)) {
+        toast.warning('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+      } else {
+        toast.error(getErrorMessage(err, 'Không thể cập nhật Yêu thích, vui lòng thử lại'));
+      }
     } finally {
       setFavLoading(false);
     }
@@ -211,6 +239,13 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
     if (favLoading) return;
+
+    // Chưa đăng nhập → chặn ngay, không gọi API
+    if (!getCurrentUser()) {
+      toast.warning('Bạn cần đăng nhập để thêm vào Yêu thích');
+      return;
+    }
+
     setFavLoading(true);
     const svc = movie.isTvShow ? tvShowService : movieService;
     try {
@@ -227,7 +262,11 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
       }
     } catch (err) {
       console.error('Favorite toggle error:', err);
-      toast.error('Không thể cập nhật Yêu thích, vui lòng thử lại');
+      if (isUnauthorizedError(err)) {
+        toast.warning('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+      } else {
+        toast.error(getErrorMessage(err, 'Không thể cập nhật Yêu thích, vui lòng thử lại'));
+      }
     } finally {
       setFavLoading(false);
     }

@@ -148,9 +148,11 @@ export const TRANSITION_HERO_CONTENT = {
 };
 
 // Stagger cho hero buttons
+// ✅ delayChildren giảm 0.4 → 0.25: CTA là tương tác đầu tiên của trang,
+// nên khả dụng sớm hơn (đồng bộ với heroButtonContainerVariants trong variants.js)
 export const STAGGER_HERO_BUTTONS = {
   staggerChildren: 0.1,
-  delayChildren: 0.4,
+  delayChildren: 0.25,
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -268,6 +270,61 @@ export const TRANSITION_EASE_OUT_QUART = {
 // ─────────────────────────────────────────────────────────────────────────
 // 🎯 QUICK REFERENCE - Sử dụng nhanh
 // ─────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🎥 CINEMATIC / GODLY-STYLE — bezier "signature" lấy cảm hứng từ motion.dev
+//    docs (expo/circ/quint) — dùng cho reveal lớn, mask-wipe, magnetic CTA.
+//    Thêm mới, không đụng tới các export cũ ở trên.
+// ─────────────────────────────────────────────────────────────────────────
+
+// ⚠️ LƯU Ý ĐỒNG BỘ: các giá trị easing dưới đây trùng với MOTION.ease trong
+// motionConfig.js (cinematic/smooth/editorial/magnetic). Nếu chỉnh 1 trong 2
+// file, phải chỉnh cả file kia — nếu không 2 khu vực của site sẽ "lệch tông"
+// chuyển động dù nhìn tưởng giống nhau. Về lâu dài nên gộp về 1 nguồn duy
+// nhất (khuyến nghị: motionConfig.js) rồi import lại ở đây.
+
+// Expo out — khởi động cực nhanh, rơi rất mượt về cuối. Dùng cho headline,
+// mask-wipe, bất cứ gì cần cảm giác "quyền lực, dứt khoát".
+export const EASE_OUT_EXPO = [0.16, 1, 0.3, 1];
+
+// Quint in-out — mượt cả hai đầu, dùng cho pinned/sticky scroll transforms.
+export const EASE_IN_OUT_QUINT = [0.83, 0, 0.17, 1];
+
+// Circ out — bám sát vật lý, dùng cho card hover / magnetic button.
+export const EASE_OUT_CIRC = [0, 0.55, 0.45, 1];
+
+export const TRANSITION_CINEMATIC = {
+  duration: 1.1,
+  ease: EASE_OUT_EXPO,
+};
+
+export const TRANSITION_MASK_WIPE = {
+  duration: 0.9,
+  ease: EASE_IN_OUT_QUINT,
+};
+
+// Magnetic button — theo con trỏ, cần phản hồi tức thì nhưng không giật.
+export const TRANSITION_MAGNETIC = {
+  type: "spring",
+  stiffness: 150,
+  damping: 15,
+  mass: 0.2,
+};
+
+// Split-text từng dòng/chữ — nhanh, dứt khoát, độ trễ do component tự cộng.
+export const TRANSITION_TEXT_LINE = {
+  duration: 0.9,
+  ease: EASE_OUT_EXPO,
+};
+
+// Stagger cho split-text theo từng dòng lớn (headline)
+export const STAGGER_TEXT_LINES = {
+  staggerChildren: 0.09,
+  delayChildren: 0,
+};
+
+// Count-up số liệu (dùng làm duration mặc định cho hook đếm số)
+export const COUNTER_DURATION_MS = 1400;
 
 /**
  * KÍCH THƯớC:

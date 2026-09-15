@@ -25,17 +25,18 @@ export const W = {
 export const MAX_CHAT_LENGTH = 500;
 export const MAX_HISTORY = 20;
 export const GREETING =
-  "Xin chào! Tôi là trợ lý AI của UIAMovie.\nBạn muốn tìm phim gì hôm nay?";
+  "Xin chào! Tôi là trợ lý của UIAMovie.\nBạn muốn tìm phim gì hôm nay?";
 
+// Plain text labels — no emoji, rendered as simple text pills
 export const MOODS = [
-  { key: "buồn",      label: "Buồn",       emoji: "😢" },
-  { key: "vui",       label: "Vui",        emoji: "😄" },
-  { key: "hồi hộp",  label: "Hồi hộp",   emoji: "😬" },
-  { key: "thư giãn", label: "Thư giãn",   emoji: "😌" },
-  { key: "sợ",       label: "Rùng rợn",   emoji: "😱" },
-  { key: "lãng mạn", label: "Lãng mạn",   emoji: "🥰" },
-  { key: "hào hứng", label: "Hào hứng",   emoji: "🤩" },
-  { key: "muốn khóc",label: "Muốn khóc",  emoji: "😭" },
+  "Buồn",
+  "Vui",
+  "Hồi hộp",
+  "Thư giãn",
+  "Rùng rợn",
+  "Lãng mạn",
+  "Hào hứng",
+  "Muốn khóc",
 ];
 
 export const INTENT_CHIPS = {
@@ -79,9 +80,9 @@ export const INTENT_CHIPS = {
 
 export const PROACTIVE_MESSAGES = {
   "/": "Hôm nay bạn muốn xem thể loại phim gì?",
-  "/movies": "Tìm mãi không ra? Để tôi gợi ý cho bạn!",
+  "/movies": "Tìm mãi không ra? Để tôi gợi ý cho bạn.",
   "/movie": "Bạn muốn biết thêm về phim này không?",
-  "/tv-shows": "Tìm series hay để cày cả tuần? Hỏi tôi đi!",
+  "/tv-shows": "Tìm series hay để cày cả tuần? Hỏi tôi nhé.",
   "/tv-show": "Bạn muốn biết thêm về series này không?",
   default: "Tôi có thể giúp bạn tìm phim & series phù hợp.",
 };

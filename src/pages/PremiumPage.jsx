@@ -36,6 +36,7 @@ import {
   GOOGLE_FONTS,
 } from "../context/homeTokens";
 import paymentService from "../services/paymentService";
+import { useToast } from "../components/common/Toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -165,42 +166,6 @@ const mapSubTypeToKey = (subStatus) => {
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-const Toast = ({ show, message, isError }) => (
-  <AnimatePresence>
-    {show && (
-      <motion.div
-        initial={{ opacity: 0, y: 16, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 10, scale: 0.97 }}
-        transition={SPRING}
-        style={{
-          position: "fixed",
-          bottom: 32,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 9999,
-          background: C.surfaceHigh,
-          border: `1px solid ${isError ? "rgba(229,9,20,0.35)" : C.borderMid}`,
-          borderRadius: RADIUS.chip,
-          padding: "14px 26px",
-          color: isError ? "#ff8080" : "#fff",
-          fontFamily: FONT_BODY,
-          fontSize: 14,
-          fontWeight: 600,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          whiteSpace: "nowrap",
-          boxShadow: SHADOW.cardLift,
-        }}
-      >
-        {isError ? <X size={16} /> : <Check size={16} />}
-        {message}
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
 
 const FAQItem = ({ q, a, isOpen, onToggle }) => (
   <div
@@ -650,11 +615,7 @@ const PlanCard = ({
 
 const PremiumPage = () => {
   const [loading, setLoading] = useState(null);
-  const [toast, setToast] = useState({
-    show: false,
-    message: "",
-    isError: false,
-  });
+  const toast = useToast();
   const [openFaq, setOpenFaq] = useState(null);
   const [subStatus, setSubStatus] = useState(null);
   const [subLoading, setSubLoading] = useState(true);
@@ -685,11 +646,6 @@ const PremiumPage = () => {
 
   const currentPlanKey = subLoading ? null : mapSubTypeToKey(subStatus);
 
-  const showToast = (message, isError = false) => {
-    setToast({ show: true, message, isError });
-    setTimeout(() => setToast((t) => ({ ...t, show: false })), 3500);
-  };
-
   const handleSubscribe = async (plan) => {
     if (loading) return;
 
@@ -697,9 +653,8 @@ const PremiumPage = () => {
       const expiry = subStatus.expiredAt
         ? new Date(subStatus.expiredAt).toLocaleDateString("vi-VN")
         : "";
-      showToast(
-        `Gói Premium của bạn vẫn còn hạn đến ${expiry}. Vui lòng liên hệ hỗ trợ để nâng cấp sớm.`,
-        true,
+      toast.warning(
+        `Gói Premium của bạn vẫn còn hạn đến ${expiry}. Vui lòng liên hệ hỗ trợ để nâng cấp sớm.`
       );
       return;
     }
@@ -712,14 +667,13 @@ const PremiumPage = () => {
       });
       const paymentUrl = result?.paymentUrl;
       if (!paymentUrl) throw new Error("Không nhận được URL thanh toán.");
-      showToast("Đang chuyển hướng tới cổng thanh toán...");
+      toast.info("Đang chuyển hướng tới cổng thanh toán...");
       setTimeout(() => {
         window.location.href = paymentUrl;
       }, 1200);
     } catch (err) {
-      showToast(
-        err.message || "Không thể tạo đơn thanh toán. Vui lòng thử lại.",
-        true,
+      toast.error(
+        err.message || "Không thể tạo đơn thanh toán. Vui lòng thử lại."
       );
     } finally {
       setLoading(null);
@@ -1230,12 +1184,6 @@ const PremiumPage = () => {
           </div>
         </div>
       </section>
-
-      <Toast
-        show={toast.show}
-        message={toast.message}
-        isError={toast.isError}
-      />
     </div>
   );
 };

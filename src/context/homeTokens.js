@@ -43,8 +43,36 @@ export const FONT_BODY    = "'Nunito', sans-serif";
 export const GOOGLE_FONTS = `
   @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,600;0,700;0,800;0,900;1,600;1,700;1,800;1,900&family=Bebas+Neue&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  ::-webkit-scrollbar { display: none; }
-  html { scrollbar-width: none; }
+
+  /* Luôn chừa chỗ scrollbar bên phải — tránh layout "nhảy" ngang khi
+     overflow:hidden được toggle tạm thời (intro lock, modal...) */
+  html { scrollbar-gutter: stable; }
+
+  /* ── Scrollbar "cinematic luxury" — mảnh, ánh vàng nhẹ, luôn nằm sát
+     mép phải, cảm giác như thanh dẫn tiến trình của một cuộn phim ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track {
+    background: linear-gradient(180deg, transparent, rgba(255,255,255,0.02) 8%, rgba(255,255,255,0.02) 92%, transparent);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(245,197,24,0.55), rgba(229,24,30,0.4));
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.4);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(245,197,24,0.85), rgba(229,24,30,0.65));
+    background-clip: padding-box;
+  }
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(245,197,24,0.55) transparent;
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
 `;
 
 // ── Search: sort & year options ───────────────────────────────────

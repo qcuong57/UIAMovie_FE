@@ -53,7 +53,9 @@ const movieService = {
 
       console.log("[movieService] GET /movies?" + params.toString());
       const response = await axiosInstance.get(`/movies?${params}`);
-      return response.data;
+      // Đồng bộ với tvShowService: controller trả Ok(ApiResponseDTO<object> { Data = result }) — unwrap .data
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
     } catch (error) {
       console.error("[movieService] Error fetching movies:", error);
       console.error("[movieService] Response data:", error?.response?.data);

@@ -21,6 +21,7 @@ import HomePage from "../pages/user/Homepage";
 import MovieInfoPage from "../pages/user/MovieInfoPage";
 import MovieDetailPage from "../pages/user/MovieDetailPage";
 import LandingPage from "../pages/Landingpage";
+import AboutUs from "../pages/AboutUs";
 import Navbar from "../components/layout/Navbar";
 import SearchPage from "../pages/user/Searchpage";
 import BrowsePage from "../pages/user/BrowsePage";
@@ -35,6 +36,7 @@ import TvShowInfoPage from "../pages/user/TvShowInfoPage";
 import TvShowDetailPage from "../pages/user/TvShowDetailPage";
 import PremiumPage from "../pages/PremiumPage";
 import PaymentResultPage from "../pages/PaymentResultPage";
+import { useToast } from "../components/common/Toast";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const isLoggedIn = () => {
@@ -53,9 +55,24 @@ const WithNavbar = () => (
   </>
 );
 
-/** Chỉ cho vào khi đã đăng nhập */
-const ProtectedRoute = ({ children }) =>
-  isLoggedIn() ? children : <Navigate to="/welcome" replace />;
+/** Chỉ cho vào khi đã đăng nhập — chưa đăng nhập thì báo toast + redirect về Trang chủ */
+const ProtectedRoute = ({ children }) => {
+  const toast = useToast();
+  const loggedIn = isLoggedIn();
+  const warnedRef = React.useRef(false);
+
+  useEffect(() => {
+    // Guard chống bắn 2 lần: do React.StrictMode (dev) invoke effect 2 lần,
+    // hoặc do component re-render trước khi Navigate kịp unmount nó.
+    if (!loggedIn && !warnedRef.current) {
+      warnedRef.current = true;
+      toast.warning("Bạn cần đăng nhập để sử dụng tính năng này");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn]);
+
+  return loggedIn ? children : <Navigate to="/" replace />;
+};
 
 /** Chỉ cho vào khi CHƯA đăng nhập */
 const GuestRoute = ({ children }) =>
@@ -86,12 +103,25 @@ const AppRouter = () => (
       <Route element={<WithNavbar />}>
         {/* Công khai — không cần đăng nhập */}
         <Route path="/" element={<HomePage />} />
+
+        {/* Trang giới thiệu (splash/marketing) — nằm chung layout với Navbar
+            để Navbar KHÔNG bị remount/reload mỗi khi vào lại /intro.
+            Nút "Đăng nhập" trong trang này tự điều hướng sang /welcome.
+            Chỉ hiển thị cho khách, đã đăng nhập rồi thì đá thẳng về "/". */}
+        <Route
+          path="/about-us"
+          element={
+            <GuestRoute>
+              <AboutUs />
+            </GuestRoute>
+          }
+        />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
         <Route path="/tvshow/:id/info" element={<TvShowInfoPage />} />
         <Route path="/person/:id" element={<PersonPage />} />
-        <Route path="/comingsoon" element={<ComingSoonPage />} />
+        <Route path="/coming-soon" element={<ComingSoonPage />} />
         <Route path="/premium" element={<PremiumPage />} />
 
         {/* Xem phim — KHÔNG bắt buộc đăng nhập nữa. Guard nội dung Premium */}
@@ -161,7 +191,7 @@ const AppRouter = () => (
           isLoggedIn() ? (
             <Navigate to="/" replace />
           ) : (
-            <Navigate to="/welcome" replace />
+            <Navigate to="/about-us" replace />
           )
         }
       />
