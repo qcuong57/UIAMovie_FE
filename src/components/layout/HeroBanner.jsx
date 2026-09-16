@@ -257,8 +257,9 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
       <div
         className="relative bg-cover bg-center flex items-end overflow-hidden"
         style={{
-          height: isMobile ? "75vw" : "100vh",
-          minHeight: isMobile ? 320 : 500,
+          height: isMobile ? "75vh" : "100vh",
+          minHeight: isMobile ? 480 : 520,
+          maxHeight: isMobile ? 640 : "none",
         }}
       >
         {/* ── Background ── */}
@@ -280,8 +281,8 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
         </AnimatePresence>
 
         {/* Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/20 pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-transparent to-transparent pointer-events-none" />
 
         {/* ── Content ── */}
         <AnimatePresence custom={direction} initial={false} mode="wait">
@@ -293,20 +294,20 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
             animate="center"
             exit="exit"
             transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-            className="relative z-10 max-w-3xl"
+            className="relative z-10 w-full max-w-3xl"
             style={{
               paddingLeft: isMobile ? 16 : 32,
               paddingRight: isMobile ? 16 : 32,
-              paddingBottom: isMobile ? 48 : 112,
+              paddingBottom: isMobile ? 54 : 112,
             }}
           >
-            {/* Type badge */}
+            {/* Type badge & Premium */}
             <div
               style={{
                 marginBottom: isMobile ? 6 : 10,
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
                 flexWrap: "wrap",
               }}
             >
@@ -314,18 +315,19 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 5,
-                  padding: "4px 10px",
+                  gap: 4,
+                  padding: isMobile ? "2px 8px" : "4px 10px",
                   borderRadius: 99,
                   fontSize: isMobile ? 10 : 11,
                   fontWeight: 700,
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   background: activeItem.isTvShow
-                    ? "rgba(126,174,232,0.18)"
-                    : "rgba(229,24,30,0.18)",
+                    ? "rgba(126,174,232,0.2)"
+                    : "rgba(229,24,30,0.2)",
                   border: `1px solid ${activeItem.isTvShow ? "rgba(126,174,232,0.4)" : "rgba(229,24,30,0.4)"}`,
-                  color: activeItem.isTvShow ? "#7eaee8" : "#e5181e",
+                  color: activeItem.isTvShow ? "#7eaee8" : "#ff3b42",
+                  lineHeight: 1.4,
                 }}
               >
                 {activeItem.isTvShow ? (
@@ -333,7 +335,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                 ) : (
                   <Film size={11} strokeWidth={2.5} />
                 )}
-                {activeItem.isTvShow ? "TV Series" : "Movies"}
+                {activeItem.isTvShow ? "TV Series" : "Movie"}
               </span>
 
               {/* Premium badge */}
@@ -344,18 +346,19 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 5,
-                    padding: "4px 10px",
+                    gap: 4,
+                    padding: isMobile ? "2px 8px" : "4px 10px",
                     borderRadius: 99,
                     fontSize: isMobile ? 10 : 11,
                     fontWeight: 800,
-                    letterSpacing: "0.1em",
+                    letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     background:
                       "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(245,158,11,0.22))",
                     border: "1px solid rgba(250,204,21,0.5)",
                     color: "#fbbf24",
                     boxShadow: "0 0 12px rgba(250,204,21,0.18)",
+                    lineHeight: 1.4,
                   }}
                 >
                   <Crown size={10} fill="#fbbf24" color="#fbbf24" />
@@ -364,12 +367,12 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               )}
             </div>
 
-            {/* Meta pills */}
+            {/* Meta pills (Rating, Year, Duration, Genre) */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 6,
+                gap: 5,
                 flexWrap: "wrap",
                 marginBottom: isMobile ? 8 : 16,
               }}
@@ -377,21 +380,26 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               {activeItem.rating > 0 && (
                 <div
                   style={{
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
-                    gap: 5,
-                    padding: "5px 11px",
+                    gap: 4,
+                    padding: isMobile ? "2px 7px" : "4px 10px",
                     borderRadius: 99,
                     background: "rgba(245,197,24,0.15)",
                     border: "1px solid rgba(245,197,24,0.35)",
+                    lineHeight: 1.3,
                   }}
                 >
                   <Star
-                    size={12}
+                    size={isMobile ? 11 : 12}
                     style={{ fill: "#f5c518", color: "#f5c518" }}
                   />
                   <span
-                    style={{ fontSize: 13, fontWeight: 700, color: "#f5c518" }}
+                    style={{
+                      fontSize: isMobile ? 11 : 13,
+                      fontWeight: 700,
+                      color: "#f5c518",
+                    }}
                   >
                     {activeItem.rating}
                   </span>
@@ -401,13 +409,14 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               {activeItem.year && (
                 <span
                   style={{
-                    fontSize: 12,
+                    fontSize: isMobile ? 11 : 12,
                     fontWeight: 600,
-                    color: "rgba(255,255,255,0.6)",
-                    padding: "5px 11px",
+                    color: "rgba(255,255,255,0.75)",
+                    padding: isMobile ? "2px 7px" : "4px 10px",
                     borderRadius: 99,
                     background: "rgba(255,255,255,0.08)",
                     border: "1px solid rgba(255,255,255,0.12)",
+                    lineHeight: 1.3,
                   }}
                 >
                   {activeItem.year}
@@ -420,7 +429,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                     fontSize: 12,
                     fontWeight: 600,
                     color: "rgba(255,255,255,0.6)",
-                    padding: "5px 11px",
+                    padding: "4px 10px",
                     borderRadius: 99,
                     background: "rgba(255,255,255,0.08)",
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -432,20 +441,18 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                 </span>
               )}
 
-              {activeItem.genres?.slice(0, isMobile ? 1 : 3).map((g) => (
+              {activeItem.genres?.slice(0, isMobile ? 2 : 3).map((g) => (
                 <span
                   key={g}
                   style={{
-                    fontSize: isMobile ? 11 : 12,
+                    fontSize: isMobile ? 10.5 : 12,
                     fontWeight: 600,
-                    color: "rgba(255,255,255,0.7)",
-                    padding: isMobile ? "3px 8px" : "5px 11px",
+                    color: "rgba(255,255,255,0.8)",
+                    padding: isMobile ? "2px 8px" : "4px 10px",
                     borderRadius: 99,
                     background: "rgba(255,255,255,0.1)",
                     border: "1px solid rgba(255,255,255,0.15)",
-                    maxWidth: isMobile ? 90 : "none",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
+                    lineHeight: 1.3,
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -459,9 +466,9 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               className="font-black leading-tight text-white drop-shadow-lg"
               style={{
                 fontSize: isMobile
-                  ? "clamp(22px, 6vw, 36px)"
-                  : "clamp(40px, 6vw, 72px)",
-                marginBottom: isMobile ? 8 : 16,
+                  ? "clamp(20px, 5.5vw, 28px)"
+                  : "clamp(36px, 5vw, 64px)",
+                marginBottom: isMobile ? 6 : 14,
               }}
             >
               {activeItem.title}
@@ -470,10 +477,10 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
             {/* Description */}
             <p
               style={{
-                marginBottom: isMobile ? 10 : 32,
-                fontSize: isMobile ? 11 : 16,
+                marginBottom: isMobile ? 14 : 28,
+                fontSize: isMobile ? 12 : 15,
                 color: "rgba(255,255,255,0.75)",
-                lineHeight: 1.6,
+                lineHeight: 1.5,
                 overflow: "hidden",
                 display: "-webkit-box",
                 WebkitLineClamp: isMobile ? 2 : 3,
@@ -484,15 +491,15 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
             </p>
 
             {/* Buttons */}
-            <div className="flex gap-4 flex-wrap">
+            <div className="flex gap-2.5 md:gap-4 items-center">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={handlePlay}
-                className="font-bold rounded-lg flex items-center gap-2"
+                className="font-bold rounded-lg flex items-center gap-1.5"
                 style={{
-                  padding: isMobile ? "8px 16px" : "12px 32px",
-                  fontSize: isMobile ? 13 : 16,
+                  padding: isMobile ? "7px 14px" : "11px 28px",
+                  fontSize: isMobile ? 12.5 : 15,
                   background: isPremiumLocked
                     ? "linear-gradient(135deg, #fbbf24, #f59e0b)"
                     : "#ffffff",
@@ -506,51 +513,51 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               >
                 {isPremiumLocked ? (
                   <>
-                    <Crown size={18} fill="#1c1400" color="#1c1400" /> Mở khoá
-                    Premium
+                    <Crown size={15} fill="#1c1400" color="#1c1400" /> Mở khoá
                   </>
                 ) : (
                   <>
-                    <Play size={20} fill="currentColor" /> Phát
+                    <Play size={16} fill="currentColor" /> Phát
                   </>
                 )}
               </motion.button>
+
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => navigate(infoPath)}
-                className="bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 flex items-center gap-2 border border-white/30"
+                className="bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 flex items-center gap-1.5 border border-white/30"
                 style={{
-                  padding: isMobile ? "8px 16px" : "12px 32px",
-                  fontSize: isMobile ? 13 : 16,
+                  padding: isMobile ? "7px 14px" : "11px 28px",
+                  fontSize: isMobile ? 12.5 : 15,
                 }}
               >
-                <Info size={20} />
+                <Info size={16} />
                 Chi tiết
               </motion.button>
             </div>
           </motion.div>
         </AnimatePresence>
 
-        {/* ── Dots + Prev/Next ── */}
+        {/* ── Dots + Prev/Next Controls ── */}
         {slides.length > 1 && (
           <div
             className="absolute z-20 flex items-center gap-3"
             style={{
-              bottom: isMobile ? 12 : 32,
+              bottom: isMobile ? 14 : 28,
               right: isMobile ? "auto" : 32,
               left: isMobile ? 16 : "auto",
             }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {slides.map((slide, i) => (
                 <button
                   key={i}
                   onClick={() => goTo(i)}
                   className="relative overflow-hidden rounded-full transition-all duration-300"
                   style={{
-                    width: i === current ? 28 : 8,
-                    height: 8,
+                    width: i === current ? (isMobile ? 20 : 28) : 6,
+                    height: 6,
                     background:
                       i === current
                         ? slide.isTvShow
@@ -584,15 +591,15 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
                 <button
                   key={i}
                   onClick={fn}
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
                   style={{
-                    background: "rgba(0,0,0,0.55)",
+                    background: "rgba(0,0,0,0.6)",
                     border: "1px solid rgba(255,255,255,0.15)",
                     backdropFilter: "blur(8px)",
                     color: "#fff",
                   }}
                 >
-                  <Icon size={16} strokeWidth={2.5} />
+                  <Icon size={14} strokeWidth={2.5} />
                 </button>
               ))}
             </div>
@@ -600,7 +607,6 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
         )}
       </div>
 
-      {/* Premium Gate Modal — portal ra ngoài stacking context của banner */}
       {createPortal(
         <PremiumGateModal
           open={showPremiumGate}

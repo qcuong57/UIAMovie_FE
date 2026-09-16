@@ -2,7 +2,7 @@
 // Trang thông tin chi tiết phim — hiển thị trước khi vào xem phim
 // Route: /movie/:id/info → /movie/:id (player)
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
@@ -28,18 +28,23 @@ import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import { useToast } from "../../components/common/Toast";
 
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * Kiểm tra user hiện tại có gói Premium không.
- * Điều chỉnh theo cách bạn lưu thông tin user (JWT claim, localStorage, context…).
- */
+function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function userHasPremium(user) {
   if (!user) return false;
-  // Tuỳ backend: user.isPremium / user.plan === 'premium' / user.subscription?.active
   return (
     user.isPremium === true ||
     user.plan === "premium" ||
@@ -54,6 +59,7 @@ export default function MovieInfoPage() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [movie, setMovie] = useState(null);
   const [cast, setCast] = useState([]);
@@ -62,21 +68,18 @@ export default function MovieInfoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
+  
+  // ── Favorite state ──
   const [isFav, setIsFav] = useState(false);
-  const [activeTab, setActiveTab] = useState("cast"); // 'cast' | 'reviews' | 'details'
+  const [favLoading, setFavLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("cast");
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  // ── Premium gate state ───────────────────────────────────────────
+  // ── Premium gate state ──
   const [showPremiumGate, setShowPremiumGate] = useState(false);
 
-  const [currentUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem("currentUser");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUser] = useState(() => getCurrentUser());
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -92,8 +95,20 @@ export default function MovieInfoPage() {
     setLoading(true);
     setError(null);
     try {
-      const movieRes = await movieService.getMovieById(id);
-      const raw = movieRes?.movie || movieRes;
+      const [movieRes, favRes] = await Promise.all([
+        movieService.getMovieById(id),
+        movieService.getFavorites().catch(() => []),
+      ]);
+      const raw = movieRes?.movie || movieRes?.data || movieRes;
+
+      // Đồng bộ trạng thái yêu thích ban đầu
+      const rawFavs = Array.isArray(favRes)
+        ? favRes
+        : favRes?.data || favRes?.favorites || favRes?.items || [];
+      const favorited = rawFavs.some(
+        (f) => String(f.movieId ?? f.id ?? f.movie?.id) === String(id)
+      );
+      setIsFav(favorited);
 
       const normalized = {
         id: raw.id,
@@ -115,14 +130,12 @@ export default function MovieInfoPage() {
         budget: raw.budget,
         revenue: raw.revenue,
         tmdbId: raw.tmdbId,
-        isPremium: raw.isPremium ?? false, // ← giữ lại trường này
+        isPremium: raw.isPremium ?? false,
         trailerKey:
           raw.trailerKey ||
           extractYoutubeKey(
             raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
           ),
-        // Trailer tự upload lên Cloudinary — chạy song song với trailerKey (Youtube).
-        // Youtube được ưu tiên phát trước nếu phim có cả 2 (xem TrailerModal).
         trailerVideoUrl:
           raw.trailerVideoUrl ||
           raw.videos?.find((v) => v.videoType === "trailer_upload")?.videoUrl ||
@@ -176,6 +189,36 @@ export default function MovieInfoPage() {
     }
   };
 
+  // ── Logic Toggle Favorite ──
+  const handleToggleFav = useCallback(async () => {
+    if (favLoading) return;
+
+    if (!getCurrentUser()) {
+      toast?.warning?.("Bạn cần đăng nhập để thêm vào Yêu thích");
+      return;
+    }
+
+    setFavLoading(true);
+    const nextState = !isFav;
+    setIsFav(nextState);
+
+    try {
+      if (!nextState) {
+        await movieService.removeFavorite(id);
+        toast?.info?.(`"${movie?.title}" đã được bỏ khỏi Yêu thích`);
+      } else {
+        await movieService.addFavorite(id);
+        toast?.success?.(`Đã thêm "${movie?.title}" vào Yêu thích`);
+      }
+    } catch (err) {
+      console.error("[MovieInfoPage] Fav Error:", err);
+      setIsFav(!nextState); // Rollback nếu lỗi API
+      toast?.error?.("Không thể cập nhật Yêu thích, vui lòng thử lại");
+    } finally {
+      setFavLoading(false);
+    }
+  }, [favLoading, isFav, id, movie?.title, toast]);
+
   // ── Derived ─────────────────────────────────────────────────────
   const directors =
     directorsFromMovie.length > 0
@@ -203,12 +246,6 @@ export default function MovieInfoPage() {
         .filter(Boolean)
     : [];
 
-  // ── Premium guard ────────────────────────────────────────────────
-  /**
-   * Gọi hàm này thay vì navigate trực tiếp.
-   * Nếu phim là premium và user chưa có gói → show modal.
-   * Ngược lại → vào xem bình thường.
-   */
   const handlePlay = () => {
     if (movie?.isPremium && !userHasPremium(currentUser)) {
       setShowPremiumGate(true);
@@ -300,7 +337,7 @@ export default function MovieInfoPage() {
         firstTrailerVideoUrl={firstTrailerVideoUrl}
         hasTrailer={hasTrailer}
         isFav={isFav}
-        onToggleFav={() => setIsFav((v) => !v)}
+        onToggleFav={handleToggleFav}
         onPlay={handlePlay}
         onTrailer={() => setShowTrailer(true)}
         imgLoaded={imgLoaded}

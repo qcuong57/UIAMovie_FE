@@ -1,14 +1,14 @@
 // src/pages/user/ComingSoonPage.jsx
-// ─── Trang "Phim Sắp Chiếu" — full page, thay thế TrendingPage ────────────────
-//
-// Data flow: giống ComingSoonSection nhưng lấy toàn bộ danh sách, nhóm theo
-// tháng phát hành, có tab lọc Phim/TV Series, và featured hero cho item gần
-// ngày ra mắt nhất. Fail-graceful: lỗi/rỗng → empty state, không crash app.
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CalendarClock, Film, Tv, Inbox, RotateCcw } from "lucide-react";
-import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeTokens";
+import {
+  C,
+  FONT_DISPLAY,
+  FONT_BODY,
+  GOOGLE_FONTS,
+} from "../../context/homeTokens";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { sortComingSoonMovies } from "../../utils/releaseDateUtils";
 import movieService from "../../services/movieService";
@@ -16,13 +16,11 @@ import tvShowService from "../../services/tvShowService";
 import BackButton from "../../components/common/BackButton";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import SectionReveal from "../../motion-configs/SectionReveal";
-import { STAGGER_NORMAL } from "../../motion-configs/transitions";
 import ComingSoonFeatured from "../../components/home/coming-soon/ComingSoonFeatured";
 import ComingSoonCard from "../../components/home/coming-soon/ComingSoonCard";
 
-const ACCENT = C.gold; // token màu riêng cho tính năng "Sắp Chiếu" — khớp accentColor dùng ở HomePage
+const ACCENT = C.gold;
 
-// ── Normalizer — khớp với ComingSoonSection.jsx ──────────────────────────────
 const normalizeMovie = (m) => ({
   id: m.id,
   title: m.title,
@@ -54,11 +52,26 @@ const normalizeTvShow = (s) => ({
 const extractItems = (data) =>
   Array.isArray(data)
     ? data
-    : (data?.items ?? data?.movies ?? data?.tvShows ?? data?.data?.items ?? data?.data ?? []);
+    : (data?.items ??
+      data?.movies ??
+      data?.tvShows ??
+      data?.data?.items ??
+      data?.data ??
+      []);
 
 const MONTH_LABELS = [
-  "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
-  "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
+  "Tháng 1",
+  "Tháng 2",
+  "Tháng 3",
+  "Tháng 4",
+  "Tháng 5",
+  "Tháng 6",
+  "Tháng 7",
+  "Tháng 8",
+  "Tháng 9",
+  "Tháng 10",
+  "Tháng 11",
+  "Tháng 12",
 ];
 
 const monthKeyOf = (item) => {
@@ -75,7 +88,6 @@ const monthLabelOf = (key) => {
   return `${MONTH_LABELS[month]}, ${year}`;
 };
 
-// ── Tabs lọc loại nội dung ────────────────────────────────────────────────
 const TABS = [
   { value: "all", label: "Tất Cả", icon: CalendarClock },
   { value: "movie", label: "Phim", icon: Film },
@@ -87,13 +99,17 @@ function FilterTabs({ active, onChange, counts, isMobile }) {
     <div
       role="tablist"
       style={{
-        display: "flex",
-        gap: 6,
-        padding: 4,
+        display: "inline-flex",
+        gap: 4,
+        padding: 3,
         borderRadius: 10,
         background: C.surface,
         border: `1px solid ${C.border}`,
-        width: "fit-content",
+        width: "fit-content", // Giúp tab ôm trọn vừa vặn
+        maxWidth: "100%",
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       {TABS.map((tab) => {
@@ -109,18 +125,19 @@ function FilterTabs({ active, onChange, counts, isMobile }) {
               position: "relative",
               display: "flex",
               alignItems: "center",
-              gap: 6,
-              padding: isMobile ? "7px 12px" : "8px 16px",
+              gap: 5,
+              padding: isMobile ? "6px 10px" : "8px 16px",
               borderRadius: 7,
               border: "none",
               cursor: "pointer",
               background: "transparent",
               fontFamily: FONT_BODY,
-              fontSize: isMobile ? 12 : 13,
+              fontSize: isMobile ? 11.5 : 13,
               fontWeight: 700,
               color: isActive ? C.bg : C.textSub,
               transition: "color 0.25s ease",
               whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
             {isActive && (
@@ -136,16 +153,18 @@ function FilterTabs({ active, onChange, counts, isMobile }) {
                 }}
               />
             )}
-            <span style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-              <Icon size={13} strokeWidth={2.5} />
+            <span
+              style={{
+                position: "relative",
+                zIndex: 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <Icon size={isMobile ? 12 : 13} strokeWidth={2.5} />
               {tab.label}
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  opacity: 0.75,
-                }}
-              >
+              <span style={{ fontSize: 10.5, fontWeight: 700, opacity: 0.85 }}>
                 {counts[tab.value] ?? 0}
               </span>
             </span>
@@ -156,7 +175,6 @@ function FilterTabs({ active, onChange, counts, isMobile }) {
   );
 }
 
-// ── Empty / error state — tinh gọn, không loè loẹt ───────────────────────
 const StateNotice = ({ icon: Icon, title, description, onRetry }) => (
   <div
     style={{
@@ -164,19 +182,19 @@ const StateNotice = ({ icon: Icon, title, description, onRetry }) => (
       flexDirection: "column",
       alignItems: "center",
       textAlign: "center",
-      padding: "80px 24px",
+      padding: "60px 20px",
     }}
   >
     <div
       style={{
-        width: 56,
-        height: 56,
+        width: 52,
+        height: 52,
         borderRadius: "50%",
         border: `1px solid ${C.borderMid}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 24,
+        marginBottom: 18,
       }}
     >
       <Icon size={20} color={C.textSub} strokeWidth={1.5} />
@@ -184,7 +202,7 @@ const StateNotice = ({ icon: Icon, title, description, onRetry }) => (
     <h3
       style={{
         fontFamily: FONT_DISPLAY,
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 700,
         color: C.text,
         marginBottom: 8,
@@ -192,21 +210,28 @@ const StateNotice = ({ icon: Icon, title, description, onRetry }) => (
     >
       {title}
     </h3>
-    <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.textSub, lineHeight: 1.6, maxWidth: 360, marginBottom: onRetry ? 24 : 0 }}>
+    <p
+      style={{
+        fontFamily: FONT_BODY,
+        fontSize: 13,
+        color: C.textSub,
+        lineHeight: 1.5,
+        maxWidth: 360,
+        marginBottom: onRetry ? 20 : 0,
+      }}
+    >
       {description}
     </p>
     {onRetry && (
-      // Đồng bộ với nút "Thử lại" ở HomePage (ErrorScreen): nền đỏ đặc C.accent,
-      // chữ trắng — thay vì outline nhạt như trước (khác hệ thống CTA chung).
       <motion.button
-        whileHover={{ scale: 1.03, filter: "brightness(1.08)" }}
+        whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.98 }}
         onClick={onRetry}
         style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
-          padding: "10px 24px",
+          padding: "9px 22px",
           borderRadius: 6,
           background: C.accent,
           border: "none",
@@ -224,12 +249,18 @@ const StateNotice = ({ icon: Icon, title, description, onRetry }) => (
   </div>
 );
 
-// ── Nhóm phim theo tháng ──────────────────────────────────────────────────
-function MonthGroup({ monthKey, items, index }) {
+function MonthGroup({ monthKey, items, index, isMobile }) {
   return (
     <SectionReveal variant="fade" delay={Math.min(index * 0.05, 0.3)}>
-      <div style={{ marginBottom: 40 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+      <div style={{ marginBottom: isMobile ? 28 : 40 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: isMobile ? 14 : 18,
+          }}
+        >
           <span
             style={{
               width: 6,
@@ -242,7 +273,7 @@ function MonthGroup({ monthKey, items, index }) {
           <h3
             style={{
               fontFamily: FONT_DISPLAY,
-              fontSize: 14,
+              fontSize: isMobile ? 13 : 15,
               fontWeight: 700,
               letterSpacing: "0.02em",
               color: C.text,
@@ -254,9 +285,24 @@ function MonthGroup({ monthKey, items, index }) {
           <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 18, rowGap: 26 }}>
+        {/* Grid phim: 2 cột trên mobile, co giãn tự động trên desktop */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile
+              ? "repeat(2, 1fr)"
+              : "repeat(auto-fill, minmax(180px, 1fr))",
+            gap: isMobile ? 10 : 18,
+            rowGap: isMobile ? 16 : 24,
+          }}
+        >
           {items.map((item) => (
-            <ComingSoonCard key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`} item={item} accentColor={ACCENT} />
+            <div
+              key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`}
+              style={{ width: "100%" }}
+            >
+              <ComingSoonCard item={item} accentColor={ACCENT} />
+            </div>
           ))}
         </div>
       </div>
@@ -264,10 +310,9 @@ function MonthGroup({ monthKey, items, index }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 export default function ComingSoonPage() {
   const isMobile = useIsMobile();
-  const [status, setStatus] = useState("loading"); // loading | ready | empty | error
+  const [status, setStatus] = useState("loading");
   const [allItems, setAllItems] = useState([]);
   const [tab, setTab] = useState("all");
 
@@ -275,9 +320,19 @@ export default function ComingSoonPage() {
     setStatus("loading");
     try {
       const [moviesRes, tvRes] = await Promise.all([
-        movieService.getMovies({ isUpcoming: true, sortBy: "releaseDate", sortDesc: false, pageSize: 100 }),
+        movieService.getMovies({
+          isUpcoming: true,
+          sortBy: "releaseDate",
+          sortDesc: false,
+          pageSize: 100,
+        }),
         tvShowService
-          .getTvShows({ isUpcoming: true, sortBy: "firstAirDate", sortDesc: false, pageSize: 100 })
+          .getTvShows({
+            isUpcoming: true,
+            sortBy: "firstAirDate",
+            sortDesc: false,
+            pageSize: 100,
+          })
           .catch(() => []),
       ]);
 
@@ -308,7 +363,7 @@ export default function ComingSoonPage() {
       movie: allItems.filter((i) => !i.isTvShow).length,
       tv: allItems.filter((i) => i.isTvShow).length,
     }),
-    [allItems]
+    [allItems],
   );
 
   const filtered = useMemo(() => {
@@ -332,10 +387,6 @@ export default function ComingSoonPage() {
 
   return (
     <>
-      {/* Loader ở lại nguyên vẹn cho đến khi status rời khỏi "loading" —
-          bọc trong AnimatePresence để hiệu ứng exit (trượt lên) của
-          LoadingScreen thực sự chạy được, thay vì bị unmount ngay lập tức
-          như early-return trước đây. */}
       <AnimatePresence>
         {status === "loading" && <LoadingScreen key="loading-screen" />}
       </AnimatePresence>
@@ -344,105 +395,131 @@ export default function ComingSoonPage() {
         <>
           <style>{GOOGLE_FONTS}</style>
 
-      <div style={{ minHeight: "100vh", background: C.bg, color: C.text }}>
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: "0 auto",
-            width: "100%",
-            // paddingTop bù cho Navbar fixed (~64-72px) + khoảng thở, thay vì
-            // marginTop:50 cũ (nhỏ hơn chiều cao Navbar thật → bị đè/lệch)
-            padding: isMobile ? "96px 16px 80px" : "112px 48px 100px",
-          }}
-        >
-          {/* ── Header ── */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 8 }}>
-            <BackButton />
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-            style={{
-              display: "flex",
-              alignItems: isMobile ? "flex-start" : "flex-end",
-              justifyContent: "space-between",
-              flexDirection: isMobile ? "column" : "row",
-              gap: isMobile ? 18 : 0,
-              margin: isMobile ? "8px 0 28px" : "8px 0 36px",
-            }}
-          >
-            <div>
-              <h1
+          <div style={{ minHeight: "100vh", background: C.bg, color: C.text }}>
+            <div
+              style={{
+                maxWidth: 1280,
+                margin: "0 auto",
+                width: "100%",
+                padding: isMobile ? "80px 14px 60px" : "112px 48px 100px",
+              }}
+            >
+              {/* Header */}
+              <div
                 style={{
-                  fontFamily: FONT_DISPLAY,
-                  fontSize: isMobile ? 26 : 36,
-                  fontWeight: 800,
-                  color: C.text,
-                  letterSpacing: "-0.01em",
-                  margin: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  marginBottom: 8,
                 }}
               >
-                Phim Sắp Chiếu
-              </h1>
-              <p style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.textSub, margin: "8px 0 0" }}>
-                Cập nhật những tựa phim &amp; series sắp ra mắt, đừng bỏ lỡ.
-              </p>
-            </div>
+                <BackButton />
+              </div>
 
-            {status === "ready" && (
-              <FilterTabs active={tab} onChange={setTab} counts={counts} isMobile={isMobile} />
-            )}
-          </motion.div>
-
-          {/* ── Content ── */}
-          {status === "error" && (
-            <StateNotice
-              icon={Inbox}
-              title="Không tải được dữ liệu"
-              description="Đã có lỗi xảy ra khi tải danh sách phim sắp chiếu. Vui lòng thử lại."
-              onRetry={load}
-            />
-          )}
-
-          {status === "empty" && (
-            <StateNotice
-              icon={CalendarClock}
-              title="Chưa có phim sắp chiếu"
-              description="Hiện chưa có tựa phim hoặc series nào được lên lịch. Hãy quay lại sau nhé."
-            />
-          )}
-
-          {status === "ready" && (
-            <AnimatePresence mode="wait">
               <motion.div
-                key={tab}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.28 }}
+                transition={{ duration: 0.4 }}
+                style={{
+                  display: "flex",
+                  alignItems: isMobile ? "flex-start" : "flex-end", // Tránh giãn dài toàn màn hình
+                  justifyContent: "space-between",
+                  flexDirection: isMobile ? "column" : "row",
+                  gap: isMobile ? 12 : 0,
+                  margin: isMobile ? "6px 0 20px" : "8px 0 36px",
+                }}
               >
-                {featured && <ComingSoonFeatured item={featured} accentColor={ACCENT} />}
+                <div>
+                  <h1
+                    style={{
+                      fontFamily: FONT_DISPLAY,
+                      fontSize: isMobile ? 24 : 36,
+                      fontWeight: 800,
+                      color: C.text,
+                      letterSpacing: "-0.01em",
+                      margin: 0,
+                    }}
+                  >
+                    Phim Sắp Chiếu
+                  </h1>
+                  <p
+                    style={{
+                      fontFamily: FONT_BODY,
+                      fontSize: isMobile ? 12 : 13,
+                      color: C.textSub,
+                      margin: "6px 0 0",
+                    }}
+                  >
+                    Cập nhật những tựa phim &amp; series sắp ra mắt, đừng bỏ lỡ.
+                  </p>
+                </div>
 
-                {grouped.length > 0 ? (
-                  grouped.map(([monthKey, items], i) => (
-                    <MonthGroup key={monthKey} monthKey={monthKey} items={items} index={i} />
-                  ))
-                ) : (
-                  !featured && (
-                    <StateNotice
-                      icon={CalendarClock}
-                      title="Không có kết quả"
-                      description="Không tìm thấy nội dung phù hợp với bộ lọc hiện tại."
-                    />
-                  )
+                {status === "ready" && (
+                  <FilterTabs
+                    active={tab}
+                    onChange={setTab}
+                    counts={counts}
+                    isMobile={isMobile}
+                  />
                 )}
               </motion.div>
-            </AnimatePresence>
-          )}
-        </div>
-      </div>
+
+              {/* Content */}
+              {status === "error" && (
+                <StateNotice
+                  icon={Inbox}
+                  title="Không tải được dữ liệu"
+                  description="Đã có lỗi xảy ra khi tải danh sách phim sắp chiếu. Vui lòng thử lại."
+                  onRetry={load}
+                />
+              )}
+
+              {status === "empty" && (
+                <StateNotice
+                  icon={CalendarClock}
+                  title="Chưa có phim sắp chiếu"
+                  description="Hiện chưa có tựa phim hoặc series nào được lên lịch."
+                />
+              )}
+
+              {status === "ready" && (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={tab}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.28 }}
+                  >
+                    {featured && (
+                      <ComingSoonFeatured
+                        item={featured}
+                        accentColor={ACCENT}
+                      />
+                    )}
+
+                    {grouped.length > 0
+                      ? grouped.map(([monthKey, items], i) => (
+                          <MonthGroup
+                            key={monthKey}
+                            monthKey={monthKey}
+                            items={items}
+                            index={i}
+                            isMobile={isMobile}
+                          />
+                        ))
+                      : !featured && (
+                          <StateNotice
+                            icon={CalendarClock}
+                            title="Không có kết quả"
+                            description="Không tìm thấy nội dung phù hợp với bộ lọc hiện tại."
+                          />
+                        )}
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </div>
+          </div>
         </>
       )}
     </>

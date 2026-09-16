@@ -1,6 +1,6 @@
 // src/components/home/TopRankedRow.jsx
-// ─── Top 10: 5 phim/trang, không scroll nội bộ, poster xéo, hover đầy đủ ───
-// ─── Hỗ trợ cả Movie lẫn TV Show — favorite API đồng bộ hoàn toàn ────────────
+// ─── Top 10: 5 phim/trang (Desktop), 2 phim/trang (Mobile) ─────────────
+// ─── Đồng bộ giao diện card trên Mobile giống MovieCard ──────────────
 
 import React, { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Star,
   Loader,
-  Tv,
   Crown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -41,13 +40,11 @@ function userHasPremium(user) {
   return user.isPremium === true || user.plan === "premium" || user.subscription?.active === true;
 }
 
-// ── Lỗi xác thực (chưa đăng nhập / hết phiên) ─────────────────────
 function isUnauthorizedError(err) {
   const status = err?.response?.status ?? err?.status;
   return status === 401 || status === 403;
 }
 
-// Lấy message lỗi thật từ server trả về (nếu có), fallback nếu không có
 function getErrorMessage(err, fallback) {
   return (
     err?.response?.data?.message ||
@@ -58,20 +55,17 @@ function getErrorMessage(err, fallback) {
   );
 }
 
-// Portal để modal thoát khỏi stacking context của motion.div (transform+zIndex)
 function ModalPortal({ children }) {
   return createPortal(children, document.body);
 }
 
 const PER_PAGE = 5;
 
-// ── Helper: route đúng theo loại nội dung ─────────────────────────────────────
 const getRoute = (item) =>
   item.isTvShow ? `/tvshow/${item.id}` : `/movie/${item.id}`;
 const getInfoRoute = (item) =>
   item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
 
-// ── Màu stroke số rank theo thứ hạng ─────────────────────────────────────────
 const rankStroke = (rank) =>
   rank === 1
     ? C.accent
@@ -82,7 +76,7 @@ const rankStroke = (rank) =>
         : "rgba(255,255,255,0.2)";
 
 // ══════════════════════════════════════════════════════════════════════════════
-// RankCard — nhận item (movie hoặc tvShow, đã normalize)
+// RankCard
 // ══════════════════════════════════════════════════════════════════════════════
 const RankCard = ({
   movie: item,
@@ -103,7 +97,6 @@ const RankCard = ({
   const matchPct = item.rating ? Math.round(item.rating * 10) : null;
   const isPremiumLocked = item.isPremium && !userHasPremium(getCurrentUser());
 
-  // Sync khi parent cập nhật favorites
   useEffect(() => {
     setLocalFav(
       typeof isFavorited === "function" ? isFavorited(item.id) : isFavorited,
@@ -114,7 +107,6 @@ const RankCard = ({
     e.stopPropagation();
     if (favLoading) return;
 
-    // Chưa đăng nhập → chặn ngay, không optimistic update, không gọi API
     if (!getCurrentUser()) {
       toast.warning("Bạn cần đăng nhập để thêm vào Yêu thích");
       return;
@@ -123,21 +115,18 @@ const RankCard = ({
     const prevFav = localFav;
     const newFav = !localFav;
 
-    // Optimistic update — đổi UI ngay lập tức
     setLocalFav(newFav);
     onFavoriteToggle?.(item, newFav);
 
     setFavLoading(true);
     try {
       if (item.isTvShow) {
-        // TV Show: gọi tvShowService
         if (newFav) {
           await tvShowService.addFavorite?.(item.id);
         } else {
           await tvShowService.removeFavorite?.(item.id);
         }
       } else {
-        // Movie: gọi movieService
         if (newFav) {
           await movieService.addFavorite(item.id);
         } else {
@@ -149,7 +138,6 @@ const RankCard = ({
       );
     } catch (err) {
       console.error("Favorite toggle error:", err);
-      // Rollback nếu API lỗi
       setLocalFav(prevFav);
       onFavoriteToggle?.(item, prevFav);
 
@@ -163,8 +151,192 @@ const RankCard = ({
     }
   };
 
-  // Chiều rộng khoảng lùi cho số rank
-  const rankW = isMobile ? (rank >= 10 ? 58 : 46) : rank >= 10 ? 88 : 68;
+  const handleCardClick = () => {
+    if (isPremiumLocked) {
+      setShowGate(true);
+      return;
+    }
+    navigate(getInfoRoute(item));
+  };
+
+  // ── GIAO DIỆN MOBILE CHUẨN (ĐỒNG BỘ VỚI MOVIECARD.JSX) ──────────────
+  if (isMobile) {
+    return (
+      <div style={{ width: "100%", padding: "0 5px" }}>
+        <div
+          onClick={handleCardClick}
+          style={{
+            position: "relative",
+            borderRadius: 8,
+            overflow: "hidden",
+            aspectRatio: "2/3",
+            background: "#181818",
+            cursor: "pointer",
+          }}
+        >
+          {/* Badge Rank góc trên trái */}
+          <div
+            style={{
+              position: "absolute",
+              top: 6,
+              left: 6,
+              zIndex: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 24,
+              height: 20,
+              padding: "0 6px",
+              borderRadius: 6,
+              background: rank === 1 ? C.accent : "rgba(0,0,0,0.85)",
+              border: `1px solid ${rank === 1 ? C.accent : "rgba(255,255,255,0.2)"}`,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.6)",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: FONT_BEBAS,
+                fontSize: 14,
+                color: "#fff",
+                lineHeight: 1,
+                letterSpacing: "0.05em",
+              }}
+            >
+              #{rank}
+            </span>
+          </div>
+
+          {/* Poster image */}
+          {item.posterUrl && !imgError ? (
+            <img
+              src={item.posterUrl}
+              alt={item.title}
+              onError={() => setImgError(true)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : (
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+              🎬
+            </div>
+          )}
+
+          {/* Rating badge */}
+          {item.rating > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: 6,
+                right: item.isPremium ? 64 : 6,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                padding: "2px 6px",
+                borderRadius: 99,
+                background: "rgba(0,0,0,0.72)",
+                backdropFilter: "blur(6px)",
+                zIndex: 5,
+              }}
+            >
+              <Star size={10} fill="#f5c518" color="#f5c518" />
+              <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 11, fontWeight: 700, color: "#f5c518" }}>
+                {item.rating.toFixed(1)}
+              </span>
+            </div>
+          )}
+
+          {/* Premium badge */}
+          {item.isPremium && (
+            <div
+              style={{
+                position: "absolute",
+                top: 6,
+                right: 6,
+                zIndex: 5,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                padding: "2px 6px",
+                borderRadius: 99,
+                background: "linear-gradient(135deg, rgba(250,204,21,0.92), rgba(245,158,11,0.92))",
+                backdropFilter: "blur(6px)",
+              }}
+            >
+              <Crown size={9} fill="#1c1400" color="#1c1400" />
+              <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 9, fontWeight: 800, color: "#1c1400", letterSpacing: "0.04em" }}>
+                PREMIUM
+              </span>
+            </div>
+          )}
+
+          {/* Nút tim */}
+          <button
+            onClick={handleFavoriteClick}
+            disabled={favLoading}
+            style={{
+              position: "absolute",
+              bottom: 6,
+              right: 6,
+              zIndex: 10,
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              background: localFav ? "#e5181e" : "rgba(0,0,0,0.6)",
+              border: `1.5px solid ${localFav ? "#e5181e" : "rgba(255,255,255,0.3)"}`,
+              backdropFilter: "blur(6px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: favLoading ? "not-allowed" : "pointer",
+              opacity: favLoading ? 0.7 : 1,
+            }}
+          >
+            {favLoading ? (
+              <Loader size={12} color="white" style={{ animation: "spin 0.7s linear infinite" }} />
+            ) : (
+              <Heart size={14} fill={localFav ? "white" : "none"} color="white" strokeWidth={2} />
+            )}
+          </button>
+        </div>
+
+        {/* Title + Year */}
+        <div style={{ paddingTop: 6 }} onClick={handleCardClick}>
+          <p
+            style={{
+              fontFamily: "'Nunito',sans-serif",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#f0f2f8",
+              lineHeight: 1.3,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              marginBottom: 1,
+              cursor: "pointer",
+            }}
+          >
+            {item.title}
+          </p>
+          {item.year && (
+            <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: "#525868" }}>
+              {item.year}
+            </p>
+          )}
+        </div>
+
+        <ModalPortal>
+          <PremiumGateModal
+            open={showGate}
+            onClose={() => setShowGate(false)}
+            movieTitle={item.title}
+          />
+        </ModalPortal>
+      </div>
+    );
+  }
+
+  // ── GIAO DIỆN DESKTOP (POSTER XÉO + SỐ KHỔNG LỒ) ─────────────────────
+  const rankW = rank >= 10 ? 88 : 68;
 
   return (
     <div
@@ -177,14 +349,8 @@ const RankCard = ({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "flex-end",
-        }}
-      >
-        {/* ── Số rank lớn nằm bên trái poster ── */}
+      <div style={{ position: "relative", display: "flex", alignItems: "flex-end" }}>
+        {/* Số rank lớn bên trái poster */}
         <div
           style={{
             position: "absolute",
@@ -198,13 +364,10 @@ const RankCard = ({
             transformOrigin: "bottom left",
           }}
         >
-          {/* Lớp shadow */}
           <span
             style={{
               fontFamily: FONT_BEBAS,
-              fontSize: isMobile
-                ? "clamp(72px, 18vw, 100px)"
-                : "clamp(110px, 10.5vw, 158px)",
+              fontSize: "clamp(110px, 10.5vw, 158px)",
               fontWeight: 400,
               color: "transparent",
               WebkitTextStroke: "1px rgba(0,0,0,0.95)",
@@ -217,13 +380,10 @@ const RankCard = ({
           >
             {rank}
           </span>
-          {/* Số chính (outline stroke) */}
           <span
             style={{
               fontFamily: FONT_BEBAS,
-              fontSize: isMobile
-                ? "clamp(72px, 18vw, 100px)"
-                : "clamp(110px, 10.5vw, 158px)",
+              fontSize: "clamp(110px, 10.5vw, 158px)",
               fontWeight: 400,
               color: "transparent",
               WebkitTextStroke: `2.5px ${rankStroke(rank)}`,
@@ -241,17 +401,14 @@ const RankCard = ({
           </span>
         </div>
 
-        {/* ── Poster ── */}
+        {/* Poster xéo */}
         <motion.div
           animate={{
             y: hovered ? -14 : 0,
             scale: hovered ? 1.07 : 1,
           }}
           transition={{ duration: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
-          onClick={() => {
-            if (isPremiumLocked) { setShowGate(true); return; }
-            navigate(getInfoRoute(item));
-          }}
+          onClick={handleCardClick}
           style={{
             position: "relative",
             zIndex: hovered ? 20 : 1,
@@ -269,7 +426,6 @@ const RankCard = ({
               "polygon(20px 0%, 100% 0%, calc(100% - 20px) 100%, 0% 100%)",
           }}
         >
-          {/* Poster image */}
           {item.posterUrl && !imgError ? (
             <motion.img
               src={item.posterUrl}
@@ -307,7 +463,6 @@ const RankCard = ({
             </div>
           )}
 
-          {/* Rating badge */}
           {item.rating && (
             <div
               style={{
@@ -338,7 +493,6 @@ const RankCard = ({
             </div>
           )}
 
-          {/* Premium badge */}
           {item.isPremium && (
             <div
               style={{
@@ -362,50 +516,6 @@ const RankCard = ({
             </div>
           )}
 
-          {/* Nút tim — chỉ mobile, góc dưới phải nếu là tvShow, trái nếu movie */}
-          {isMobile && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFavoriteClick(e);
-              }}
-              disabled={favLoading}
-              style={{
-                position: "absolute",
-                bottom: 8,
-                right: 8,
-                zIndex: 10,
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                background: localFav ? "#e5181e" : "rgba(0,0,0,0.65)",
-                border: `1.5px solid ${localFav ? "#e5181e" : "rgba(255,255,255,0.3)"}`,
-                backdropFilter: "blur(6px)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: favLoading ? "not-allowed" : "pointer",
-                opacity: favLoading ? 0.7 : 1,
-              }}
-            >
-              {favLoading ? (
-                <Loader
-                  size={11}
-                  color="white"
-                  style={{ animation: "spin 0.7s linear infinite" }}
-                />
-              ) : (
-                <Heart
-                  size={12}
-                  fill={localFav ? "white" : "none"}
-                  color="white"
-                  strokeWidth={2}
-                />
-              )}
-            </button>
-          )}
-
-          {/* Vignette đáy */}
           <div
             style={{
               position: "absolute",
@@ -416,7 +526,6 @@ const RankCard = ({
             }}
           />
 
-          {/* ── Hover overlay đầy đủ ── */}
           <AnimatePresence>
             {hovered && (
               <motion.div
@@ -436,7 +545,6 @@ const RankCard = ({
                   padding: "14px 16px",
                 }}
               >
-                {/* Buttons */}
                 <div
                   style={{
                     display: "flex",
@@ -445,7 +553,6 @@ const RankCard = ({
                     marginBottom: 10,
                   }}
                 >
-                  {/* Play */}
                   <motion.button
                     whileHover={{ scale: 1.15 }}
                     whileTap={{ scale: 0.9 }}
@@ -475,7 +582,6 @@ const RankCard = ({
                     }
                   </motion.button>
 
-                  {/* Favorite */}
                   <motion.button
                     whileHover={{ scale: 1.15 }}
                     whileTap={{ scale: 0.9 }}
@@ -508,7 +614,6 @@ const RankCard = ({
                     )}
                   </motion.button>
 
-                  {/* Thumbs up */}
                   <motion.button
                     whileHover={{ scale: 1.15 }}
                     whileTap={{ scale: 0.9 }}
@@ -529,7 +634,6 @@ const RankCard = ({
                     <ThumbsUp size={12} color="white" strokeWidth={2.5} />
                   </motion.button>
 
-                  {/* More info */}
                   <motion.button
                     whileHover={{ scale: 1.15 }}
                     whileTap={{ scale: 0.9 }}
@@ -555,7 +659,6 @@ const RankCard = ({
                   </motion.button>
                 </div>
 
-                {/* Title */}
                 <p
                   style={{
                     fontFamily: FONT_BODY,
@@ -572,7 +675,6 @@ const RankCard = ({
                   {item.title}
                 </p>
 
-                {/* Meta */}
                 <div
                   style={{
                     display: "flex",
@@ -607,20 +709,6 @@ const RankCard = ({
                       {item.year}
                     </span>
                   )}
-                  {/* {item.isTvShow && (
-                    <span
-                      style={{
-                        fontFamily: FONT_BODY,
-                        fontSize: 10,
-                        color: "#818cf8",
-                        border: "1px solid rgba(129,140,248,0.35)",
-                        borderRadius: 3,
-                        padding: "1px 5px",
-                      }}
-                    >
-                      TV Series
-                    </span>
-                  )} */}
                   {item.genres?.[0] && (
                     <span
                       style={{
@@ -642,7 +730,6 @@ const RankCard = ({
         </motion.div>
       </div>
 
-      {/* Premium Gate Modal — Portal để thoát stacking context */}
       <ModalPortal>
         <PremiumGateModal
           open={showGate}
@@ -655,13 +742,12 @@ const RankCard = ({
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TopRankedRow — PAGINATED (5 phim/trang, không cuộn nội bộ)
-// Nhận prop `movies` (movie) và `tvShows` (TV show), merge và sort theo rating
+// TopRankedRow
 // ══════════════════════════════════════════════════════════════════════════════
 export default function TopRankedRow({
   title = "Top 10 Hôm Nay",
   movies = [],
-  tvShows = [], // ← prop mới
+  tvShows = [],
   isFavorited,
   onFavoriteToggle,
 }) {
@@ -670,7 +756,6 @@ export default function TopRankedRow({
   const [page, setPage] = useState(0);
   const [direction, setDirection] = useState(1);
 
-  // Merge movies + tvShows, sort theo rating, lấy top 10
   const top10 = React.useMemo(() => {
     const all = [...movies, ...tvShows];
     return all.sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 10);
@@ -702,22 +787,21 @@ export default function TopRankedRow({
   };
 
   return (
-    <section style={{ marginBottom: 52 }}>
+    <section style={{ marginBottom: isMobile ? 32 : 52 }}>
       {/* ── Header ── */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: 24,
+          marginBottom: isMobile ? 14 : 24,
         }}
       >
-        {/* Left: title + dot indicators */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div
             style={{
               width: 3,
-              height: 20,
+              height: isMobile ? 16 : 20,
               borderRadius: 99,
               background: C.accent,
               flexShrink: 0,
@@ -726,7 +810,7 @@ export default function TopRankedRow({
           <h2
             style={{
               fontFamily: FONT_DISPLAY,
-              fontSize: isMobile ? 16 : 20,
+              fontSize: isMobile ? 15 : 20,
               fontWeight: 800,
               color: C.text,
               lineHeight: 1,
@@ -739,8 +823,8 @@ export default function TopRankedRow({
           <div
             style={{
               display: "flex",
-              gap: 5,
-              marginLeft: 8,
+              gap: 4,
+              marginLeft: 6,
               alignItems: "center",
             }}
           >
@@ -752,7 +836,7 @@ export default function TopRankedRow({
                   setPage(i);
                 }}
                 style={{
-                  width: i === page ? 22 : 6,
+                  width: i === page ? (isMobile ? 16 : 22) : (isMobile ? 5 : 6),
                   height: 3,
                   borderRadius: 99,
                   cursor: "pointer",
@@ -764,17 +848,17 @@ export default function TopRankedRow({
           </div>
         </div>
 
-        {/* Right: Prev / Next buttons */}
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Prev / Next buttons */}
+        <div style={{ display: "flex", gap: 6 }}>
           {[
             {
               dir: -1,
-              icon: <ChevronLeft size={18} strokeWidth={2} />,
+              icon: <ChevronLeft size={isMobile ? 15 : 18} strokeWidth={2} />,
               can: canLeft,
             },
             {
               dir: 1,
-              icon: <ChevronRight size={18} strokeWidth={2} />,
+              icon: <ChevronRight size={isMobile ? 15 : 18} strokeWidth={2} />,
               can: canRight,
             },
           ].map(({ dir, icon, can }) => (
@@ -783,8 +867,8 @@ export default function TopRankedRow({
               onClick={() => can && go(dir)}
               disabled={!can}
               style={{
-                width: 38,
-                height: 38,
+                width: isMobile ? 32 : 38,
+                height: isMobile ? 32 : 38,
                 borderRadius: "50%",
                 background: "rgba(12,12,12,0.88)",
                 border: "1px solid rgba(255,255,255,0.15)",
@@ -797,12 +881,6 @@ export default function TopRankedRow({
                 justifyContent: "center",
                 transition: "opacity 0.2s, transform 0.15s",
               }}
-              onMouseEnter={(e) =>
-                can && (e.currentTarget.style.transform = "scale(1.1)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.transform = "scale(1)")
-              }
             >
               {icon}
             </button>
@@ -824,8 +902,8 @@ export default function TopRankedRow({
             style={{
               display: "flex",
               gap: 0,
-              paddingTop: 28,
-              paddingBottom: 36,
+              paddingTop: isMobile ? 6 : 28,
+              paddingBottom: isMobile ? 12 : 36,
               overflow: "visible",
             }}
           >

@@ -1,3 +1,40 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Chặn kéo trôi nảy trang, khóa zoom và giữ cuộn dọc mượt mà ── */
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  /* Chặn nảy giật trang ở 2 đầu nhưng vẫn cho phép cuộn tự nhiên */
+  overscroll-behavior-y: contain;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  /* Bật cuộn mượt native trên iOS/Android */
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-height: 100dvh;
+  position: relative;
+}
+
+/* Chống tự động phóng to (zoom) khi chạm vào ô input trên iPhone/iPad */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

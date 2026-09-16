@@ -15,14 +15,10 @@ import {
 } from "lucide-react";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
 
-// ── Shared UI components ──────────────────────────────────────────────────────
 import UserAvatar from "../ui/UserAvatar";
 import { MovieResultItem, ActorResultItem } from "../ui/SearchResultItem";
 import SearchShimmer from "../ui/SearchShimmer";
-
-// ── Shared hook ───────────────────────────────────────────────────────────────
 import useDebounce from "../../hooks/useDebounce";
-
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
@@ -32,8 +28,6 @@ import authService from "../../services/authService";
 import axiosInstance from "../../config/axios";
 import NavbarFilterModal from "../ui/NavbarFilterModal";
 
-// ─── Fetch search — /movies/search ───────────────────────────────────────────
-// ─── toSlug — khớp với movieConstants.toSlug ─────────────────────────
 const toSlug = (name) =>
   (name || "unknown")
     .toLowerCase()
@@ -51,7 +45,6 @@ const fetchSearch = async (q) => {
   return Array.isArray(raw) ? raw : [];
 };
 
-// ─── Fetch TV show search — /tvshows/search ───────────────────────────────────
 const fetchTvShowSearch = async (q) => {
   try {
     const res = await axiosInstance.get(
@@ -64,7 +57,6 @@ const fetchTvShowSearch = async (q) => {
   }
 };
 
-// ─── Fetch actor search — /movies/search/actor + /tvshows/search/actor ────────
 const fetchActorSearch = async (q) => {
   try {
     const [movieRes, tvRes] = await Promise.allSettled([
@@ -87,7 +79,6 @@ const fetchActorSearch = async (q) => {
     const processSource = (rawList) => {
       rawList.forEach((item) => {
         const itemTitle = item.title ?? item.name;
-        // Handle camelCase (movie) và PascalCase (nếu serializer không config CamelCase)
         const castList = item.cast ?? item.Cast ?? [];
         castList.forEach((c) => {
           const name = c.name ?? c.Name ?? c.personName;
@@ -128,7 +119,6 @@ const fetchActorSearch = async (q) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
 const Navbar = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,7 +127,6 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
 
-  // ── Search state ───────────────────────────────────────────────────────────
   const [results, setResults] = useState([]);
   const [tvShows, setTvShows] = useState([]);
   const [actors, setActors] = useState([]);
@@ -148,10 +137,6 @@ const Navbar = () => {
   const navigate = useNavigate();
   const guardedNav = useAuthGuard();
   const location = useLocation();
-  // Chỉ trang chủ mới có HeroBanner (ảnh nền lớn) đủ tối để header trong suốt
-  // trông đẹp lúc chưa cuộn. Các trang khác (Coming Soon, Search, Browse...)
-  // nền tối trơn nên header trong suốt bị "biến mất" → ép luôn hiển thị dạng
-  // nền đặc (giống trạng thái đã cuộn) khi không phải trang chủ.
   const isHomePage = location.pathname === "/";
   const [searchParams] = useSearchParams();
   const currentTab = searchParams.get("tab") || "movie";
@@ -160,7 +145,6 @@ const Navbar = () => {
   const searchWrapRef = useRef(null);
   const filterBtnRef = useRef(null);
 
-  // 350ms — không spam request khi gõ nhanh
   const debouncedQuery = useDebounce(searchQuery, 350);
 
   const [currentUser, setCurrentUser] = useState(() =>
@@ -172,7 +156,6 @@ const Navbar = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // ── Sync user ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const sync = () => setCurrentUser(authService.getCurrentUser());
     window.addEventListener("storage", sync);
@@ -183,21 +166,17 @@ const Navbar = () => {
     };
   }, []);
 
-  // ── Scroll listener ────────────────────────────────────────────────────────
-  // Trang không phải Home (không có HeroBanner phía sau) → header luôn ở
-  // trạng thái nền đặc, không phụ thuộc scroll.
   useEffect(() => {
     if (!isHomePage) {
       setScrolled(true);
       return;
     }
     const onScroll = () => setScrolled(window.scrollY > 60);
-    onScroll(); // đồng bộ ngay khi mount (vd. quay lại Home bằng back)
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [isHomePage]);
 
-  // ── Click outside user dropdown ────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -207,7 +186,6 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── Click outside search wrapper → đóng results (không đóng input) ─────────
   useEffect(() => {
     const handler = (e) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(e.target))
@@ -217,7 +195,6 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── Trigger search khi debounced query đổi ─────────────────────────────────
   useEffect(() => {
     if (!showSearch || debouncedQuery.trim().length < 1) {
       setResults([]);
@@ -250,7 +227,6 @@ const Navbar = () => {
     }
   }, []);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
   const openSearch = () => {
     setShowSearch(true);
     setTimeout(() => searchInputRef.current?.focus(), 80);
@@ -265,7 +241,6 @@ const Navbar = () => {
     setShowResults(false);
   };
 
-  // Enter → trang search đầy đủ
   const handleSearchSubmit = (e) => {
     e?.preventDefault();
     const q = searchQuery.trim();
@@ -273,7 +248,6 @@ const Navbar = () => {
     closeSearch();
   };
 
-  // Click phim → thẳng trang chi tiết
   const handleResultClick = (movie) => {
     navigate(`/movie/${movie.id}/info`);
     closeSearch();
@@ -282,7 +256,6 @@ const Navbar = () => {
   const handleFilterApply = useCallback(
     (params) => {
       const qs = new URLSearchParams();
-      // Giữ lại từ khoá search nếu user đang gõ trong search bar
       if (searchQuery.trim()) qs.set("q", searchQuery.trim());
       Object.entries(params).forEach(([k, v]) => {
         if (Array.isArray(v)) v.forEach((id) => qs.append(k, id));
@@ -305,7 +278,6 @@ const Navbar = () => {
   };
 
   const isLoggedIn = !!currentUser;
-
   const isPremium =
     currentUser?.subscriptionPlan === "premium" || currentUser?.isPremium;
 
@@ -367,18 +339,15 @@ const Navbar = () => {
           "background 0.35s ease, border-color 0.35s ease, backdrop-filter 0.35s ease",
       }}
     >
-      <div className="flex items-center justify-between px-4 md:px-8 py-3">
+      <div className="flex items-center justify-between px-3 md:px-8 py-2.5 md:py-3">
         {/* ── Logo ── */}
         <motion.div
-          className="flex items-center gap-1.5 cursor-pointer"
+          className="flex items-center gap-1.5 cursor-pointer shrink-0"
           onClick={goHome}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           style={{
-            // Font-size gốc của cụm logo — UIA = 1em, MOVIE ăn theo tỉ lệ em
-            // nên luôn nhỏ hơn UIA đúng 1 tỉ lệ ở mọi breakpoint, không cần
-            // khai báo 2 bộ class riêng cho từng chữ nữa.
-            fontSize: "clamp(1.35rem, 1.05rem + 1vw, 1.875rem)",
+            fontSize: "clamp(1.2rem, 1rem + 1vw, 1.875rem)",
           }}
         >
           <span
@@ -393,8 +362,6 @@ const Navbar = () => {
               color: scrolled ? "#ffffff" : "#f0f0f0",
               letterSpacing: "0.06em",
               transition: "color 0.3s",
-              // Nhỏ hơn UIA một chút; nhờ flex items-center của div cha mà
-              // nó tự căn giữa theo chiều dọc so với UIA, không lệch trên/dưới.
               fontSize: "0.62em",
               lineHeight: 1,
               alignSelf: "center",
@@ -456,8 +423,6 @@ const Navbar = () => {
                 >
                   {label}
                 </span>
-
-                {/* Gạch chân mảnh — cố định khi active, kéo ra mượt khi hover */}
                 <span
                   className={`absolute left-3 right-3 bottom-[3px] h-[1px] origin-center transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
                     isActive
@@ -476,20 +441,19 @@ const Navbar = () => {
         </div>
 
         {/* ── Right actions ── */}
-        <div className="flex items-center gap-1">
-          {/* ── Search ── */}
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+          {/* ── Search Bar ── */}
           <AnimatePresence mode="wait">
             {showSearch ? (
               <motion.div
                 key="search-open"
                 ref={searchWrapRef}
                 initial={{ width: 36, opacity: 0 }}
-                animate={{ width: isMobile ? 230 : 340, opacity: 1 }}
+                animate={{ width: isMobile ? 190 : 320, opacity: 1 }}
                 exit={{ width: 36, opacity: 0 }}
                 transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                 style={{ position: "relative" }}
               >
-                {/* Input bar */}
                 <form
                   onSubmit={handleSearchSubmit}
                   style={{
@@ -498,12 +462,12 @@ const Navbar = () => {
                     overflow: "hidden",
                     background: scrolled
                       ? "rgba(255,255,255,0.07)"
-                      : "rgba(0,0,0,0.45)",
+                      : "rgba(0,0,0,0.55)",
                     borderRadius: dropdownVisible ? "10px 10px 0 0" : 10,
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    border: "1px solid rgba(255,255,255,0.15)",
                     borderBottom: dropdownVisible
                       ? "1px solid rgba(255,255,255,0.06)"
-                      : "1px solid rgba(255,255,255,0.12)",
+                      : "1px solid rgba(255,255,255,0.15)",
                     backdropFilter: "blur(12px)",
                     transition: "border-radius 0.15s",
                   }}
@@ -514,13 +478,13 @@ const Navbar = () => {
                       background: "none",
                       border: "none",
                       cursor: "pointer",
-                      padding: "8px 10px",
+                      padding: isMobile ? "6px 8px" : "8px 10px",
                       display: "flex",
-                      color: "rgba(255,255,255,0.45)",
+                      color: "rgba(255,255,255,0.6)",
                       flexShrink: 0,
                     }}
                   >
-                    <Search size={15} />
+                    <Search size={isMobile ? 14 : 15} />
                   </button>
 
                   <input
@@ -535,16 +499,16 @@ const Navbar = () => {
                       if (results.length > 0 || tvShows.length > 0)
                         setShowResults(true);
                     }}
-                    placeholder="Tìm phim, TV show, diễn viên..."
+                    placeholder={isMobile ? "Tìm phim..." : "Tìm phim, TV show, diễn viên..."}
                     style={{
                       flex: 1,
                       background: "none",
                       border: "none",
                       outline: "none",
                       color: "#fff",
-                      fontSize: 13,
+                      fontSize: isMobile ? 12 : 13,
                       fontFamily: "'DM Sans', sans-serif",
-                      padding: "9px 0",
+                      padding: isMobile ? "6px 0" : "8px 0",
                       minWidth: 0,
                     }}
                   />
@@ -558,13 +522,13 @@ const Navbar = () => {
                       background: "none",
                       border: "none",
                       cursor: "pointer",
-                      padding: "8px 10px",
+                      padding: isMobile ? "6px 8px" : "8px 10px",
                       display: "flex",
-                      color: "rgba(255,255,255,0.3)",
+                      color: "rgba(255,255,255,0.4)",
                       flexShrink: 0,
                     }}
                   >
-                    <X size={14} />
+                    <X size={13} />
                   </button>
                 </form>
 
@@ -582,25 +546,23 @@ const Navbar = () => {
                         top: "100%",
                         left: 0,
                         right: 0,
+                        maxHeight: "75vh",
+                        overflowY: "auto",
                         background: "rgba(10,10,10,0.98)",
                         border: "1px solid rgba(255,255,255,0.1)",
                         borderTop: "none",
                         borderRadius: "0 0 12px 12px",
-                        overflow: "hidden",
                         backdropFilter: "blur(20px)",
                         boxShadow: "0 20px 50px rgba(0,0,0,0.75)",
                         zIndex: 9998,
                       }}
                     >
-                      {/* ── Loading skeleton ── */}
                       {searching && (
                         <SearchShimmer movieRows={3} actorRows={2} showActors />
                       )}
 
-                      {/* ── Kết quả phim ── */}
                       {!searching && hasMovies && (
                         <>
-                          {/* Section header: Phim */}
                           <div
                             style={{
                               padding: "8px 16px 4px",
@@ -641,7 +603,6 @@ const Navbar = () => {
                         </>
                       )}
 
-                      {/* ── Divider movies / tvshows ── */}
                       {!searching && hasMovies && hasTvShows && (
                         <div
                           style={{
@@ -652,7 +613,6 @@ const Navbar = () => {
                         />
                       )}
 
-                      {/* ── Kết quả TV show ── */}
                       {!searching && hasTvShows && (
                         <>
                           <div
@@ -702,7 +662,6 @@ const Navbar = () => {
                         </>
                       )}
 
-                      {/* ── Divider ── */}
                       {!searching && hasMovies && hasActors && (
                         <div
                           style={{
@@ -713,10 +672,8 @@ const Navbar = () => {
                         />
                       )}
 
-                      {/* ── Kết quả diễn viên ── */}
                       {!searching && hasActors && (
                         <>
-                          {/* Section header: Diễn viên */}
                           <div
                             style={{
                               padding: "8px 16px 4px",
@@ -753,7 +710,6 @@ const Navbar = () => {
                         </>
                       )}
 
-                      {/* Không có kết quả */}
                       {!searching &&
                         !hasMovies &&
                         !hasTvShows &&
@@ -780,7 +736,6 @@ const Navbar = () => {
                           </div>
                         )}
 
-                      {/* Footer — xem tất cả */}
                       {!searching && (hasMovies || hasTvShows || hasActors) && (
                         <motion.button
                           type="button"
@@ -826,14 +781,14 @@ const Navbar = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="p-2 rounded-lg"
+                className="p-1.5 md:p-2 rounded-lg"
                 style={{
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
                   color: scrolled
-                    ? "rgba(255,255,255,0.8)"
-                    : "rgba(255,255,255,0.7)",
+                    ? "rgba(255,255,255,0.85)"
+                    : "rgba(255,255,255,0.75)",
                 }}
               >
                 <Search size={18} />
@@ -841,24 +796,7 @@ const Navbar = () => {
             )}
           </AnimatePresence>
 
-          {/* ── Hamburger (mobile) ── */}
-          {isMobile && (
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              onClick={() => setShowMobileMenu((v) => !v)}
-              className="p-2 rounded-lg md:hidden"
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "rgba(255,255,255,0.8)",
-              }}
-            >
-              {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
-            </motion.button>
-          )}
-
-          {/* ── Bộ lọc button (right actions) ── */}
+          {/* ── Bộ lọc Icon kế bên Tìm kiếm (Cả Desktop & Mobile) ── */}
           <motion.button
             ref={filterBtnRef}
             onClick={() => setShowFilter((p) => !p)}
@@ -867,19 +805,20 @@ const Navbar = () => {
               backgroundColor: "rgba(255,255,255,0.1)",
             }}
             whileTap={{ scale: 0.94 }}
-            className="hidden md:flex items-center justify-center p-2 rounded-lg"
+            className="flex items-center justify-center p-1.5 md:p-2 rounded-lg"
+            title="Bộ lọc phim"
             style={{
-              background: showFilter ? "rgba(229,24,30,0.15)" : "transparent",
+              background: showFilter ? "rgba(229,24,30,0.18)" : "transparent",
               border: "none",
               cursor: "pointer",
               color: showFilter
                 ? ACCENT
                 : scrolled
-                  ? "rgba(255,255,255,0.8)"
-                  : "rgba(255,255,255,0.7)",
+                  ? "rgba(255,255,255,0.85)"
+                  : "rgba(255,255,255,0.75)",
             }}
           >
-            <IconAdjustmentsHorizontal size={18} strokeWidth={1.6} />
+            <IconAdjustmentsHorizontal size={18} strokeWidth={1.7} />
           </motion.button>
 
           {/* ── Divider ── */}
@@ -893,7 +832,7 @@ const Navbar = () => {
             }}
           />
 
-          {/* ── Đăng nhập / Đăng ký (chỉ khi chưa đăng nhập) ── */}
+          {/* ── Auth / User dropdown ── */}
           {!isLoggedIn ? (
             <div className="hidden md:flex items-center gap-2.5">
               <motion.button
@@ -961,210 +900,221 @@ const Navbar = () => {
               </motion.button>
             </div>
           ) : (
-          <div className="relative" ref={dropdownRef}>
-            <motion.button
-              onClick={() => setShowDropdown((p) => !p)}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-              style={{
-                background: showDropdown
-                  ? "rgba(255,255,255,0.1)"
-                  : "transparent",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              {/* ← UserAvatar thay thế khối avatar inline */}
-              <UserAvatar
-                avatarUrl={currentUser?.avatar}
-                name={currentUser?.name}
-                size={28}
+            <div className="relative" ref={dropdownRef}>
+              <motion.button
+                onClick={() => setShowDropdown((p) => !p)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg"
                 style={{
-                  boxShadow: scrolled
-                    ? "0 2px 8px rgba(229,24,30,0.4)"
-                    : "0 2px 12px rgba(229,24,30,0.5)",
-                  transition: "box-shadow 0.3s",
+                  background: showDropdown
+                    ? "rgba(255,255,255,0.1)"
+                    : "transparent",
+                  border: "none",
+                  cursor: "pointer",
                 }}
-              />
-
-              {/* Tên (chỉ hiện khi scrolled) */}
-              <AnimatePresence>
-                {scrolled && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-xs font-semibold text-white overflow-hidden whitespace-nowrap"
-                    style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      maxWidth: 80,
-                    }}
-                  >
-                    {currentUser?.name?.split(" ")[0] ?? "User"}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-
-              <motion.div
-                animate={{ rotate: showDropdown ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
-                style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
               >
-                <ChevronDown size={13} />
-              </motion.div>
-            </motion.button>
-
-            {/* Dropdown panel */}
-            <AnimatePresence>
-              {showDropdown && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="absolute right-0 mt-2 w-52 rounded-2xl overflow-hidden shadow-2xl"
+                <UserAvatar
+                  avatarUrl={currentUser?.avatar}
+                  name={currentUser?.name}
+                  size={isMobile ? 26 : 28}
                   style={{
-                    background: "rgba(12,12,12,0.97)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    backdropFilter: "blur(20px)",
+                    boxShadow: scrolled
+                      ? "0 2px 8px rgba(229,24,30,0.4)"
+                      : "0 2px 12px rgba(229,24,30,0.5)",
+                    transition: "box-shadow 0.3s",
                   }}
-                >
-                  {/* User info */}
-                  <div
-                    className="px-4 py-3"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {/* ← UserAvatar trong dropdown */}
-                      <UserAvatar
-                        avatarUrl={currentUser?.avatar}
-                        name={currentUser?.name}
-                        size={32}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate leading-tight">
-                          {currentUser?.name ?? "Người dùng"}
-                        </p>
-                        <p
-                          className="text-xs truncate leading-tight"
-                          style={{ color: "rgba(255,255,255,0.3)" }}
-                        >
-                          {currentUser?.email ?? ""}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                />
 
-                  {/* Menu items */}
-                  <div className="py-1.5 px-1.5">
-                    {dropdownItems.map(
-                      ({ icon, label, onClick, isPremium: itemIsPremium }) => (
-                        <motion.button
-                          key={label}
-                          onClick={() => {
-                            setShowDropdown(false);
-                            onClick();
-                          }}
-                          whileHover={{
-                            backgroundColor:
-                              itemIsPremium && !isPremium
-                                ? "rgba(234,179,8,0.12)"
-                                : "rgba(255,255,255,0.06)",
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <span
-                            style={{
-                              color: itemIsPremium
-                                ? isPremium
-                                  ? "rgba(234,179,8,0.9)"
-                                  : "rgba(234,179,8,0.7)"
-                                : "rgba(255,255,255,0.3)",
-                            }}
-                          >
-                            {icon}
-                          </span>
-                          <span
-                            className="text-sm"
-                            style={{
-                              fontFamily: "'DM Sans', sans-serif",
-                              color: itemIsPremium
-                                ? isPremium
-                                  ? "#facc15"
-                                  : "#fbbf24"
-                                : "rgba(255,255,255,0.7)",
-                              fontWeight: itemIsPremium ? 600 : 400,
-                            }}
-                          >
-                            {label}
-                          </span>
-                          {itemIsPremium && !isPremium && (
-                            <span
-                              style={{
-                                marginLeft: "auto",
-                                fontSize: 10,
-                                fontWeight: 700,
-                                color: "#facc15",
-                                background: "rgba(234,179,8,0.15)",
-                                padding: "1px 6px",
-                                borderRadius: 4,
-                                fontFamily: "'DM Sans', sans-serif",
-                              }}
-                            >
-                              HOT
-                            </span>
-                          )}
-                        </motion.button>
-                      ),
-                    )}
-                  </div>
-
-                  {/* Logout */}
-                  <div
-                    className="px-1.5 pb-1.5"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-                  >
-                    <motion.button
-                      onClick={handleLogout}
-                      whileHover={{ backgroundColor: "rgba(229,24,30,0.1)" }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mt-1"
+                <AnimatePresence>
+                  {scrolled && !isMobile && (
+                    <motion.span
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: "auto" }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-xs font-semibold text-white overflow-hidden whitespace-nowrap"
                       style={{
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
+                        fontFamily: "'DM Sans', sans-serif",
+                        maxWidth: 80,
                       }}
                     >
-                      <LogOut
-                        size={15}
-                        style={{ color: "rgba(229,24,30,0.7)" }}
-                      />
-                      <span
-                        className="text-sm font-medium"
+                      {currentUser?.name?.split(" ")[0] ?? "User"}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+
+                <motion.div
+                  animate={{ rotate: showDropdown ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
+                >
+                  <ChevronDown size={13} />
+                </motion.div>
+              </motion.button>
+
+              {/* Dropdown panel */}
+              <AnimatePresence>
+                {showDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute right-0 mt-2 w-52 rounded-2xl overflow-hidden shadow-2xl"
+                    style={{
+                      background: "rgba(12,12,12,0.97)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      backdropFilter: "blur(20px)",
+                    }}
+                  >
+                    <div
+                      className="px-4 py-3"
+                      style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <UserAvatar
+                          avatarUrl={currentUser?.avatar}
+                          name={currentUser?.name}
+                          size={32}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate leading-tight">
+                            {currentUser?.name ?? "Người dùng"}
+                          </p>
+                          <p
+                            className="text-xs truncate leading-tight"
+                            style={{ color: "rgba(255,255,255,0.3)" }}
+                          >
+                            {currentUser?.email ?? ""}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="py-1.5 px-1.5">
+                      {dropdownItems.map(
+                        ({ icon, label, onClick, isPremium: itemIsPremium }) => (
+                          <motion.button
+                            key={label}
+                            onClick={() => {
+                              setShowDropdown(false);
+                              onClick();
+                            }}
+                            whileHover={{
+                              backgroundColor:
+                                itemIsPremium && !isPremium
+                                  ? "rgba(234,179,8,0.12)"
+                                  : "rgba(255,255,255,0.06)",
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: itemIsPremium
+                                  ? isPremium
+                                    ? "rgba(234,179,8,0.9)"
+                                    : "rgba(234,179,8,0.7)"
+                                  : "rgba(255,255,255,0.3)",
+                              }}
+                            >
+                              {icon}
+                            </span>
+                            <span
+                              className="text-sm"
+                              style={{
+                                fontFamily: "'DM Sans', sans-serif",
+                                color: itemIsPremium
+                                  ? isPremium
+                                    ? "#facc15"
+                                    : "#fbbf24"
+                                  : "rgba(255,255,255,0.7)",
+                                fontWeight: itemIsPremium ? 600 : 400,
+                              }}
+                            >
+                              {label}
+                            </span>
+                            {itemIsPremium && !isPremium && (
+                              <span
+                                style={{
+                                  marginLeft: "auto",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: "#facc15",
+                                  background: "rgba(234,179,8,0.15)",
+                                  padding: "1px 6px",
+                                  borderRadius: 4,
+                                  fontFamily: "'DM Sans', sans-serif",
+                                }}
+                              >
+                                HOT
+                              </span>
+                            )}
+                          </motion.button>
+                        ),
+                      )}
+                    </div>
+
+                    <div
+                      className="px-1.5 pb-1.5"
+                      style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <motion.button
+                        onClick={handleLogout}
+                        whileHover={{ backgroundColor: "rgba(229,24,30,0.1)" }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mt-1"
                         style={{
-                          color: "#e5181e",
-                          fontFamily: "'DM Sans', sans-serif",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
                         }}
                       >
-                        Đăng xuất
-                      </span>
-                    </motion.button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                        <LogOut
+                          size={15}
+                          style={{ color: "rgba(229,24,30,0.7)" }}
+                        />
+                        <span
+                          className="text-sm font-medium"
+                          style={{
+                            color: "#e5181e",
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          Đăng xuất
+                        </span>
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* ── Hamburger (Mobile) ── */}
+          {isMobile && (
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setShowMobileMenu((v) => !v)}
+              className="p-1.5 rounded-lg md:hidden"
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "rgba(255,255,255,0.85)",
+              }}
+            >
+              {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
+            </motion.button>
           )}
         </div>
       </div>
 
-      {/* ── Mobile menu ── */}
+      {/* ── Mobile menu drawer ── */}
       <AnimatePresence>
         {isMobile && showMobileMenu && (
           <motion.div
@@ -1186,15 +1136,14 @@ const Navbar = () => {
           >
             {[
               { label: "Trang chủ", path: "/" },
-              // Các mục dưới đây cần đăng nhập → chỉ hiện khi đã login
+              { label: "Phim sắp chiếu", path: "/coming-soon" },
               ...(isLoggedIn
                 ? [
                     { label: "Yêu thích", path: "/favorites" },
-                    { label: "Watchlist", path: "/search?filter=watchlist" },
                     { label: "Lịch sử xem", path: "/watch-history" },
                   ]
                 : []),
-              { label: "Về chúng tôi", path: "/intro" },
+              { label: "Về chúng tôi", path: "/about-us" },
             ].map(({ label, path }) => (
               <button
                 key={label}
@@ -1210,7 +1159,7 @@ const Navbar = () => {
                   background: "none",
                   border: "none",
                   cursor: "pointer",
-                  color: "rgba(255,255,255,0.75)",
+                  color: "rgba(255,255,255,0.85)",
                   fontFamily: "'DM Sans', sans-serif",
                   fontSize: 15,
                   fontWeight: 600,
@@ -1220,32 +1169,7 @@ const Navbar = () => {
                 {label}
               </button>
             ))}
-            {/* Bộ lọc — mobile */}
-            <button
-              onClick={() => {
-                setShowFilter((p) => !p);
-                setShowMobileMenu(false);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                width: "100%",
-                textAlign: "left",
-                padding: "12px 8px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "rgba(255,255,255,0.75)",
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 15,
-                fontWeight: 600,
-                borderBottom: "1px solid rgba(255,255,255,0.05)",
-              }}
-            >
-              <IconAdjustmentsHorizontal size={16} strokeWidth={1.6} />
-              Bộ lọc
-            </button>
+
             {isLoggedIn ? (
               <button
                 onClick={() => {
@@ -1256,7 +1180,7 @@ const Navbar = () => {
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  marginTop: 8,
+                  marginTop: 10,
                   padding: "12px 8px",
                   background: "none",
                   border: "none",
@@ -1270,9 +1194,7 @@ const Navbar = () => {
                 <LogOut size={16} /> Đăng xuất
               </button>
             ) : (
-              <div
-                style={{ display: "flex", gap: 8, marginTop: 8 }}
-              >
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button
                   onClick={() => {
                     navigate("/welcome", { state: { view: "login" } });
@@ -1283,8 +1205,7 @@ const Navbar = () => {
                     flex: 1,
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 8,
-                    padding: "12px 8px",
+                    padding: "10px 8px",
                     background:
                       "linear-gradient(135deg, #ff2b32 0%, #e5181e 55%, #c81017 100%)",
                     border: "none",
@@ -1294,8 +1215,6 @@ const Navbar = () => {
                     fontFamily: "'DM Sans', sans-serif",
                     fontSize: 14,
                     fontWeight: 600,
-                    letterSpacing: "0.01em",
-                    boxShadow: "0 3px 12px rgba(229,24,30,0.3)",
                   }}
                 >
                   Đăng nhập
@@ -1310,17 +1229,15 @@ const Navbar = () => {
                     flex: 1,
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 8,
-                    padding: "12px 8px",
+                    padding: "10px 8px",
                     background: "rgba(255,255,255,0.04)",
                     border: "1px solid rgba(255,255,255,0.1)",
                     borderRadius: 8,
                     cursor: "pointer",
-                    color: "rgba(255,255,255,0.6)",
+                    color: "rgba(255,255,255,0.7)",
                     fontFamily: "'DM Sans', sans-serif",
                     fontSize: 14,
                     fontWeight: 600,
-                    letterSpacing: "0.01em",
                   }}
                 >
                   Đăng ký

@@ -1,9 +1,8 @@
 // src/components/home/coming-soon/ComingSoonFeatured.jsx
-// Hero cho "Sắp Chiếu" — chỉ hiển thị 1 phim (item gần ngày ra mắt nhất).
-// Có góc trailer riêng (CornerTrailer) nếu item đó có trailerVideoUrl.
+
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Info, Play, Volume2, VolumeX, X } from "lucide-react";
+import { Info, Play, Volume2, VolumeX, X, Calendar } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../../context/homeTokens";
 import { useIsMobile } from "../../../hooks/useIsMobile";
@@ -13,10 +12,6 @@ import ComingSoonCountdown from "./ComingSoonCountdown";
 
 const infoPath = (item) => (item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`);
 
-// ── Trailer góc — chỉ hiện khi item đã có trailer chính thức ──────────────
-// Business rule: trailer chỉ upload cho phim sắp ra mắt gần, không phải mọi
-// phim coming soon đều có → component tự ẩn nếu không có trailerVideoUrl
-// (kiểm tra hasTrailer ở component cha, tránh mount thừa).
 function CornerTrailer({ item, isMobile }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -30,7 +25,7 @@ function CornerTrailer({ item, isMobile }) {
     }
   }, [playing, isYT]);
 
-  const width = isMobile ? 108 : 220;
+  const width = isMobile ? 110 : 200;
   const height = (width * 9) / 16;
 
   const close = (e) => {
@@ -55,7 +50,7 @@ function CornerTrailer({ item, isMobile }) {
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
+      transition={{ duration: 0.4 }}
       onClick={(e) => {
         e.stopPropagation();
         if (!playing) setPlaying(true);
@@ -66,16 +61,15 @@ function CornerTrailer({ item, isMobile }) {
         right: isMobile ? 12 : 20,
         width,
         height,
-        borderRadius: 10,
+        borderRadius: 8,
         overflow: "hidden",
         cursor: playing ? "default" : "pointer",
         border: "1px solid rgba(255,255,255,0.25)",
-        boxShadow: "0 10px 26px rgba(0,0,0,0.55)",
-        zIndex: 2,
+        boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
+        zIndex: 15,
         background: C.surfaceHigh,
       }}
     >
-      {/* Thumbnail nền — luôn render để tránh giật hình khi video đang load */}
       {(item.backdropUrl || item.posterUrl) && (
         <img
           src={item.backdropUrl || item.posterUrl}
@@ -88,7 +82,6 @@ function CornerTrailer({ item, isMobile }) {
             height: "100%",
             objectFit: "cover",
             opacity: playing && ready ? 0 : 1,
-            transition: "opacity 0.3s ease",
           }}
         />
       )}
@@ -116,129 +109,56 @@ function CornerTrailer({ item, isMobile }) {
         )
       )}
 
-      {/* Overlay tối nhẹ để icon/nút nổi bật trên mọi loại ảnh nền */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: playing
-            ? "linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 45%)"
-            : "rgba(0,0,0,0.28)",
+          background: playing ? "none" : "rgba(0,0,0,0.35)",
           pointerEvents: "none",
         }}
       />
 
       {!playing ? (
-        <>
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div
-              style={{
-                width: isMobile ? 30 : 40,
-                height: isMobile ? 30 : 40,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.2)",
-                backdropFilter: "blur(4px)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Play size={isMobile ? 13 : 17} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-            </div>
-          </div>
-          <span
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div
             style={{
-              position: "absolute",
-              left: 8,
-              bottom: 6,
-              fontFamily: FONT_BODY,
-              fontSize: isMobile ? 9 : 10,
-              fontWeight: 800,
-              color: "#fff",
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-            }}
-          >
-            Trailer
-          </span>
-        </>
-      ) : (
-        <>
-          <button
-            onClick={close}
-            aria-label="Đóng trailer"
-            style={{
-              position: "absolute",
-              top: 6,
-              right: 6,
-              width: 22,
-              height: 22,
+              width: isMobile ? 24 : 36,
+              height: isMobile ? 24 : 36,
               borderRadius: "50%",
-              border: "1px solid rgba(255,255,255,0.3)",
-              background: "rgba(0,0,0,0.55)",
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
+              border: "1px solid rgba(255,255,255,0.4)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: "pointer",
             }}
           >
-            <X size={12} color="#fff" />
-          </button>
-
-          {!isMobile && (
-            <button
-              onClick={toggleMute}
-              aria-label={muted ? "Bật tiếng" : "Tắt tiếng"}
-              style={{
-                position: "absolute",
-                bottom: 6,
-                right: 6,
-                width: 22,
-                height: 22,
-                borderRadius: "50%",
-                border: "1px solid rgba(255,255,255,0.3)",
-                background: "rgba(0,0,0,0.55)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              {muted ? <VolumeX size={11} color="#fff" /> : <Volume2 size={11} color="#fff" />}
-            </button>
-          )}
-        </>
+            <Play size={isMobile ? 10 : 14} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={close}
+          aria-label="Đóng trailer"
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            border: "none",
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <X size={11} color="#fff" />
+        </button>
       )}
     </motion.div>
-  );
-}
-
-// ── Badge "Sắp Chiếu" — pill giống type badge của HeroBanner.jsx:
-// nền tint màu accent + border cùng màu, uppercase, letter-spacing 0.1em ──
-function ComingSoonBadge({ accentColor, isMobile }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        width: "fit-content",
-        whiteSpace: "nowrap",
-        padding: "4px 10px 0px 10px",
-        borderRadius: 99,
-        fontFamily: FONT_BODY,
-        fontSize: isMobile ? 10 : 11,
-        fontWeight: 700,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        background: `${accentColor}2e`, // ~18% alpha, cùng cách HeroBanner dùng rgba(...,0.18)
-        border: `1px solid ${accentColor}66`, // ~40% alpha
-        color: accentColor,
-      }}
-    >
-      Sắp Chiếu
-    </span>
   );
 }
 
@@ -246,13 +166,12 @@ export default function ComingSoonFeatured({ item, items, accentColor = C.gold }
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
-  // Tương thích ngược: nếu ai đó còn truyền `items` (mảng), chỉ lấy phần tử đầu
   const activeItem = item ?? (items && items.length ? items[0] : null);
-
   if (!activeItem) return null;
 
   const days = getDaysUntilRelease(activeItem);
-  const showCountdown = days != null && days >= 0 && days <= 30;
+  // Bỏ chặn 30 ngày: Phim tương lai sẽ luôn hiển thị đếm ngược
+  const showCountdown = days != null && days >= 0;
   const hasTrailer = Boolean(activeItem.trailerVideoUrl);
 
   return (
@@ -261,8 +180,10 @@ export default function ComingSoonFeatured({ item, items, accentColor = C.gold }
         position: "relative",
         borderRadius: isMobile ? 14 : 18,
         overflow: "hidden",
-        minHeight: isMobile ? 340 : 460,
-        marginBottom: isMobile ? 24 : 32,
+        minHeight: isMobile ? 420 : 460,
+        marginBottom: isMobile ? 24 : 36,
+        background: C.surface,
+        border: `1px solid ${C.borderMid}`,
       }}
     >
       {/* Backdrop */}
@@ -277,105 +198,147 @@ export default function ComingSoonFeatured({ item, items, accentColor = C.gold }
             width: "100%",
             height: "100%",
             objectFit: "cover",
+            objectPosition: isMobile ? "center top" : "center",
           }}
-          loading="lazy"
         />
       )}
 
-      {/* Gradient/mask — hoà backdrop vào nền, tránh cảm giác banner cứng */}
+      {/* Gradient lớp phủ chống chói chữ */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           background: isMobile
-            ? `linear-gradient(to top, ${C.bg} 5%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.15) 100%)`
-            : `linear-gradient(to right, ${C.bg} 0%, rgba(0,0,0,0.75) 32%, rgba(0,0,0,0.25) 62%, transparent 100%),
-               linear-gradient(to top, ${C.bg} 0%, transparent 35%)`,
+            ? "linear-gradient(to top, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.3) 100%)"
+            : "linear-gradient(to right, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.85) 45%, rgba(0,0,0,0.2) 75%, transparent 100%), linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 40%)",
         }}
       />
 
-      {/* Trailer góc — chỉ mount khi item có trailer chính thức */}
+      {/* Trailer góc */}
       {hasTrailer && <CornerTrailer item={activeItem} isMobile={isMobile} />}
 
-      {/* Content */}
+      {/* Content wrapper */}
       <div
         style={{
           position: "relative",
-          zIndex: 1,
+          zIndex: 10,
           display: "flex",
-          flexDirection: isMobile ? "column-reverse" : "row",
-          alignItems: isMobile ? "stretch" : "flex-end",
-          gap: isMobile ? 16 : 32,
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "flex-start" : "flex-end",
+          gap: isMobile ? 16 : 28,
           height: "100%",
-          padding: isMobile ? "20px 18px" : "40px 48px",
+          padding: isMobile ? "20px 16px" : "36px 44px",
+          paddingTop: isMobile ? 54 : "36px",
         }}
       >
-        {/* Poster — desktop only, cinematic touch */}
-        {!isMobile && activeItem.posterUrl && (
-          <motion.img
-            src={activeItem.posterUrl}
-            alt={activeItem.title}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+        {/* Poster phim sắp chiếu (Hiển thị cả mobile và desktop) */}
+        {activeItem.posterUrl && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
             style={{
-              width: 160,
-              aspectRatio: "2/3",
-              objectFit: "cover",
-              borderRadius: 10,
-              boxShadow: "0 20px 48px -8px rgba(0,0,0,0.85)",
               flexShrink: 0,
+              width: isMobile ? 96 : 160,
+              aspectRatio: "2/3",
+              borderRadius: 10,
+              overflow: "hidden",
+              boxShadow: "0 14px 32px rgba(0,0,0,0.8)",
+              border: "1px solid rgba(255,255,255,0.2)",
             }}
-          />
+          >
+            <img
+              src={activeItem.posterUrl}
+              alt={activeItem.title}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </motion.div>
         )}
 
-        {/* Info */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12, maxWidth: 560 }}
-        >
-          <ComingSoonBadge accentColor={accentColor} isMobile={isMobile} />
+        {/* Cụm thông tin */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: isMobile ? 7 : 10, maxWidth: 640 }}>
+          {/* Badge Sắp Chiếu */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: isMobile ? "2px 8px" : "3px 10px",
+              borderRadius: 99,
+              fontFamily: FONT_BODY,
+              fontSize: isMobile ? 10 : 11,
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              background: "rgba(245, 197, 24, 0.2)",
+              border: "1px solid rgba(245, 197, 24, 0.6)",
+              color: accentColor,
+              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            SẮP CHIẾU
+          </span>
 
-          <h3
+          {/* Title */}
+          <h2
             style={{
               fontFamily: FONT_DISPLAY,
-              fontSize: isMobile ? 22 : 34,
+              fontSize: isMobile ? 20 : 32,
               fontWeight: 800,
-              color: C.text,
-              lineHeight: 1.15,
+              color: "#ffffff",
+              lineHeight: 1.2,
               margin: 0,
+              textShadow: "0 2px 8px rgba(0,0,0,0.9)",
             }}
           >
             {activeItem.title}
-          </h3>
+          </h2>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700, color: C.text }}>
+          {/* Meta (Ngày chiếu & Thể loại) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: isMobile ? 11.5 : 13,
+              fontWeight: 600,
+              color: "#ffffff",
+              textShadow: "0 1px 5px rgba(0,0,0,0.9)",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 4, color: accentColor, fontWeight: 700 }}>
+              <Calendar size={isMobile ? 12 : 14} />
               {getReleaseLabel(activeItem)}
             </span>
             {activeItem.genres?.length > 0 && (
-              <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.textSub }}>
-                {activeItem.genres.slice(0, 3).map((g) => (typeof g === "string" ? g : g?.name)).join(" · ")}
-              </span>
+              <>
+                <span style={{ opacity: 0.5 }}>•</span>
+                <span style={{ color: "rgba(255,255,255,0.85)" }}>
+                  {activeItem.genres.slice(0, 3).map((g) => (typeof g === "string" ? g : g?.name)).join(", ")}
+                </span>
+              </>
             )}
           </div>
 
-          {showCountdown && <ComingSoonCountdown item={activeItem} accentColor={accentColor} />}
+          {/* Countdown timer */}
+          {showCountdown && (
+            <div style={{ marginTop: 2, marginBottom: 2 }}>
+              <ComingSoonCountdown item={activeItem} accentColor={accentColor} />
+            </div>
+          )}
 
-          {activeItem.description && !isMobile && (
+          {/* Mô tả */}
+          {activeItem.description && (
             <p
               style={{
                 fontFamily: FONT_BODY,
-                fontSize: 13,
-                color: C.textSub,
-                lineHeight: 1.6,
-                margin: 0,
+                fontSize: isMobile ? 12 : 13.5,
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: 1.5,
+                margin: "2px 0 6px",
+                textShadow: "0 1px 4px rgba(0,0,0,0.9)",
                 display: "-webkit-box",
-                WebkitLineClamp: 2,
+                WebkitLineClamp: isMobile ? 2 : 3,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
               }}
@@ -384,25 +347,32 @@ export default function ComingSoonFeatured({ item, items, accentColor = C.gold }
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            {/* Nút Chi Tiết — style kính mờ (frosted), đồng bộ với hệ UI chung, thu nhỏ để vừa section này */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(infoPath(activeItem))}
-              aria-label="Xem chi tiết"
-              className="bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 flex items-center gap-2 border border-white/30"
-              style={{
-                padding: isMobile ? "7px 14px" : "9px 20px",
-                fontFamily: FONT_BODY,
-                fontSize: isMobile ? 12 : 13,
-              }}
-            >
-              <Info size={14} />
-              Chi Tiết
-            </motion.button>
-          </div>
-        </motion.div>
+          {/* CTA Button */}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => navigate(infoPath(activeItem))}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: isMobile ? "7px 16px" : "9px 20px",
+              borderRadius: 8,
+              background: "rgba(255, 255, 255, 0.18)",
+              border: "1px solid rgba(255, 255, 255, 0.35)",
+              color: "#ffffff",
+              fontFamily: FONT_BODY,
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              backdropFilter: "blur(8px)",
+              marginTop: 4,
+            }}
+          >
+            <Info size={14} />
+            Chi Tiết
+          </motion.button>
+        </div>
       </div>
     </div>
   );

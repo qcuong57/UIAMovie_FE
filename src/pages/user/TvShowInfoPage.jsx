@@ -2,7 +2,7 @@
 // Trang thông tin chi tiết TV Show — hiển thị trước khi vào xem
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
@@ -19,6 +19,16 @@ import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import { useToast } from "../../components/common/Toast";
+
+function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -27,6 +37,7 @@ export default function TvShowInfoPage() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [show, setShow] = useState(null);
   const [cast, setCast] = useState([]);
@@ -35,23 +46,19 @@ export default function TvShowInfoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
+
+  // ── Favorite state ──
   const [isFav, setIsFav] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState("cast");
   const [imgLoaded, setImgLoaded] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
-  // Cache episodes theo season number (lazy-load từ /seasons/{n})
   const [seasonEpisodesCache, setSeasonEpisodesCache] = useState({});
   const [loadingSeasonEpisodes, setLoadingSeasonEpisodes] = useState(false);
 
-  const [currentUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem("currentUser");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUser] = useState(() => getCurrentUser());
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -67,10 +74,21 @@ export default function TvShowInfoPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await tvShowService.getTvShowById(id);
-      // BE: ApiResponseDTO<TvShowDTO> → axios unwrap → { data: TvShowDTO, message }
+      const [res, favRes] = await Promise.all([
+        tvShowService.getTvShowById(id),
+        tvShowService.getFavorites ? tvShowService.getFavorites().catch(() => []) : Promise.resolve([]),
+      ]);
       const envelope = res?.data ?? res;
       const raw = envelope?.data ?? envelope?.tvShow ?? envelope;
+
+      // Đồng bộ trạng thái yêu thích ban đầu
+      const rawFavs = Array.isArray(favRes)
+        ? favRes
+        : favRes?.data || favRes?.favorites || favRes?.items || [];
+      const favorited = rawFavs.some(
+        (f) => String(f.tvShowId ?? f.id ?? f.tvShow?.id) === String(id)
+      );
+      setIsFav(favorited);
 
       const normalized = {
         id: raw.id,
@@ -100,8 +118,6 @@ export default function TvShowInfoPage() {
           extractYoutubeKey(
             raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
           ),
-        // Trailer tự upload lên Cloudinary — chạy song song với trailerKey (Youtube).
-        // Youtube được ưu tiên phát trước nếu show có cả 2 (xem TrailerModal).
         trailerVideoUrl:
           raw.trailerVideoUrl ||
           raw.videos?.find((v) => v.videoType === "trailer_upload")?.videoUrl ||
@@ -151,17 +167,11 @@ export default function TvShowInfoPage() {
       }
 
       // Cast
-      // Log để debug — xoá sau khi xác nhận hoạt động
-      console.debug('[TvShowInfoPage] raw.cast:', raw?.cast);
-      console.debug('[TvShowInfoPage] raw.seasons cast sample:', raw?.seasons?.[0]);
-
       const rawCast = Array.isArray(raw?.cast) && raw.cast.length > 0
         ? raw.cast
-        // Fallback: gộp cast từ tất cả seasons nếu root cast rỗng
         : (raw?.seasons ?? []).flatMap(s => Array.isArray(s.cast) ? s.cast : []);
 
       if (rawCast.length > 0) {
-        // Dedup theo id khi gộp từ nhiều seasons
         const seen = new Set();
         const deduped = rawCast.filter(c => {
           const key = c.id ?? c.personId ?? c.name;
@@ -189,11 +199,45 @@ export default function TvShowInfoPage() {
     }
   };
 
-  // Lazy-load episodes khi user bấm vào season (BE không kèm episodes trong GET /id)
+  // ── Logic Toggle Favorite ──
+  const handleToggleFav = useCallback(async () => {
+    if (favLoading) return;
+
+    if (!getCurrentUser()) {
+      toast?.warning?.("Bạn cần đăng nhập để thêm vào Yêu thích");
+      return;
+    }
+
+    setFavLoading(true);
+    const nextState = !isFav;
+    setIsFav(nextState);
+
+    try {
+      if (!nextState) {
+        if (tvShowService.removeFavorite) {
+          await tvShowService.removeFavorite(id);
+        }
+        toast?.info?.(`"${show?.title}" đã được bỏ khỏi Yêu thích`);
+      } else {
+        if (tvShowService.addFavorite) {
+          await tvShowService.addFavorite(id);
+        }
+        toast?.success?.(`Đã thêm "${show?.title}" vào Yêu thích`);
+      }
+    } catch (err) {
+      console.error("[TvShowInfoPage] Fav Error:", err);
+      setIsFav(!nextState); // Rollback nếu lỗi API
+      toast?.error?.("Không thể cập nhật Yêu thích, vui lòng thử lại");
+    } finally {
+      setFavLoading(false);
+    }
+  }, [favLoading, isFav, id, show?.title, toast]);
+
+  // Lazy-load episodes khi user bấm vào season
   const handleSeasonSelect = async (season) => {
     setSelectedSeason(season);
     const sn = season.seasonNumber;
-    if (seasonEpisodesCache[sn]) return; // đã có
+    if (seasonEpisodesCache[sn]) return;
     try {
       setLoadingSeasonEpisodes(true);
       const data = await tvShowService.getSeason(id, sn);
@@ -205,6 +249,7 @@ export default function TvShowInfoPage() {
       setLoadingSeasonEpisodes(false);
     }
   };
+
   const creators =
     directorsFromShow.length > 0
       ? directorsFromShow
@@ -310,7 +355,7 @@ export default function TvShowInfoPage() {
         firstTrailerVideoUrl={firstTrailerVideoUrl}
         hasTrailer={hasTrailer}
         isFav={isFav}
-        onToggleFav={() => setIsFav((v) => !v)}
+        onToggleFav={handleToggleFav}
         onPlay={() => navigate(`/tvshow/${id}`)}
         onTrailer={() => setShowTrailer(true)}
         imgLoaded={imgLoaded}
