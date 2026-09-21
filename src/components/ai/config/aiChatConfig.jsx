@@ -130,10 +130,14 @@ export const parseMarkdownTable = (md) => {
   );
 
   // Bỏ hàng divider (|---|---|---|)
-  const contentRows = parsedRows.filter(
-    (row) => !row.every((c) => /^[-:\s]+$/.test(c))
+const isMarkdownDividerCell = (value) =>
+  [...value].every(
+    (char) => char === "-" || char === ":" || char.trim() === ""
   );
 
+const contentRows = parsedRows.filter(
+  (row) => !row.every(isMarkdownDividerCell)
+);
   if (contentRows.length === 0) return { header: [], body: [] };
 
   return {
