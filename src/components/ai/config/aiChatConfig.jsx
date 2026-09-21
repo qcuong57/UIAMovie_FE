@@ -13,30 +13,21 @@ export const W = {
   accentSoft: "rgba(229,24,30,0.10)",
   accentGlow: "rgba(229,24,30,0.20)",
   text: "rgba(255,255,255,0.88)",
-  textSub: "rgba(255,255,255,0.42)",
-  textDim: "rgba(255,255,255,0.18)",
+  textSub: "rgba(255,255,255,0.52)",
+  textDim: "rgba(255,255,255,0.28)",
   userBg: "#c8151a",
   gold: "#f5c518",
   green: "#22c55e",
   warn: "#f59e0b",
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 export const MAX_CHAT_LENGTH = 500;
-export const MAX_HISTORY = 20;
+export const MAX_HISTORY = 12;
 export const GREETING =
   "Xin chào! Tôi là trợ lý của UIAMovie.\nBạn muốn tìm phim gì hôm nay?";
 
-// Plain text labels — no emoji, rendered as simple text pills
 export const MOODS = [
-  "Buồn",
-  "Vui",
-  "Hồi hộp",
-  "Thư giãn",
-  "Rùng rợn",
-  "Lãng mạn",
-  "Hào hứng",
-  "Muốn khóc",
+  "Buồn", "Vui", "Hồi hộp", "Thư giãn", "Rùng rợn", "Lãng mạn", "Hào hứng", "Muốn khóc",
 ];
 
 export const INTENT_CHIPS = {
@@ -88,6 +79,20 @@ export const PROACTIVE_MESSAGES = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Xóa sạch các đoạn bảng markdown | ... | khỏi text hiển thị thông thường
+ * để tránh việc người dùng bị nhìn thấy các gạch nối Markdown thô xấu xí.
+ */
+export const stripMarkdownTable = (text) => {
+  if (!text) return "";
+  return text
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("|"))
+    .join("\n")
+    .trim();
+};
+
 export const renderMarkdown = (text) => {
   if (!text) return null;
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -103,20 +108,36 @@ export const renderMarkdown = (text) => {
   });
 };
 
+/**
+ * Parser bảng Markdown an toàn, hỗ trợ bóc tách từng hàng thuộc tính
+ */
 export const parseMarkdownTable = (md) => {
   if (!md) return { header: [], body: [] };
+  
   const lines = md
     .trim()
     .split("\n")
-    .filter((l) => l.trim().startsWith("|"));
-  const allRows = lines.map((l) =>
-    l
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("|") && l.endsWith("|"));
+
+  if (lines.length < 2) return { header: [], body: [] };
+
+  const parsedRows = lines.map((line) =>
+    line
+      .slice(1, -1)
       .split("|")
-      .map((c) => c.trim())
-      .filter(Boolean),
+      .map((col) => col.trim())
   );
-  const filtered = allRows.filter(
-    (row) => !row.every((c) => /^[-:]+$/.test(c)),
+
+  // Bỏ hàng divider (|---|---|---|)
+  const contentRows = parsedRows.filter(
+    (row) => !row.every((c) => /^[-:\s]+$/.test(c))
   );
-  return { header: filtered[0] || [], body: filtered.slice(1) };
+
+  if (contentRows.length === 0) return { header: [], body: [] };
+
+  return {
+    header: contentRows[0] || [],
+    body: contentRows.slice(1) || [],
+  };
 };

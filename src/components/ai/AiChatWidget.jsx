@@ -18,6 +18,14 @@ import AiChatMessageBubble from "./AiChatMessageBubble";
 
 const EASE_EXP = [0.16, 1, 0.3, 1];
 
+const BE_MAX_MESSAGE = 500;
+const BE_MAX_HISTORY_TURNS = 12; // Cập nhật đúng giới hạn 12 turn của backend mới
+const BE_MAX_TURN_LENGTH = 2000;
+
+const capTo = (value, max) => (Number.isFinite(value) && value > 0 ? Math.min(value, max) : max);
+const MSG_LIMIT = capTo(MAX_CHAT_LENGTH, BE_MAX_MESSAGE);
+const HISTORY_LIMIT = capTo(MAX_HISTORY, BE_MAX_HISTORY_TURNS);
+
 export default function AiChatWidget() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -91,9 +99,12 @@ export default function AiChatWidget() {
   const buildHistory = (msgs) =>
     msgs
       .slice(1)
-      .filter((m) => !m._typing)
-      .slice(-MAX_HISTORY)
-      .map(({ role, content }) => ({ role, content }));
+      .filter((m) => !m._typing && !m._error && m.content?.trim())
+      .slice(-HISTORY_LIMIT)
+      .map(({ role, content }) => ({
+        role,
+        content: content.trim().slice(0, BE_MAX_TURN_LENGTH),
+      }));
 
   const handleMovieClick = useCallback(
     (movie) => {
@@ -117,7 +128,7 @@ export default function AiChatWidget() {
 
   const sendMessage = async (text) => {
     const trimmed = text.trim();
-    if (!trimmed || loading || trimmed.length > MAX_CHAT_LENGTH) return;
+    if (!trimmed || loading || trimmed.length > MSG_LIMIT) return;
     setShowMoodPicker(false);
 
     const userMsg = { role: "user", content: trimmed };
@@ -129,10 +140,22 @@ export default function AiChatWidget() {
     setMessages((prev) => [...prev, { role: "assistant", content: "", _typing: true }]);
     setLoading(true);
 
+    // Trích xuất ngữ cảnh trang hiện tại để gửi cho AI
+    const pathname = location.pathname;
+    const movieMatch = pathname.match(/\/movie\/([a-f0-9-]{36})/i);
+    const tvMatch = pathname.match(/\/tv-show\/([a-f0-9-]{36})/i);
+
+    const clientContext = {
+      currentPath: pathname,
+      currentMovieId: movieMatch ? movieMatch[1] : null,
+      currentTvShowId: tvMatch ? tvMatch[1] : null,
+    };
+
     try {
-      const { reply, movies, tvshows, intent, compareTable } = await aiService.chat(
+      const { reply, movies, tvshows, intent, compareTable, suggestedActions } = await aiService.chat(
         trimmed,
-        buildHistory(nextMsgs),
+        buildHistory(messages),
+        clientContext
       );
       setLastIntent(intent || "movie");
       setMessages((prev) => [
@@ -144,12 +167,25 @@ export default function AiChatWidget() {
           tvshows: tvshows?.length ? tvshows : undefined,
           intent: intent ?? "movie",
           compareTable: compareTable ?? null,
+          suggestedActions: suggestedActions ?? [],
         },
       ]);
-    } catch {
+    } catch (err) {
+      console.error("[AiChatWidget] sendMessage failed:", err?.response?.data || err?.message || err);
+
+      const status = err?.response?.status;
+      const friendly =
+        status === 503
+          ? "Dịch vụ AI đang quá tải hoặc tạm gián đoạn. Vui lòng thử lại sau ít phút."
+          : status === 429
+          ? "Bạn gửi hơi nhanh, vui lòng chờ một chút rồi thử lại."
+          : status === 400
+          ? `Tin nhắn không hợp lệ (tối đa ${MSG_LIMIT} ký tự). Hãy rút gọn câu hỏi rồi thử lại.`
+          : "Xin lỗi, không thể kết nối tới AI. Vui lòng thử lại sau.";
+
       setMessages((prev) => [
         ...prev.filter((m) => !m._typing),
-        { role: "assistant", content: "Xin lỗi, không thể kết nối tới AI. Vui lòng thử lại sau." },
+        { role: "assistant", content: friendly, _error: true },
       ]);
     } finally {
       setLoading(false);
@@ -178,8 +214,8 @@ export default function AiChatWidget() {
   };
 
   const inputLength = input.length;
-  const overLimit = inputLength > MAX_CHAT_LENGTH;
-  const nearLimit = inputLength > MAX_CHAT_LENGTH - 50;
+  const overLimit = inputLength > MSG_LIMIT;
+  const nearLimit = inputLength > MSG_LIMIT - 50;
   const canSend = input.trim().length > 0 && !loading && !overLimit;
   const isFirst = messages.length === 1;
   const currentChips = INTENT_CHIPS[lastIntent] ?? INTENT_CHIPS.movie;
@@ -220,7 +256,7 @@ export default function AiChatWidget() {
               overflow: "hidden",
             }}
           >
-            {/* Header — wordmark + status, no logo box, no badge chrome */}
+            {/* Header */}
             <div
               style={{
                 padding: "15px 16px 13px",
@@ -322,6 +358,8 @@ export default function AiChatWidget() {
                   compareTable={msg.compareTable}
                   intent={msg.intent}
                   showLabel={i === 0 || messages[i - 1].role !== msg.role}
+                  suggestedActions={msg.suggestedActions}
+                  onActionClick={(action) => sendMessage(action)}
                 />
               ))}
               <div ref={bottomRef} />
@@ -413,7 +451,7 @@ export default function AiChatWidget() {
               )}
             </AnimatePresence>
 
-            {/* Mood toggle — plain text link, sits just above the composer */}
+            {/* Mood toggle */}
             <div style={{ padding: "0 14px 6px", flexShrink: 0 }}>
               <button
                 onClick={() => setShowMoodPicker((v) => !v)}
@@ -511,7 +549,7 @@ export default function AiChatWidget() {
                 </p>
                 {nearLimit && (
                   <span style={{ fontFamily: FONT_BODY, fontSize: 9.5, fontWeight: 600, color: overLimit ? W.warn : W.textDim }}>
-                    {inputLength}/{MAX_CHAT_LENGTH}
+                    {inputLength}/{MSG_LIMIT}
                   </span>
                 )}
               </div>
@@ -520,7 +558,7 @@ export default function AiChatWidget() {
         )}
       </AnimatePresence>
 
-      {/* FAB — single word mark, no icon library glyph */}
+      {/* FAB */}
       <motion.button
         onClick={() => setOpen((v) => !v)}
         whileHover={{ scale: 1.06 }}
@@ -567,4 +605,4 @@ export default function AiChatWidget() {
       </motion.button>
     </>
   );
-}
+} 

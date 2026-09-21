@@ -1,56 +1,81 @@
 // src/services/aiService.js
 // ─── AI Service — wrapper toàn bộ /api/ai/* ──────────────────────────────────
 //
-// v6 — TV Show support [v4 backend]:
-//   [NEW] chat: response shape thêm `tvshows` (TvShowSummaryDTO[]) khi intent = "tvshow"
-//   [NEW] getTvShowRecommendations: GET /ai/recommend/tvshows (yêu cầu auth)
-//   [NEW] smartSearchTvShows:       GET /ai/search/tvshows?q=
-//
-// Giữ nguyên từ v5:
-//   [FIX-1] getReviewSummary: POST /ai/review (không phải GET /ai/review-summary/{id})
+// v8 — Tối ưu hóa Clean Architecture & Hỗ trợ Client Context:
+//   [NEW] Hỗ trợ tham số clientContext (currentPath, currentMovieId, currentTvShowId)
+//   [NEW] Đọc cấu trúc RESTful mới (message, items, actions, meta) song song backward compatibility
+//   [FIX] Giới hạn lịch sử gửi lên 12 turns gần nhất theo chuẩn backend
 
 import axiosInstance from '../config/axios';
 
 const unwrap = (res) => {
-  if (res && typeof res === 'object' && 'data' in res) return res.data;
-  return res;
+  const body = res && typeof res === 'object' && 'data' in res ? res.data : res;
+  if (body && typeof body === 'object' && 'success' in body && 'data' in body) {
+    return body.data;
+  }
+  return body;
 };
 
 const aiService = {
 
   // ── POST /api/ai/chat ─────────────────────────────────────────────────────
   //
+  // @param {string} message
+  // @param {Array<{role: string, content: string}>} history
+  // @param {object|null} clientContext - { currentPath, currentMovieId, currentTvShowId, searchQuery }
   // @returns {Promise<{
-  //   reply:        string,
-  //   movies:       MovieDTO[],       // có giá trị khi intent = "movie" | "mood" | "compare"
-  //   tvshows:      TvShowSummaryDTO[], // có giá trị khi intent = "tvshow"
-  //   intent:       string,           // "movie" | "tvshow" | "mood" | "compare" | "review" | "site"
-  //   compareTable: string | null,
+  //   reply:            string,
+  //   message:          string,
+  //   movies:           MovieDTO[],
+  //   tvshows:          TvShowSummaryDTO[],
+  //   items:            Array<object>,
+  //   intent:           string,
+  //   compareTable:     string | null,
+  //   suggestedActions: string[],
+  //   meta:             object,
   // }>}
-  //
-  // Backend trả: { success, data: { reply, movies, tvshows, intent, compareTable? }, message }
-  chat: async (message, history = []) => {
-    const res = await axiosInstance.post('/ai/chat', {
+  chat: async (message, history = [], clientContext = null) => {
+    const payload = {
       message,
+      // Cắt tối đa 12 turn gần nhất theo chuẩn backend mới
       history: history
-        .filter(h => h.role === 'user' || h.role === 'assistant')
-        .slice(-20),
-    });
+        .filter((h) => h.role === 'user' || h.role === 'assistant')
+        .slice(-12)
+        .map(({ role, content }) => ({
+          role,
+          content: content?.trim()?.slice(0, 2000) ?? '',
+        })),
+    };
 
+    if (clientContext) {
+      payload.clientContext = clientContext;
+    }
+
+    const res = await axiosInstance.post('/ai/chat', payload);
     const data = unwrap(res);
+
+    const replyText =
+      data?.message ?? data?.Message ?? data?.reply ?? data?.Reply ?? 'Xin lỗi, tôi đang bận. Vui lòng thử lại.';
+
+    const rawActions = data?.actions ?? data?.Actions ?? [];
+    const suggestedActions = Array.isArray(data?.suggestedActions ?? data?.SuggestedActions)
+      ? (data.suggestedActions ?? data.SuggestedActions)
+      : rawActions.map((a) => a.label || a.value || a);
+
     return {
-      reply:        data?.reply        ?? 'Xin lỗi, tôi đang bận. Vui lòng thử lại.',
-      movies:       Array.isArray(data?.movies)   ? data.movies   : [],
-      tvshows:      Array.isArray(data?.tvshows)  ? data.tvshows  : [],
-      intent:       data?.intent       ?? 'movie',
-      compareTable: data?.compareTable ?? null,
+      reply:            replyText,
+      message:          replyText,
+      movies:           Array.isArray(data?.movies ?? data?.Movies) ? (data.movies ?? data.Movies) : [],
+      tvshows:          Array.isArray(data?.tvshows ?? data?.TvShows) ? (data.tvshows ?? data.TvShows) : [],
+      items:            Array.isArray(data?.items ?? data?.Items) ? (data.items ?? data.Items) : [],
+      intent:           data?.intent ?? data?.Intent ?? 'movie',
+      compareTable:     data?.compareTable ?? data?.CompareTable ?? null,
+      suggestedActions,
+      meta:             data?.meta ?? data?.Meta ?? {},
     };
   },
 
   // ── GET /api/ai/recommend ─────────────────────────────────────────────────
-  // Gợi ý phim lẻ dựa trên lịch sử xem — yêu cầu đăng nhập.
-  //
-  // @returns {Promise<{ movies: MovieDTO[], message: string }>}
   getRecommendations: async () => {
     const res  = await axiosInstance.get('/ai/recommend');
     const data = unwrap(res);
@@ -61,9 +86,6 @@ const aiService = {
   },
 
   // ── GET /api/ai/recommend/tvshows ─────────────────────────────────────────
-  // Gợi ý TV show/series dựa trên lịch sử xem — yêu cầu đăng nhập.
-  //
-  // @returns {Promise<{ tvshows: TvShowSummaryDTO[], message: string }>}
   getTvShowRecommendations: async () => {
     const res  = await axiosInstance.get('/ai/recommend/tvshows');
     const data = unwrap(res);
@@ -74,9 +96,6 @@ const aiService = {
   },
 
   // ── GET /api/ai/search?q=... ──────────────────────────────────────────────
-  // AI search phim lẻ bằng ngôn ngữ tự nhiên.
-  //
-  // @returns {Promise<MovieDTO[]>}
   smartSearch: async (query) => {
     if (!query?.trim()) return [];
     const res  = await axiosInstance.get('/ai/search', {
@@ -87,10 +106,6 @@ const aiService = {
   },
 
   // ── GET /api/ai/search/tvshows?q=... ─────────────────────────────────────
-  // AI search TV show/series bằng ngôn ngữ tự nhiên.
-  // Luồng backend: basic search → nếu < 5 kết quả → gọi AI → merge.
-  //
-  // @returns {Promise<TvShowSummaryDTO[]>}
   smartSearchTvShows: async (query) => {
     if (!query?.trim()) return [];
     const res  = await axiosInstance.get('/ai/search/tvshows', {
@@ -101,48 +116,36 @@ const aiService = {
   },
 
   // ── POST /api/ai/mood ─────────────────────────────────────────────────────
-  //
-  // @param  {string} mood - tâm trạng người dùng (vd: "buồn", "vui", "hồi hộp")
-  // @returns {Promise<{ mood: string, movies: MovieDTO[] }>}
   getMoodRecommend: async (mood) => {
     if (!mood?.trim()) return { mood: '', movies: [] };
     const res  = await axiosInstance.post('/ai/mood', { mood: mood.trim() });
     const data = unwrap(res);
     return {
-      mood:   data?.mood   ?? mood,
-      movies: Array.isArray(data?.movies) ? data.movies : [],
+      mood:   data?.mood ?? data?.Mood ?? mood,
+      movies: Array.isArray(data?.movies ?? data?.Movies) ? (data.movies ?? data.Movies) : [],
     };
   },
 
   // ── POST /api/ai/compare ──────────────────────────────────────────────────
-  //
-  // @param  {string} movieIdA - UUID phim A
-  // @param  {string} movieIdB - UUID phim B
-  // @returns {Promise<{ movieA: MovieDTO, movieB: MovieDTO, markdownTable: string }>}
   compareMovies: async (movieIdA, movieIdB) => {
     if (!movieIdA || !movieIdB) throw new Error('Cần cung cấp 2 ID phim hợp lệ.');
     const res  = await axiosInstance.post('/ai/compare', { movieIdA, movieIdB });
     const data = unwrap(res);
     return {
-      movieA:        data?.movieA        ?? null,
-      movieB:        data?.movieB        ?? null,
-      markdownTable: data?.markdownTable ?? '',
+      movieA:        data?.movieA ?? data?.MovieA ?? null,
+      movieB:        data?.movieB ?? data?.MovieB ?? null,
+      markdownTable: data?.markdownTable ?? data?.MarkdownTable ?? '',
     };
   },
 
   // ── POST /api/ai/review ───────────────────────────────────────────────────
-  //
-  // [FIX-1] POST /ai/review — đúng với AiController.cs [HttpPost("review")]
-  //
-  // @param  {string} movieId - UUID phim
-  // @returns {Promise<{ movieId: string, summary: string }>}
   getReviewSummary: async (movieId) => {
     if (!movieId) throw new Error('Cần cung cấp Movie ID.');
     const res  = await axiosInstance.post('/ai/review', { movieId });
     const data = unwrap(res);
     return {
-      movieId: data?.movieId ?? movieId,
-      summary: data?.summary ?? 'Chưa có đánh giá.',
+      movieId: data?.movieId ?? data?.MovieId ?? movieId,
+      summary: data?.summary ?? data?.Summary ?? 'Chưa có đánh giá.',
     };
   },
 

@@ -206,6 +206,8 @@ export default function HomePage() {
   const isMobile = useIsMobile();
   const [retryCount, setRetryCount] = useState(0);
   const hasFetched = useRef(false);
+
+  // Giữ pastBanner để ẩn nút khi ở đầu trang nếu muốn, nhưng KHÔNG unmount component
   const [pastBanner, setPastBanner] = useState(false);
 
   useEffect(() => {
@@ -318,10 +320,6 @@ export default function HomePage() {
         ]),
       );
 
-      // BUG CŨ: chỉ lấy lịch sử xem phim lẻ (movieService.getWatchHistory),
-      // bỏ sót toàn bộ lịch sử xem phim bộ (tvShowService.getWatchHistory) —
-      // vì đây là 2 bảng/endpoint tách biệt ở backend (WatchHistory vs
-      // TvShowWatchHistory), không tự gộp cho FE.
       const rawMovieHistory = Array.isArray(historyData)
         ? historyData
         : historyData?.data || historyData?.history || [];
@@ -329,9 +327,6 @@ export default function HomePage() {
         ? tvHistoryData
         : tvHistoryData?.data || tvHistoryData?.history || [];
 
-      // Gắn cờ isTvShow ngay từ đây vì 2 DTO có field hoàn toàn khác nhau
-      // (MovieTitle/ProgressMinutes vs TvShowTitle/ProgressSeconds) và không
-      // có field isTvShow / object lồng "movie"/"tvShow" nào cả.
       const combinedHistory = [
         ...rawMovieHistory.map((h) => ({ ...h, isTvShow: false })),
         ...rawTvHistory.map((h) => ({ ...h, isTvShow: true })),
@@ -411,15 +406,6 @@ export default function HomePage() {
     [favorites],
   );
 
-  // ── Chuẩn hóa danh sách xem tiếp ──────────────────────────────────────────
-  // Backend trả 2 DTO phẳng, KHÔNG có object "movie"/"tvShow" lồng bên trong,
-  // KHÔNG có field currentTime/duration/progress/remainingMinutes/title/isTvShow
-  // như code cũ giả định — nên trước đây item.title luôn undefined và bị
-  // filter loại hết (section không bao giờ hiện).
-  //   WatchHistoryDTO (phim lẻ):  movieId, movieTitle, posterUrl, progressMinutes
-  //   TvShowWatchHistoryDTO (bộ): tvShowId, tvShowTitle, posterUrl,
-  //                               seasonNumber, episodeNumber, episodeRuntime (phút),
-  //                               progressSeconds
   const continueWatchingList = useMemo(() => {
     const movieMap = new Map(movies.map((m) => [String(m.id), m]));
     const tvMap = new Map(tvShows.map((s) => [String(s.id), s]));
@@ -430,15 +416,10 @@ export default function HomePage() {
         const id = isTv ? item.tvShowId : item.movieId;
         const meta = isTv ? tvMap.get(String(id)) : movieMap.get(String(id));
 
-        // Quy về cùng đơn vị giây, vì phim lẻ lưu progressMinutes còn phim
-        // bộ lưu progressSeconds.
         const currentTime = isTv
           ? item.progressSeconds ?? 0
           : (item.progressMinutes ?? 0) * 60;
 
-        // Tổng thời lượng: phim bộ có sẵn episodeRuntime (phút) trong chính
-        // history DTO; phim lẻ phải tra chéo qua danh sách movies đã fetch
-        // vì WatchHistoryDTO không trả Duration.
         const durationMinutes = isTv
           ? item.episodeRuntime
           : meta?.duration;
@@ -470,11 +451,6 @@ export default function HomePage() {
       })
       .filter((i) => Boolean(i.id && i.title));
 
-    // TvShowWatchHistory trả 1 dòng / tập đã xem, không phải 1 dòng / show —
-    // nên 1 show xem nhiều tập sẽ tạo nhiều item trùng tvShowId, gây trùng
-    // key "tv-{id}" khi ContinueWatchingSection render. Dedupe theo
-    // (isTvShow, id), giữ bản ghi đầu tiên vì watchHistory đã được sort mới
-    // nhất trước (combinedHistory sort theo watchedAt desc).
     const seenKeys = new Set();
     return mapped.filter((item) => {
       const dedupeKey = `${item.isTvShow ? "tv" : "mv"}-${item.id}`;
@@ -485,7 +461,6 @@ export default function HomePage() {
   }, [watchHistory, movies, tvShows]);
 
   const handleRemoveHistory = useCallback(async (item) => {
-    // Xóa lạc quan khỏi UI trước, rollback nếu API lỗi.
     setWatchHistory((prev) =>
       prev.filter((h) => String(h.id) !== String(item.historyId))
     );
@@ -498,8 +473,6 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error("Error deleting watch history:", err);
-      // Rollback: tải lại lịch sử xem thật từ server thay vì tự chèn lại
-      // item cũ (tránh lệch dữ liệu nếu có thay đổi khác xảy ra song song).
       const [historyData, tvHistoryData] = await Promise.all([
         movieService.getWatchHistory().catch(() => []),
         tvShowService.getWatchHistory?.().catch(() => []) ??
@@ -604,7 +577,7 @@ export default function HomePage() {
                   padding: isMobile ? "8px 16px 40px" : "8px 48px 56px",
                 }}
               >
-                {/* ── Tiếp tục xem (Ưu tiên đầu bảng khi có lịch sử xem dở) ── */}
+                {/* ── Tiếp tục xem ── */}
                 {continueWatchingList.length > 0 && (
                   <SectionReveal variant="slide-right" divider>
                     <ContinueWatchingSection
@@ -702,10 +675,9 @@ export default function HomePage() {
                   </SectionReveal>
                 )}
 
-                {/* ── Dành Cho Bạn (Showcase Studio Layout) ── */}
+                {/* ── Dành Cho Bạn ── */}
                 {forYouLoading && forYou.length === 0 ? (
                   <div style={{ marginBottom: 56 }}>
-                    {/* Header Skeleton */}
                     <div
                       style={{
                         display: "flex",
@@ -732,7 +704,6 @@ export default function HomePage() {
                       />
                     </div>
 
-                    {/* Showcase Container Skeleton */}
                     {!isMobile ? (
                       <div
                         style={{
@@ -745,7 +716,6 @@ export default function HomePage() {
                           animation: "pulse 1.6s ease-in-out infinite",
                         }}
                       >
-                        {/* Cột trái: Poster đứng 2:3 */}
                         <div
                           style={{
                             width: "100%",
@@ -754,8 +724,6 @@ export default function HomePage() {
                             background: "rgba(255,255,255,0.04)",
                           }}
                         />
-
-                        {/* Cột phải: Content + 5 Card bên dưới */}
                         <div
                           style={{
                             display: "flex",
@@ -764,13 +732,7 @@ export default function HomePage() {
                           }}
                         >
                           <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 8,
-                                marginBottom: 14,
-                              }}
-                            >
+                            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                               <div
                                 style={{
                                   height: 22,
@@ -851,8 +813,6 @@ export default function HomePage() {
                               />
                             </div>
                           </div>
-
-                          {/* Hàng 5 Card mini bên dưới */}
                           <div
                             style={{
                               display: "grid",
@@ -875,7 +835,6 @@ export default function HomePage() {
                         </div>
                       </div>
                     ) : (
-                      /* Mobile Skeleton */
                       <div
                         style={{
                           borderRadius: 16,
@@ -962,28 +921,28 @@ export default function HomePage() {
                 </SectionReveal>
               </div>
 
-              <AnimatePresence>
-                {pastBanner && (
-                  <motion.div
-                    key="ai-chat"
-                    initial={{ opacity: 0, scale: 0.85, y: 16 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.85, y: 16 }}
-                    transition={{
-                      duration: 0.35,
-                      ease: [0.215, 0.61, 0.355, 1],
-                    }}
-                    style={{
-                      position: "fixed",
-                      bottom: 0,
-                      right: 0,
-                      zIndex: 50,
-                    }}
-                  >
-                    <AiChatWidget />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* ── AI CHAT WIDGET: LUÔN MOUNT ĐỂ BẢO TOÀN LỊCH SỬ TIN NHẮN ── */}
+              <motion.div
+                animate={{
+                  opacity: pastBanner ? 1 : 0,
+                  scale: pastBanner ? 1 : 0.85,
+                  y: pastBanner ? 0 : 16,
+                }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.215, 0.61, 0.355, 1],
+                }}
+                style={{
+                  position: "fixed",
+                  bottom: 0,
+                  right: 0,
+                  zIndex: 50,
+                  pointerEvents: pastBanner ? "auto" : "none",
+                }}
+              >
+                <AiChatWidget />
+              </motion.div>
+
               <Footer />
             </>
           </div>

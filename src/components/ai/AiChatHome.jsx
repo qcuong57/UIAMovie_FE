@@ -34,20 +34,22 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 16px 14px" }}>
-      {/* Greeting */}
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 16px 16px" }}>
+      {/* ──── Greeting ──── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: EASE_EXP }}
+        style={{ marginBottom: 18 }}
       >
         <h2
           style={{
             fontFamily: FONT_DISPLAY,
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: 800,
             color: "#fff",
-            margin: "0 0 5px",
+            margin: "0 0 6px",
+            letterSpacing: "-0.5px",
           }}
         >
           Xin chào 👋
@@ -55,7 +57,7 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
         <p
           style={{
             fontFamily: FONT_BODY,
-            fontSize: 13,
+            fontSize: 13.5,
             color: W.textSub,
             margin: 0,
             lineHeight: 1.5,
@@ -65,7 +67,7 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
         </p>
       </motion.div>
 
-      {/* Search */}
+      {/* ──── Search Input ──── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -73,15 +75,24 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          marginTop: 16,
+          gap: 10,
+          marginBottom: 12,
           background: W.surfaceUp,
-          border: `1px solid ${W.border}`,
-          borderRadius: 13,
-          padding: "10px 12px",
+          border: `1.5px solid ${W.border}`,
+          borderRadius: 12,
+          padding: "11px 13px",
+          transition: "border-color 0.2s, box-shadow 0.2s",
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = W.borderHi;
+          e.currentTarget.style.boxShadow = `0 0 12px ${W.accentGlow}`;
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = W.border;
+          e.currentTarget.style.boxShadow = "none";
         }}
       >
-        <IconSearch size={15} color={W.textDim} />
+        <IconSearch size={16} color={W.textDim} />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -95,24 +106,25 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
             color: W.text,
             fontFamily: FONT_BODY,
             fontSize: 13,
+            WebkitFontSmoothing: "antialiased",
           }}
         />
       </motion.div>
 
-      {/* Status card */}
+      {/* ──── Status Card ──── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, delay: 0.1, ease: EASE_EXP }}
         style={{
-          marginTop: 10,
+          marginBottom: 14,
           display: "flex",
           alignItems: "center",
-          gap: 9,
-          borderRadius: 13,
-          border: `1px solid ${W.border}`,
+          gap: 10,
+          borderRadius: 12,
+          border: `1.5px solid ${W.border}`,
           background: W.surfaceUp,
-          padding: "11px 13px",
+          padding: "12px 13px",
         }}
       >
         <motion.span
@@ -127,77 +139,123 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
           transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontFamily: FONT_BODY, fontSize: 11.5, fontWeight: 700, color: W.text }}>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT_BODY,
+              fontSize: 12,
+              fontWeight: 700,
+              color: W.text,
+            }}
+          >
             AI Concierge đang hoạt động
           </p>
-          <p style={{ margin: "2px 0 0", fontFamily: FONT_BODY, fontSize: 10, color: W.textDim }}>
+          <p
+            style={{
+              margin: "2px 0 0",
+              fontFamily: FONT_BODY,
+              fontSize: 11,
+              color: W.textDim,
+            }}
+          >
             Thường phản hồi trong vài giây
           </p>
         </div>
       </motion.div>
 
-      {/* CTA — jump into chat */}
+      {/* ──── CTA Button — Prominent & Clear ──── */}
       <motion.button
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, delay: 0.15, ease: EASE_EXP }}
-        whileHover={{ y: -1 }}
+        whileHover={{ y: -2 }}
         whileTap={{ scale: 0.98 }}
         onClick={() => onOpenChat()}
         style={{
-          marginTop: 12,
+          marginBottom: 20,
           width: "100%",
           textAlign: "left",
           display: "flex",
           alignItems: "center",
-          gap: 11,
-          padding: "13px 14px",
-          borderRadius: 14,
-          background: `linear-gradient(135deg, rgba(229,24,30,0.14), rgba(229,24,30,0.04))`,
-          border: `1px solid rgba(229,24,30,0.22)`,
+          gap: 12,
+          padding: "14px 15px",
+          borderRadius: 13,
+          background: `linear-gradient(135deg, ${W.accent}, #a01015)`,
+          border: `1.5px solid rgba(229,24,30,0.35)`,
           cursor: "pointer",
+          transition: "all 0.2s ease",
+          boxShadow: "0 4px 16px rgba(229,24,30,0.25)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = "0 8px 24px rgba(229,24,30,0.35)";
+          e.currentTarget.style.transform = "translateY(-2px)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = "0 4px 16px rgba(229,24,30,0.25)";
+          e.currentTarget.style.transform = "translateY(0)";
         }}
       >
         <div
           style={{
-            width: 34,
-            height: 34,
+            width: 36,
+            height: 36,
             borderRadius: 10,
-            background: W.accentSoft,
+            background: "rgba(255,255,255,0.12)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
           }}
         >
-          <IconMessage2 size={16} color={W.accent} />
+          <IconMessage2 size={18} color="#fff" strokeWidth={2.2} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontFamily: FONT_BODY, fontSize: 12.5, fontWeight: 700, color: "#fff" }}>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT_BODY,
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#fff",
+            }}
+          >
             Nhắn tin cho Concierge
           </p>
-          <p style={{ margin: "1px 0 0", fontFamily: FONT_BODY, fontSize: 10.5, color: W.textSub }}>
+          <p
+            style={{
+              margin: "2px 0 0",
+              fontFamily: FONT_BODY,
+              fontSize: 11,
+              color: "rgba(255,255,255,0.75)",
+            }}
+          >
             Tìm phim, gợi ý theo cảm xúc, so sánh...
           </p>
         </div>
-        <IconArrowUpRight size={15} color={W.accent} />
+        <IconArrowUpRight size={16} color="#fff" strokeWidth={2.2} />
       </motion.button>
 
-      {/* Suggested topics */}
+      {/* ──── Suggested Topics ──── */}
       <p
         style={{
-          marginTop: 22,
-          marginBottom: 8,
+          marginBottom: 9,
           fontFamily: FONT_BODY,
-          fontSize: 10,
+          fontSize: 10.5,
           fontWeight: 700,
           color: W.textDim,
-          letterSpacing: "0.06em",
+          letterSpacing: "0.5px",
         }}
       >
         Chủ đề gợi ý
       </p>
-      <div style={{ borderRadius: 13, border: `1px solid ${W.border}`, overflow: "hidden" }}>
+      <div
+        style={{
+          borderRadius: 12,
+          border: `1.5px solid ${W.border}`,
+          overflow: "hidden",
+          background: W.surfaceUp,
+        }}
+      >
         {HOME_TOPICS.map((t, i) => {
           const Icon = TOPIC_ICONS[t.key] || IconSparkles;
           return (
@@ -211,35 +269,51 @@ export default function AiChatHome({ onOpenChat, onQuickAsk }) {
                 width: "100%",
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                padding: "11px 13px",
+                gap: 11,
+                padding: "12px 13px",
                 background: "transparent",
                 border: "none",
-                borderBottom: i < HOME_TOPICS.length - 1 ? `1px solid ${W.border}` : "none",
+                borderBottom:
+                  i < HOME_TOPICS.length - 1 ? `1px solid ${W.border}` : "none",
                 cursor: "pointer",
                 textAlign: "left",
+                transition: "all 0.15s ease",
+                minHeight: 48,
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = W.surfaceMid)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = W.surfaceMid;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
             >
               <div
                 style={{
-                  width: 26,
-                  height: 26,
+                  width: 28,
+                  height: 28,
                   borderRadius: 8,
-                  background: W.surfaceMid,
+                  background: W.accentSoft,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   flexShrink: 0,
+                  transition: "background 0.15s",
                 }}
               >
-                <Icon size={13} color={W.accent} />
+                <Icon size={14} color={W.accent} strokeWidth={2} />
               </div>
-              <span style={{ flex: 1, fontFamily: FONT_BODY, fontSize: 12, color: W.text, fontWeight: 500 }}>
+              <span
+                style={{
+                  flex: 1,
+                  fontFamily: FONT_BODY,
+                  fontSize: 12.5,
+                  color: W.text,
+                  fontWeight: 500,
+                }}
+              >
                 {t.label}
               </span>
-              <IconArrowUpRight size={13} color={W.textDim} />
+              <IconArrowUpRight size={14} color={W.textDim} strokeWidth={2} />
             </motion.button>
           );
         })}

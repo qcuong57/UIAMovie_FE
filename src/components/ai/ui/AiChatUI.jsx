@@ -36,7 +36,12 @@ export const TypingDots = () => (
   </div>
 );
 
-// Plain text pills — no emoji, no grid chrome
+/**
+ * MoodPicker — rõ ràng, dễ click
+ * - Min height 44px cho accessibility
+ * - Visual distinction rõ
+ * - Feedback ngay lập tức
+ */
 export const MoodPicker = ({ onSelect, loading }) => (
   <div
     style={{
@@ -48,15 +53,16 @@ export const MoodPicker = ({ onSelect, loading }) => (
     <p
       style={{
         fontFamily: FONT_BODY,
-        fontSize: 10.5,
-        fontWeight: 500,
+        fontSize: 11,
+        fontWeight: 600,
         color: W.textSub,
-        margin: "0 0 9px",
+        margin: "0 0 10px",
+        letterSpacing: "0.3px",
       }}
     >
       Bạn đang cảm thấy thế nào?
     </p>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
       {MOODS.map((m, i) => (
         <motion.button
           key={m}
@@ -65,31 +71,35 @@ export const MoodPicker = ({ onSelect, loading }) => (
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18, delay: i * 0.03 }}
-          whileHover={loading ? {} : { y: -1 }}
-          whileTap={loading ? {} : { scale: 0.96 }}
+          whileHover={loading ? {} : { y: -2 }}
+          whileTap={loading ? {} : { scale: 0.95 }}
           style={{
-            padding: "6px 12px",
-            borderRadius: 99,
-            background: "transparent",
-            border: `1px solid ${W.border}`,
+            minHeight: 32,
+            padding: "7px 13px",
+            borderRadius: 8,
+            background: loading ? "transparent" : W.surface,
+            border: `1.5px solid ${loading ? W.border : W.borderHi}`,
             cursor: loading ? "not-allowed" : "pointer",
             opacity: loading ? 0.45 : 1,
             fontFamily: FONT_BODY,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 500,
             color: W.textSub,
-            transition: "color 0.15s, background 0.15s, border-color 0.15s",
+            transition: "all 0.15s ease",
+            WebkitFontSmoothing: "antialiased",
           }}
           onMouseEnter={(e) => {
             if (loading) return;
-            e.currentTarget.style.color = W.text;
             e.currentTarget.style.background = W.surfaceMid;
-            e.currentTarget.style.borderColor = W.borderHi;
+            e.currentTarget.style.borderColor = W.accent;
+            e.currentTarget.style.color = "#fff";
+            e.currentTarget.style.boxShadow = `0 0 12px ${W.accentGlow}`;
           }}
           onMouseLeave={(e) => {
+            e.currentTarget.style.background = W.surface;
+            e.currentTarget.style.borderColor = W.borderHi;
             e.currentTarget.style.color = W.textSub;
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.borderColor = W.border;
+            e.currentTarget.style.boxShadow = "none";
           }}
         >
           {m}
@@ -99,7 +109,9 @@ export const MoodPicker = ({ onSelect, loading }) => (
   </div>
 );
 
-// Quiet notification card — text only, no icon badge
+/**
+ * ProactiveBubble — thông báo rõ ràng, phân biệt
+ */
 export const ProactiveBubble = ({ onOpen, onDismiss, message }) => (
   <motion.div
     initial={{ opacity: 0, y: 12, scale: 0.96 }}
@@ -112,12 +124,12 @@ export const ProactiveBubble = ({ onOpen, onDismiss, message }) => (
       bottom: 92,
       right: 24,
       zIndex: 9997,
-      maxWidth: 226,
-      background: W.surface,
-      border: `1px solid ${W.borderHi}`,
+      maxWidth: 260,
+      background: W.surfaceUp,
+      border: `1.5px solid ${W.borderHi}`,
       borderRadius: 13,
       padding: "12px 14px",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+      boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 20px rgba(229,24,30,0.15)",
       cursor: "pointer",
     }}
   >
@@ -133,33 +145,46 @@ export const ProactiveBubble = ({ onOpen, onDismiss, message }) => (
         background: "transparent",
         border: "none",
         cursor: "pointer",
-        padding: 3,
+        padding: 6,
         color: W.textDim,
+        borderRadius: 6,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "all 0.15s",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.color = W.textSub)}
-      onMouseLeave={(e) => (e.currentTarget.style.color = W.textDim)}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.color = W.accent;
+        e.currentTarget.style.background = W.accentSoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.color = W.textDim;
+        e.currentTarget.style.background = "transparent";
+      }}
     >
-      <IconX size={10} />
+      <IconX size={14} />
     </button>
+    
     <p
       style={{
         fontFamily: FONT_BODY,
-        fontSize: 9.5,
-        fontWeight: 600,
+        fontSize: 10,
+        fontWeight: 700,
         color: W.accent,
         margin: "0 0 4px",
+        letterSpacing: "0.5px",
       }}
     >
-      UIAMovie
+      UIAMovie Concierge
     </p>
     <p
       style={{
         fontFamily: FONT_BODY,
-        fontSize: 12,
+        fontSize: 12.5,
         color: W.text,
         margin: 0,
         lineHeight: 1.5,
-        paddingRight: 12,
+        paddingRight: 16,
       }}
     >
       {message}
@@ -167,7 +192,9 @@ export const ProactiveBubble = ({ onOpen, onDismiss, message }) => (
   </motion.div>
 );
 
-// FAB glyph — the one icon this widget actually needs
+/**
+ * FabIcon — biểu tượng FAB, animation mượt
+ */
 export const FabIcon = ({ isOpen }) => (
   <AnimatePresence mode="wait">
     {isOpen ? (
@@ -178,7 +205,7 @@ export const FabIcon = ({ isOpen }) => (
         exit={{ opacity: 0, rotate: 45, scale: 0.6 }}
         transition={{ duration: 0.16 }}
       >
-        <IconX size={20} color="rgba(255,255,255,0.85)" />
+        <IconX size={20} color="rgba(255,255,255,0.9)" strokeWidth={2.5} />
       </motion.div>
     ) : (
       <motion.span
@@ -201,24 +228,35 @@ export const FabIcon = ({ isOpen }) => (
   </AnimatePresence>
 );
 
+/**
+ * HeaderIconBtn — button icon nhỏ, phản hồi rõ
+ */
 export const HeaderIconBtn = ({ onClick, title, children }) => (
   <button
     onClick={onClick}
     title={title}
     style={{
+      minWidth: 32,
+      minHeight: 32,
       background: "transparent",
       border: "none",
       cursor: "pointer",
-      padding: "5px 6px",
+      padding: "6px 7px",
       borderRadius: 8,
       color: W.textDim,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      transition: "color 0.15s",
+      transition: "all 0.15s",
     }}
-    onMouseEnter={(e) => (e.currentTarget.style.color = W.textSub)}
-    onMouseLeave={(e) => (e.currentTarget.style.color = W.textDim)}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.color = W.accent;
+      e.currentTarget.style.background = W.accentSoft;
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.color = W.textDim;
+      e.currentTarget.style.background = "transparent";
+    }}
   >
     {children}
   </button>
