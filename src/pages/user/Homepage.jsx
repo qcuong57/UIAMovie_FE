@@ -37,6 +37,8 @@ import RecommendSection from "../../components/home/RecommendSection";
 import SectionReveal from "../../motion-configs/SectionReveal";
 import { LoadingScreen } from "../../components/ui";
 
+const VERCEL_DOMAIN = "https://uiamovie.vercel.app";
+
 // ─── Normalize movie ──────────────────────────────────────────────────────────
 const normalizeMovie = (m) => ({
   id: m.id,
@@ -520,34 +522,31 @@ export default function HomePage() {
     return byNewest(deduped).slice(0, 15);
   }, [movies, tvShows, trailerSourceMovies, trailerSourceTvShows]);
 
-  // ── Schema JSON-LD cho Trang Chủ ─────────────────────────────────────────────
+  // ── Schema JSON-LD cho Trang Chủ (Đồng bộ Domain Vercel) ─────────────────────
   const homeSchema = useMemo(() => {
     const topItems = [...highlyRated, ...tvTopRated].slice(0, 10);
-    const origin =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://uiamovie.vn";
 
     return {
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "WebSite",
-          "@id": `${origin}/#website`,
-          url: origin,
+          "@id": `${VERCEL_DOMAIN}/#website`,
+          url: VERCEL_DOMAIN,
           name: "UIAMovie",
           description:
             "Nền tảng xem phim trực tuyến chất lượng cao, tích hợp trợ lý AI gợi ý phim theo cảm xúc",
           potentialAction: {
             "@type": "SearchAction",
-            target: `${origin}/movies?search={search_term_string}`,
+            target: `${VERCEL_DOMAIN}/movies?search={search_term_string}`,
             "query-input": "required name=search_term_string",
           },
         },
         {
           "@type": "ItemList",
           name: "Phim & Series Thịnh Hành",
-          description: "Top phim chiếu rạp và phim bộ được xem nhiều nhất trên UIAMovie",
+          description:
+            "Top phim chiếu rạp và phim bộ được xem nhiều nhất trên UIAMovie",
           numberOfItems: topItems.length,
           itemListElement: topItems.map((item, index) => ({
             "@type": "ListItem",
@@ -556,7 +555,7 @@ export default function HomePage() {
               "@type": item.isTvShow ? "TVSeries" : "Movie",
               name: item.title,
               image: item.posterUrl || item.backdropUrl,
-              url: `${origin}/${item.isTvShow ? "tvshow" : "movie"}/${item.id}`,
+              url: `${VERCEL_DOMAIN}/${item.isTvShow ? "tvshow" : "movie"}/${item.id}`,
               ...(item.rating > 0 && {
                 aggregateRating: {
                   "@type": "AggregateRating",
@@ -572,12 +571,12 @@ export default function HomePage() {
     };
   }, [highlyRated, tvTopRated]);
 
-  // Ảnh đại diện OpenGraph: Lấy backdrop của phim tiêu biểu nhất làm ảnh preview
+  // Ảnh đại diện OpenGraph cho Vercel preview
   const ogImage = useMemo(() => {
     return (
       movies[0]?.backdropUrl ||
       movies[0]?.posterUrl ||
-      "/src/assets/favicon.ico"
+      `${VERCEL_DOMAIN}/src/assets/favicon.ico`
     );
   }, [movies]);
 
@@ -588,8 +587,9 @@ export default function HomePage() {
       {/* ── Thẻ SEO Meta & OpenGraph & JSON-LD ── */}
       <SeoMeta
         title="UIAMovie - Xem Phim Online HD, 4K Vietsub Miễn Phí & Trợ Lý AI"
-        description="Khám phá kho phim điện ảnh bom tấn, series truyền hình K-Drama, Anime mới nhất 2024. Xem phim mượt mà chuẩn 4K, hỗ trợ tư vấn chọn phim thông minh bằng trợ lý AI."
+        description="Khám phá kho phim điện ảnh bom tấn, series truyền hình K-Drama, Anime mới nhất. Xem phim mượt mà chuẩn 4K, hỗ trợ tư vấn chọn phim thông minh bằng trợ lý AI."
         image={ogImage}
+        url={VERCEL_DOMAIN}
         schemaData={homeSchema}
       />
 
