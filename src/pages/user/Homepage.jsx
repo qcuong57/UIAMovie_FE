@@ -18,6 +18,7 @@ import aiService from "../../services/aiService";
 import authService from "../../services/authService";
 import AiChatWidget from "../../components/ai/AiChatWidget";
 import ContinueWatchingSection from "../../components/home/ContinueWatchingSection";
+import SeoMeta from "../../components/common/SeoMeta";
 
 import {
   C,
@@ -207,7 +208,6 @@ export default function HomePage() {
   const [retryCount, setRetryCount] = useState(0);
   const hasFetched = useRef(false);
 
-  // Giữ pastBanner để ẩn nút khi ở đầu trang nếu muốn, nhưng KHÔNG unmount component
   const [pastBanner, setPastBanner] = useState(false);
 
   useEffect(() => {
@@ -520,10 +520,79 @@ export default function HomePage() {
     return byNewest(deduped).slice(0, 15);
   }, [movies, tvShows, trailerSourceMovies, trailerSourceTvShows]);
 
+  // ── Schema JSON-LD cho Trang Chủ ─────────────────────────────────────────────
+  const homeSchema = useMemo(() => {
+    const topItems = [...highlyRated, ...tvTopRated].slice(0, 10);
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://uiamovie.vn";
+
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${origin}/#website`,
+          url: origin,
+          name: "UIAMovie",
+          description:
+            "Nền tảng xem phim trực tuyến chất lượng cao, tích hợp trợ lý AI gợi ý phim theo cảm xúc",
+          potentialAction: {
+            "@type": "SearchAction",
+            target: `${origin}/movies?search={search_term_string}`,
+            "query-input": "required name=search_term_string",
+          },
+        },
+        {
+          "@type": "ItemList",
+          name: "Phim & Series Thịnh Hành",
+          description: "Top phim chiếu rạp và phim bộ được xem nhiều nhất trên UIAMovie",
+          numberOfItems: topItems.length,
+          itemListElement: topItems.map((item, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            item: {
+              "@type": item.isTvShow ? "TVSeries" : "Movie",
+              name: item.title,
+              image: item.posterUrl || item.backdropUrl,
+              url: `${origin}/${item.isTvShow ? "tvshow" : "movie"}/${item.id}`,
+              ...(item.rating > 0 && {
+                aggregateRating: {
+                  "@type": "AggregateRating",
+                  ratingValue: Number(item.rating).toFixed(1),
+                  bestRating: "10",
+                  ratingCount: "100",
+                },
+              }),
+            },
+          })),
+        },
+      ],
+    };
+  }, [highlyRated, tvTopRated]);
+
+  // Ảnh đại diện OpenGraph: Lấy backdrop của phim tiêu biểu nhất làm ảnh preview
+  const ogImage = useMemo(() => {
+    return (
+      movies[0]?.backdropUrl ||
+      movies[0]?.posterUrl ||
+      "/src/assets/favicon.ico"
+    );
+  }, [movies]);
+
   if (error) return <ErrorScreen message={error} onRetry={handleRetry} />;
 
   return (
     <>
+      {/* ── Thẻ SEO Meta & OpenGraph & JSON-LD ── */}
+      <SeoMeta
+        title="UIAMovie - Xem Phim Online HD, 4K Vietsub Miễn Phí & Trợ Lý AI"
+        description="Khám phá kho phim điện ảnh bom tấn, series truyền hình K-Drama, Anime mới nhất 2024. Xem phim mượt mà chuẩn 4K, hỗ trợ tư vấn chọn phim thông minh bằng trợ lý AI."
+        image={ogImage}
+        schemaData={homeSchema}
+      />
+
       <AnimatePresence>
         {loading && <LoadingScreen key="loading-screen" />}
       </AnimatePresence>

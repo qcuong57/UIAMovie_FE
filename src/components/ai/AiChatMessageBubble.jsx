@@ -32,11 +32,9 @@ export default function AiChatMessageBubble({
 
   // Lọc bỏ chuỗi bảng thô khỏi bong bóng tin nhắn chính nếu có
   let displayContent = content;
-  if (typeof content === "string") {
-    if (isCompare || content.includes("|")) {
-      const pipeIndex = content.indexOf("|");
-      displayContent = pipeIndex !== -1 ? content.substring(0, pipeIndex).trim() : content.trim();
-    }
+  if (typeof content === "string" && isCompare) {
+    const pipeIndex = content.indexOf("|");
+    displayContent = pipeIndex !== -1 ? content.substring(0, pipeIndex).trim() : content.trim();
   }
 
   const handleCompareClick = (item) =>

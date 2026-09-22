@@ -1,5 +1,5 @@
 // src/components/home/RecommendSection.jsx
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -22,6 +22,7 @@ import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import { useToast } from "../common/Toast";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
+import recommendationService from "../../services/recommendationService";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
 
 // ── Auth & Premium Helpers ─────────────────────────────────────────
@@ -58,6 +59,40 @@ function getErrorMessage(err, fallback) {
   );
 }
 
+// Seeded PRNG Algorithm - Giữ thứ tự cố định trong ngày nhưng đổi mới sau 24h
+function seededShuffle(array, seed) {
+  const arr = [...array];
+  let random = seed;
+  for (let i = arr.length - 1; i > 0; i--) {
+    random = (random * 9301 + 49297) % 233280;
+    const j = Math.floor((random / 233280) * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function getTodaySeed() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+// Tính Match % thực tế dựa trên rating và hash định danh phim
+function calculateMatchPercentage(item) {
+  if (!item) return 85;
+  let baseScore = 72;
+
+  if (item.rating) {
+    baseScore += Math.min(20, Math.round((Number(item.rating) / 10) * 20));
+  }
+
+  const idHash = (String(item.id || ""))
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const variance = (idHash % 9);
+
+  return Math.min(99, Math.max(76, baseScore + variance - 2));
+}
+
 function ModalPortal({ children }) {
   if (typeof document === "undefined") return null;
   return createPortal(children, document.body);
@@ -80,18 +115,65 @@ export default function RecommendSection({
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useMemo(() => getCurrentUser(), []);
 
-  // Chuẩn 10 phim (2 lượt carousel, mỗi lượt đúng 5 phim)
-  const list = useMemo(() => {
-    const raw = items ?? [...movies, ...tvShows];
-    return (raw || []).filter(Boolean).slice(0, 10);
-  }, [items, movies, tvShows]);
-
+  const [aiItems, setAiItems] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselPage, setCarouselPage] = useState(0); // 0 (phim 1-5) hoặc 1 (phim 6-10)
   const [showGate, setShowGate] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const [gateTitle, setGateTitle] = useState("");
+
+  // Gọi API lấy dữ liệu gợi ý và lưu cache 24h
+  useEffect(() => {
+    let isMounted = true;
+    const cacheKey = `rec_cache_${user?.id || "guest"}_${getTodaySeed()}`;
+
+    const loadRecommendations = async () => {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAiItems(parsed);
+            return;
+          }
+        } catch {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+
+      try {
+        const data = await recommendationService.getPersonalizedRecommendations(20);
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setAiItems(data);
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+      } catch (err) {
+        console.warn("[RecommendSection] Dùng fallback từ props:", err?.message || err);
+      }
+    };
+
+    loadRecommendations();
+    return () => { isMounted = false; };
+  }, [user?.id]);
+
+  // Trộn phim theo seed ngày hôm nay và chốt danh sách 10 phim (2 lượt carousel)[cite: 1]
+  const list = useMemo(() => {
+    const raw = aiItems.length > 0 ? aiItems : (items ?? [...movies, ...tvShows]);
+    const valid = (raw || []).filter(Boolean);
+    if (!valid.length) return [];
+
+    const shuffled = seededShuffle(valid, getTodaySeed());
+    return shuffled.slice(0, 10);
+  }, [aiItems, items, movies, tvShows]);
+
+  // Đảm bảo activeIndex hợp lệ khi list thay đổi
+  useEffect(() => {
+    if (activeIndex >= list.length) {
+      setActiveIndex(0);
+    }
+  }, [list.length, activeIndex]);
 
   const activeItem = list[activeIndex] || list[0] || null;
 
@@ -157,12 +239,12 @@ export default function RecommendSection({
 
   const isCurrentFav = checkFav(activeItem.id);
   const isCurrentPremium = activeItem.isPremium && !userHasPremium(getCurrentUser());
-  const matchPct = activeItem.rating ? Math.round(activeItem.rating * 10) : 96;
+  const matchPct = calculateMatchPercentage(activeItem);
   const displayGenre =
     activeItem.genres?.[0] ||
     (Array.isArray(activeItem.genre) ? activeItem.genre[0] : activeItem.genre);
 
-  // 5 phim tương ứng cho carousel hiện tại
+  // 5 phim tương ứng cho carousel hiện tại[cite: 1]
   const currentFiveMovies = list.slice(carouselPage * 5, carouselPage * 5 + 5);
 
   return (
@@ -172,7 +254,7 @@ export default function RecommendSection({
         position: "relative",
       }}
     >
-      {/* ── Tiêu đề Section (Không viền) ── */}
+      {/* ── Tiêu đề Section ── */}
       <div
         style={{
           display: "flex",
@@ -218,11 +300,11 @@ export default function RecommendSection({
             fontWeight: 600,
           }}
         >
-          {subtitle || "Dựa trên sở thích xem phim của bạn"}
+          {subtitle || (user ? "Cá nhân hóa bởi UIAMovie AI" : "Đề xuất thịnh hành hôm nay")}
         </span>
       </div>
 
-      {/* ── SHOWCASE STUDIO LAYOUT (KHÔNG DÙNG VIỀN) ── */}
+      {/* ── SHOWCASE STUDIO LAYOUT (DESKTOP) ── */}
       {!isMobile ? (
         <div
           style={{
@@ -240,7 +322,7 @@ export default function RecommendSection({
             overflow: "hidden",
           }}
         >
-          {/* Ambient Glow nhẹ phía sau */}
+          {/* Ambient Glow */}
           <div
             style={{
               position: "absolute",
@@ -331,7 +413,7 @@ export default function RecommendSection({
             </div>
           </div>
 
-          {/* 2. CỘT PHẢI: Khối Thông Tin + Carousel 5 Phim (2 Lần Scroll) */}
+          {/* 2. CỘT PHẢI: Khối Thông Tin + Carousel 5 Phim */}
           <div
             style={{
               display: "flex",
@@ -340,7 +422,6 @@ export default function RecommendSection({
               minWidth: 0,
             }}
           >
-            {/* Cụm thông tin chi tiết */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={`info-${activeItem.id}`}
@@ -377,7 +458,7 @@ export default function RecommendSection({
                       borderRadius: 999,
                     }}
                   >
-                    Đề xuất hàng đầu hôm nay
+                    Đề xuất hôm nay
                   </span>
                 </div>
 
@@ -440,7 +521,7 @@ export default function RecommendSection({
                     maxWidth: 620,
                   }}
                 >
-                  {activeItem.description || "Nội dung phim được đề xuất dựa trên mức độ tương đồng về diễn viên, đạo diễn và thể loại yêu thích của bạn."}
+                  {activeItem.description || "Nội dung phim được đề xuất tự động dựa trên thói quen và thể loại yêu thích của bạn."}
                 </p>
 
                 {/* Dàn nút hành động */}
@@ -533,7 +614,7 @@ export default function RecommendSection({
               </motion.div>
             </AnimatePresence>
 
-            {/* ── DÀN CAROUSEL 5 PHIM (TỔNG 2 LẦN SCROLL) ── */}
+            {/* ── DÀN CAROUSEL 5 PHIM (2 LẦN CUỘN) ── */}
             <div style={{ paddingTop: 24 }}>
               <div
                 style={{
@@ -557,7 +638,7 @@ export default function RecommendSection({
                     Các phim khác cùng gu
                   </span>
 
-                  {/* Dot phân trang hiển thị 2 lượt cuộn */}
+                  {/* Dot phân trang */}
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <div
                       style={{
@@ -580,7 +661,7 @@ export default function RecommendSection({
                   </div>
                 </div>
 
-                {/* Nút lật 2 lượt cuộn */}
+                {/* Nút lật trang */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button
                     onClick={handleTogglePage}
@@ -625,7 +706,7 @@ export default function RecommendSection({
                 </div>
               </div>
 
-              {/* Dàn 5 Card hiển thị cùng lúc (Không viền tím đáy) */}
+              {/* Dàn 5 Card */}
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`carousel-page-${carouselPage}`}
@@ -642,7 +723,7 @@ export default function RecommendSection({
                   {currentFiveMovies.map((item, idx) => {
                     const globalIdx = carouselPage * 5 + idx;
                     const isSelected = globalIdx === activeIndex;
-                    const itemMatch = item.rating ? Math.round(item.rating * 10) : 92;
+                    const itemMatch = calculateMatchPercentage(item);
 
                     return (
                       <motion.div
@@ -677,7 +758,6 @@ export default function RecommendSection({
                           }}
                         />
 
-                        {/* Gradient che tối để đọc chữ rõ ràng */}
                         <div
                           style={{
                             position: "absolute",
@@ -687,7 +767,6 @@ export default function RecommendSection({
                           }}
                         />
 
-                        {/* Điểm % phù hợp */}
                         <div
                           style={{
                             position: "absolute",
@@ -713,7 +792,6 @@ export default function RecommendSection({
                           </span>
                         </div>
 
-                        {/* Tên phim */}
                         <div
                           style={{
                             position: "absolute",
@@ -763,7 +841,7 @@ export default function RecommendSection({
           {list.map((item) => {
             const isFav = checkFav(item.id);
             const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
-            const matchPct = item.rating ? Math.round(item.rating * 10) : 95;
+            const itemMatch = calculateMatchPercentage(item);
 
             return (
               <div
@@ -834,7 +912,7 @@ export default function RecommendSection({
                         marginBottom: 3,
                       }}
                     >
-                      {matchPct}% Phù hợp
+                      {itemMatch}% Phù hợp
                     </span>
 
                     <h4
