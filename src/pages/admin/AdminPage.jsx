@@ -2,14 +2,16 @@
 import React, { useState } from "react";
 import { Navigate } from "react-router-dom";
 import authService from "../../services/authService";
+
 import AdminLayout from "../../components/admin/AdminLayout";
 import AdminDashboard from "../../components/admin/AdminDashboard";
 import AdminMovies from "../../components/admin/AdminMovies";
+import AdminTvShows from "../../components/admin/AdminTvShows";
+import AdminAnnouncements from "../../components/admin/AdminAnnouncements";
 import AdminGenres from "../../components/admin/AdminGenres";
 import AdminReviews from "../../components/admin/AdminReviews";
 import AdminUsers from "../../components/admin/AdminUsers";
 import AdminPersons from "../../components/admin/AdminPersons";
-import AdminTvShows from "../../components/admin/AdminTvShows";
 import AdminRevenue from "../../components/admin/AdminRevenue";
 import AdminAds from "../../components/admin/AdminAds";
 
@@ -31,8 +33,10 @@ export default function AdminPage() {
         return <AdminAds />;
       case "movies":
         return <AdminMovies />;
-        case "tvshows":
+      case "tvshows":
         return <AdminTvShows />;
+      case "announcements":
+        return <AdminAnnouncements />;
       case "genres":
         return <AdminGenres />;
       case "reviews":

@@ -27,6 +27,7 @@ import * as transitions from "../../motion-configs/transitions";
 import authService from "../../services/authService";
 import axiosInstance from "../../config/axios";
 import NavbarFilterModal from "../ui/NavbarFilterModal";
+import NotificationBell from "../ui/NotificationBell";
 
 const toSlug = (name) =>
   (name || "unknown")
@@ -377,6 +378,7 @@ const Navbar = () => {
             { label: "Trang chủ", path: "/" },
             { label: "Yêu thích", path: "/favorites", protected: true },
             { label: "Phim sắp chiếu", path: "/coming-soon" },
+            { label: "Tin tức", path: "/announcements" }, // ← Đã bổ sung trang Tin tức
             { label: "Về chúng tôi", path: "/about-us" },
           ].map(({ label, path, protected: isProtected }, i) => {
             const isActive =
@@ -796,7 +798,7 @@ const Navbar = () => {
             )}
           </AnimatePresence>
 
-          {/* ── Bộ lọc Icon kế bên Tìm kiếm (Cả Desktop & Mobile) ── */}
+          {/* ── Bộ lọc Icon kế bên Tìm kiếm ── */}
           <motion.button
             ref={filterBtnRef}
             onClick={() => setShowFilter((p) => !p)}
@@ -900,198 +902,203 @@ const Navbar = () => {
               </motion.button>
             </div>
           ) : (
-            <div className="relative" ref={dropdownRef}>
-              <motion.button
-                onClick={() => setShowDropdown((p) => !p)}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg"
-                style={{
-                  background: showDropdown
-                    ? "rgba(255,255,255,0.1)"
-                    : "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
-                <UserAvatar
-                  avatarUrl={currentUser?.avatar}
-                  name={currentUser?.name}
-                  size={isMobile ? 26 : 28}
+            <div className="flex items-center gap-1.5">
+              {/* Chuông thông báo */}
+              <NotificationBell scrolled={scrolled} />
+
+              <div className="relative" ref={dropdownRef}>
+                <motion.button
+                  onClick={() => setShowDropdown((p) => !p)}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg"
                   style={{
-                    boxShadow: scrolled
-                      ? "0 2px 8px rgba(229,24,30,0.4)"
-                      : "0 2px 12px rgba(229,24,30,0.5)",
-                    transition: "box-shadow 0.3s",
+                    background: showDropdown
+                      ? "rgba(255,255,255,0.1)"
+                      : "transparent",
+                    border: "none",
+                    cursor: "pointer",
                   }}
-                />
-
-                <AnimatePresence>
-                  {scrolled && !isMobile && (
-                    <motion.span
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: "auto" }}
-                      exit={{ opacity: 0, width: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-xs font-semibold text-white overflow-hidden whitespace-nowrap"
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        maxWidth: 80,
-                      }}
-                    >
-                      {currentUser?.name?.split(" ")[0] ?? "User"}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-
-                <motion.div
-                  animate={{ rotate: showDropdown ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
                 >
-                  <ChevronDown size={13} />
-                </motion.div>
-              </motion.button>
-
-              {/* Dropdown panel */}
-              <AnimatePresence>
-                {showDropdown && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute right-0 mt-2 w-52 rounded-2xl overflow-hidden shadow-2xl"
+                  <UserAvatar
+                    avatarUrl={currentUser?.avatar}
+                    name={currentUser?.name}
+                    size={isMobile ? 26 : 28}
                     style={{
-                      background: "rgba(12,12,12,0.97)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      backdropFilter: "blur(20px)",
+                      boxShadow: scrolled
+                        ? "0 2px 8px rgba(229,24,30,0.4)"
+                        : "0 2px 12px rgba(229,24,30,0.5)",
+                      transition: "box-shadow 0.3s",
                     }}
-                  >
-                    <div
-                      className="px-4 py-3"
-                      style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <UserAvatar
-                          avatarUrl={currentUser?.avatar}
-                          name={currentUser?.name}
-                          size={32}
-                        />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate leading-tight">
-                            {currentUser?.name ?? "Người dùng"}
-                          </p>
-                          <p
-                            className="text-xs truncate leading-tight"
-                            style={{ color: "rgba(255,255,255,0.3)" }}
-                          >
-                            {currentUser?.email ?? ""}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                  />
 
-                    <div className="py-1.5 px-1.5">
-                      {dropdownItems.map(
-                        ({ icon, label, onClick, isPremium: itemIsPremium }) => (
-                          <motion.button
-                            key={label}
-                            onClick={() => {
-                              setShowDropdown(false);
-                              onClick();
-                            }}
-                            whileHover={{
-                              backgroundColor:
-                                itemIsPremium && !isPremium
-                                  ? "rgba(234,179,8,0.12)"
-                                  : "rgba(255,255,255,0.06)",
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: itemIsPremium
-                                  ? isPremium
-                                    ? "rgba(234,179,8,0.9)"
-                                    : "rgba(234,179,8,0.7)"
-                                  : "rgba(255,255,255,0.3)",
-                              }}
-                            >
-                              {icon}
-                            </span>
-                            <span
-                              className="text-sm"
-                              style={{
-                                fontFamily: "'DM Sans', sans-serif",
-                                color: itemIsPremium
-                                  ? isPremium
-                                    ? "#facc15"
-                                    : "#fbbf24"
-                                  : "rgba(255,255,255,0.7)",
-                                fontWeight: itemIsPremium ? 600 : 400,
-                              }}
-                            >
-                              {label}
-                            </span>
-                            {itemIsPremium && !isPremium && (
-                              <span
-                                style={{
-                                  marginLeft: "auto",
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  color: "#facc15",
-                                  background: "rgba(234,179,8,0.15)",
-                                  padding: "1px 6px",
-                                  borderRadius: 4,
-                                  fontFamily: "'DM Sans', sans-serif",
-                                }}
-                              >
-                                HOT
-                              </span>
-                            )}
-                          </motion.button>
-                        ),
-                      )}
-                    </div>
-
-                    <div
-                      className="px-1.5 pb-1.5"
-                      style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-                    >
-                      <motion.button
-                        onClick={handleLogout}
-                        whileHover={{ backgroundColor: "rgba(229,24,30,0.1)" }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mt-1"
+                  <AnimatePresence>
+                    {scrolled && !isMobile && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-xs font-semibold text-white overflow-hidden whitespace-nowrap"
                         style={{
-                          background: "transparent",
-                          border: "none",
-                          cursor: "pointer",
+                          fontFamily: "'DM Sans', sans-serif",
+                          maxWidth: 80,
                         }}
                       >
-                        <LogOut
-                          size={15}
-                          style={{ color: "rgba(229,24,30,0.7)" }}
-                        />
-                        <span
-                          className="text-sm font-medium"
+                        {currentUser?.name?.split(" ")[0] ?? "User"}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+
+                  <motion.div
+                    animate={{ rotate: showDropdown ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
+                  >
+                    <ChevronDown size={13} />
+                  </motion.div>
+                </motion.button>
+
+                {/* Dropdown panel */}
+                <AnimatePresence>
+                  {showDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="absolute right-0 mt-2 w-52 rounded-2xl overflow-hidden shadow-2xl"
+                      style={{
+                        background: "rgba(12,12,12,0.97)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        backdropFilter: "blur(20px)",
+                      }}
+                    >
+                      <div
+                        className="px-4 py-3"
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <UserAvatar
+                            avatarUrl={currentUser?.avatar}
+                            name={currentUser?.name}
+                            size={32}
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate leading-tight">
+                              {currentUser?.name ?? "Người dùng"}
+                            </p>
+                            <p
+                              className="text-xs truncate leading-tight"
+                              style={{ color: "rgba(255,255,255,0.3)" }}
+                            >
+                              {currentUser?.email ?? ""}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="py-1.5 px-1.5">
+                        {dropdownItems.map(
+                          ({ icon, label, onClick, isPremium: itemIsPremium }) => (
+                            <motion.button
+                              key={label}
+                              onClick={() => {
+                                setShowDropdown(false);
+                                onClick();
+                              }}
+                              whileHover={{
+                                backgroundColor:
+                                  itemIsPremium && !isPremium
+                                    ? "rgba(234,179,8,0.12)"
+                                    : "rgba(255,255,255,0.06)",
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: itemIsPremium
+                                    ? isPremium
+                                      ? "rgba(234,179,8,0.9)"
+                                      : "rgba(234,179,8,0.7)"
+                                    : "rgba(255,255,255,0.3)",
+                                }}
+                              >
+                                {icon}
+                              </span>
+                              <span
+                                className="text-sm"
+                                style={{
+                                  fontFamily: "'DM Sans', sans-serif",
+                                  color: itemIsPremium
+                                    ? isPremium
+                                      ? "#facc15"
+                                      : "#fbbf24"
+                                    : "rgba(255,255,255,0.7)",
+                                  fontWeight: itemIsPremium ? 600 : 400,
+                                }}
+                              >
+                                {label}
+                              </span>
+                              {itemIsPremium && !isPremium && (
+                                <span
+                                  style={{
+                                    marginLeft: "auto",
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: "#facc15",
+                                    background: "rgba(234,179,8,0.15)",
+                                    padding: "1px 6px",
+                                    borderRadius: 4,
+                                    fontFamily: "'DM Sans', sans-serif",
+                                  }}
+                                >
+                                  HOT
+                                </span>
+                              )}
+                            </motion.button>
+                          ),
+                        )}
+                      </div>
+
+                      <div
+                        className="px-1.5 pb-1.5"
+                        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+                      >
+                        <motion.button
+                          onClick={handleLogout}
+                          whileHover={{ backgroundColor: "rgba(229,24,30,0.1)" }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mt-1"
                           style={{
-                            color: "#e5181e",
-                            fontFamily: "'DM Sans', sans-serif",
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
                           }}
                         >
-                          Đăng xuất
-                        </span>
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                          <LogOut
+                            size={15}
+                            style={{ color: "rgba(229,24,30,0.7)" }}
+                          />
+                          <span
+                            className="text-sm font-medium"
+                            style={{
+                              color: "#e5181e",
+                              fontFamily: "'DM Sans', sans-serif",
+                            }}
+                          >
+                            Đăng xuất
+                          </span>
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           )}
 
@@ -1137,6 +1144,7 @@ const Navbar = () => {
             {[
               { label: "Trang chủ", path: "/" },
               { label: "Phim sắp chiếu", path: "/coming-soon" },
+              { label: "Tin tức", path: "/announcements" }, // ← Đã bổ sung trang Tin tức trên mobile
               ...(isLoggedIn
                 ? [
                     { label: "Yêu thích", path: "/favorites" },

@@ -36,6 +36,7 @@ import TvShowInfoPage from "../pages/user/TvShowInfoPage";
 import TvShowDetailPage from "../pages/user/TvShowDetailPage";
 import PremiumPage from "../pages/PremiumPage";
 import PaymentResultPage from "../pages/PaymentResultPage";
+import AnnouncementsPage from "../pages/user/AnnouncementsPage";
 import { useToast } from "../components/common/Toast";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -106,6 +107,14 @@ const AppRouter = () => (
         <Route path="/person/:id" element={<PersonPage />} />
         <Route path="/coming-soon" element={<ComingSoonPage />} />
         <Route path="/premium" element={<PremiumPage />} />
+        <Route
+          path="/announcements"
+          element={
+            <ProtectedRoute>
+              <AnnouncementsPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Xem phim */}
         <Route path="/movie/:id" element={<MovieDetailPage />} />

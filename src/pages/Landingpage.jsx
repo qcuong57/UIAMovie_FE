@@ -36,6 +36,19 @@ const C = {
   green: "#46d369",
 };
 
+// Helper trích xuất thông báo lỗi tổng quát (xử lý cả 400, 401, 429)
+const extractErrorMessage = (e, defaultMsg = "Đã có lỗi xảy ra") => {
+  if (e.response?.status === 429) {
+    return "Bạn thao tác quá nhanh hoặc nhập sai nhiều lần. Vui lòng đợi 1 phút trước khi thử lại.";
+  }
+  return (
+    e.response?.data?.message ||
+    e.response?.data?.data?.message ||
+    e.message ||
+    defaultMsg
+  );
+};
+
 // ─── Banned account banner ───────────────────────────────────────────────────
 function BannedMsg({ reason }) {
   return (
@@ -98,8 +111,7 @@ function BannedMsg({ reason }) {
   );
 }
 
-// ─── Validation helpers (khớp RegisterValidator.cs + LoginValidator.cs) ────────
-
+// ─── Validation helpers (Khớp hoàn toàn với Backend Validators) ───────────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
 const HAS_UPPER = /[A-Z]/;
@@ -141,7 +153,6 @@ function validateConfirm(pass, confirm) {
 }
 
 // ─── Shared UI ──────────────────────────────────────────────────────────────
-
 function InputField({
   label,
   type = "text",
@@ -160,7 +171,6 @@ function InputField({
   const hasError = touched && error;
 
   const borderColor = hasError ? C.borderE : focused ? C.borderF : C.border;
-
   const labelColor = hasError
     ? "rgba(229,9,20,0.9)"
     : focused
@@ -387,7 +397,7 @@ function LoginView({ onSwitch, onOtp, navigate }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [banned, setBanned] = useState(null); // { reason } | null
+  const [banned, setBanned] = useState(null);
   const [touched, setTouched] = useState({});
 
   const errors = {
@@ -400,15 +410,13 @@ function LoginView({ onSwitch, onOtp, navigate }) {
 
   const hasFieldErrors = Object.values(errors).some(Boolean);
 
-  // Keywords BE có thể trả về khi tài khoản bị khóa/ban
   const isBannedError = (msg = "") => {
     const lower = msg.toLowerCase();
     return (
       lower.includes("khóa") ||
       lower.includes("ban") ||
       lower.includes("bị khóa") ||
-      lower.includes("locked") ||
-      lower.includes("suspended")
+      lower.includes("locked")
     );
   };
 
@@ -430,13 +438,12 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
     } catch (e) {
       const data = e.response?.data;
-      const msg = data?.message || e.message || "";
+      const msg = extractErrorMessage(e, "Email hoặc mật khẩu không đúng");
 
       if (isBannedError(msg)) {
-        // ✅ Đọc banReason riêng, không dùng msg chung làm lý do
         setBanned({ reason: data?.banReason || null });
       } else {
-        setError(msg || "Email hoặc mật khẩu không đúng");
+        setError(msg);
       }
     } finally {
       setLoading(false);
@@ -445,24 +452,10 @@ function LoginView({ onSwitch, onOtp, navigate }) {
 
   return (
     <>
-      <p
-        style={{
-          fontSize: 20,
-          fontWeight: 800,
-          color: C.text,
-          marginBottom: 4,
-        }}
-      >
+      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>
         Chào mừng trở lại
       </p>
-      <p
-        style={{
-          fontFamily: "'Nunito',sans-serif",
-          fontSize: 13,
-          color: C.sub,
-          marginBottom: 24,
-        }}
-      >
+      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24 }}>
         Đăng nhập để tiếp tục xem phim
       </p>
 
@@ -589,21 +582,9 @@ function RegisterView({ onSwitch, onRegisterOtp }) {
         password,
         confirmPassword: confirm,
       });
-      // BE gửi OTP về email → chuyển sang bước xác nhận OTP đăng ký
       onRegisterOtp({ email: email.trim() });
     } catch (e) {
-      console.error(
-        "[Auth Error]",
-        e.message,
-        e.response?.status,
-        e.response?.data,
-      );
-      setError(
-        e.response?.data?.message ||
-          e.response?.data?.data?.message ||
-          e.message ||
-          "Đăng ký thất bại, vui lòng thử lại",
-      );
+      setError(extractErrorMessage(e, "Đăng ký thất bại, vui lòng thử lại"));
     } finally {
       setLoading(false);
     }
@@ -611,24 +592,10 @@ function RegisterView({ onSwitch, onRegisterOtp }) {
 
   return (
     <>
-      <p
-        style={{
-          fontSize: 20,
-          fontWeight: 800,
-          color: C.text,
-          marginBottom: 4,
-        }}
-      >
+      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>
         Tạo tài khoản
       </p>
-      <p
-        style={{
-          fontFamily: "'Nunito',sans-serif",
-          fontSize: 13,
-          color: C.sub,
-          marginBottom: 22,
-        }}
-      >
+      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 22 }}>
         Miễn phí — bắt đầu xem phim ngay
       </p>
 
@@ -723,7 +690,7 @@ function RegisterView({ onSwitch, onRegisterOtp }) {
   );
 }
 
-// ── OTP (2FA login hoặc xác nhận đăng ký) ────────────────────────────────────
+// ── OTP View ─────────────────────────────────────────────────────────────────
 function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSuccess }) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -742,28 +709,15 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
     setError("");
     try {
       if (isRegister) {
-        // Bước 2 đăng ký: xác nhận OTP → tạo user trong DB
         await authService.verifyRegisterOtp({ email, code });
         onRegisterSuccess && onRegisterSuccess();
       } else {
-        // 2FA login
         const data = await authService.verifyOtp({ userId, code });
         authService.saveSession(data);
         navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
       }
     } catch (e) {
-      console.error(
-        "[Auth Error]",
-        e.message,
-        e.response?.status,
-        e.response?.data,
-      );
-      setError(
-        e.response?.data?.message ||
-          e.response?.data?.data?.message ||
-          e.message ||
-          "Mã OTP không đúng hoặc đã hết hạn",
-      );
+      setError(extractErrorMessage(e, "Mã OTP không đúng hoặc đã hết hạn"));
     } finally {
       setLoading(false);
     }
@@ -775,27 +729,13 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
     setError("");
     try {
       if (isRegister) {
-        // Đăng ký dùng /auth/forgot-password không đúng — BE không có resend cho register
-        // Gọi lại /register/verify-otp sẽ fail nếu OTP hết hạn,
-        // cách đơn giản nhất: quay lại form đăng ký để user submit lại
-        setError("OTP hết hạn. Vui lòng quay lại và đăng ký lại để nhận mã mới.");
+        setError("OTP đã hết hạn. Vui lòng quay lại và đăng ký lại để nhận mã mới.");
       } else {
         await authService.sendOtp(userId);
         setSent(true);
       }
     } catch (e) {
-      console.error(
-        "[Auth Error]",
-        e.message,
-        e.response?.status,
-        e.response?.data,
-      );
-      setError(
-        e.response?.data?.message ||
-          e.response?.data?.data?.message ||
-          e.message ||
-          "Không thể gửi lại OTP",
-      );
+      setError(extractErrorMessage(e, "Không thể gửi lại OTP"));
     } finally {
       setResending(false);
     }
@@ -821,40 +761,24 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
         <ArrowLeft size={14} /> Quay lại
       </button>
 
-      <p
-        style={{
-          fontSize: 20,
-          fontWeight: 800,
-          color: C.text,
-          marginBottom: 6,
-        }}
-      >
+      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 6 }}>
         {isRegister ? "Xác nhận email" : "Xác thực 2 bước"}
       </p>
-      <p
-        style={{
-          fontFamily: "'Nunito',sans-serif",
-          fontSize: 13,
-          color: C.sub,
-          marginBottom: 24,
-          lineHeight: 1.6,
-        }}
-      >
-        {isRegister
-          ? <>Mã xác nhận đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />Nhập mã 6 chữ số để hoàn tất đăng ký.</>
-          : <>Mã OTP đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />Nhập mã 6 chữ số để tiếp tục.</>
-        }
+      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
+        {isRegister ? (
+          <>
+            Mã xác nhận đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />
+            Nhập mã 6 chữ số để hoàn tất đăng ký.
+          </>
+        ) : (
+          <>
+            Mã OTP đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />
+            Nhập mã 6 chữ số để tiếp tục.
+          </>
+        )}
       </p>
 
-      {/* OTP input — 6 ô */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          justifyContent: "center",
-          marginBottom: 20,
-        }}
-      >
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 20 }}>
         {Array.from({ length: 6 }).map((_, i) => (
           <input
             key={i}
@@ -869,8 +793,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
               arr[i] = val;
               const next = arr.join("").slice(0, 6);
               setCode(next);
-              if (val && i < 5)
-                document.getElementById(`otp-${i + 1}`)?.focus();
+              if (val && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
             }}
             onKeyDown={(e) => {
               if (e.key === "Backspace" && !code[i] && i > 0)
@@ -897,11 +820,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       {sent && <SuccessMsg>Đã gửi lại OTP</SuccessMsg>}
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
-      <SubmitBtn
-        loading={loading}
-        onClick={submit}
-        disabled={code.length !== 6}
-      >
+      <SubmitBtn loading={loading} onClick={submit} disabled={code.length !== 6}>
         Xác nhận
       </SubmitBtn>
 
@@ -947,18 +866,7 @@ function ForgotView({ onSwitch }) {
       await authService.forgotPassword(email.trim());
       setSent(true);
     } catch (e) {
-      console.error(
-        "[Auth Error]",
-        e.message,
-        e.response?.status,
-        e.response?.data,
-      );
-      setError(
-        e.response?.data?.message ||
-          e.response?.data?.data?.message ||
-          e.message ||
-          "Có lỗi xảy ra, vui lòng thử lại",
-      );
+      setError(extractErrorMessage(e, "Có lỗi xảy ra, vui lòng thử lại"));
     } finally {
       setLoading(false);
     }
@@ -985,17 +893,8 @@ function ForgotView({ onSwitch }) {
           <ArrowLeft size={14} /> Quay lại
         </button>
         <SuccessMsg>Nếu email tồn tại, mã OTP đã được gửi</SuccessMsg>
-        <p
-          style={{
-            fontFamily: "'Nunito',sans-serif",
-            fontSize: 13,
-            color: C.sub,
-            marginBottom: 20,
-            lineHeight: 1.65,
-          }}
-        >
-          Kiểm tra hộp thư <strong style={{ color: C.text }}>{email}</strong> và
-          nhập mã OTP để đặt lại mật khẩu.
+        <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 20, lineHeight: 1.65 }}>
+          Kiểm tra hộp thư <strong style={{ color: C.text }}>{email}</strong> và nhập mã OTP để đặt lại mật khẩu.
         </p>
         <SubmitBtn loading={false} onClick={() => onSwitch("reset", email)}>
           Nhập mã OTP
@@ -1023,25 +922,10 @@ function ForgotView({ onSwitch }) {
         <ArrowLeft size={14} /> Quay lại đăng nhập
       </button>
 
-      <p
-        style={{
-          fontSize: 20,
-          fontWeight: 800,
-          color: C.text,
-          marginBottom: 6,
-        }}
-      >
+      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 6 }}>
         Quên mật khẩu?
       </p>
-      <p
-        style={{
-          fontFamily: "'Nunito',sans-serif",
-          fontSize: 13,
-          color: C.sub,
-          marginBottom: 24,
-          lineHeight: 1.65,
-        }}
-      >
+      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.65 }}>
         Nhập email đăng ký, chúng tôi sẽ gửi mã OTP để đặt lại mật khẩu.
       </p>
 
@@ -1080,6 +964,7 @@ function ResetView({ email: initEmail, onSwitch }) {
   const [done, setDone] = useState(false);
   const [touched, setTouched] = useState({});
 
+  // Khớp đồng bộ với ResetPasswordValidator ở Backend
   const errors = {
     email: !initEmail ? validateEmail(email) : "",
     code: !code.trim()
@@ -1112,18 +997,7 @@ function ResetView({ email: initEmail, onSwitch }) {
       setDone(true);
       setTimeout(() => onSwitch("login"), 2000);
     } catch (e) {
-      console.error(
-        "[Auth Error]",
-        e.message,
-        e.response?.status,
-        e.response?.data,
-      );
-      setError(
-        e.response?.data?.message ||
-          e.response?.data?.data?.message ||
-          e.message ||
-          "Mã OTP không đúng hoặc đã hết hạn",
-      );
+      setError(extractErrorMessage(e, "Mã OTP không đúng hoặc đã hết hạn"));
     } finally {
       setLoading(false);
     }
@@ -1151,23 +1025,10 @@ function ResetView({ email: initEmail, onSwitch }) {
         >
           <Check size={24} style={{ color: C.green }} />
         </div>
-        <p
-          style={{
-            fontSize: 17,
-            fontWeight: 800,
-            color: C.text,
-            marginBottom: 6,
-          }}
-        >
+        <p style={{ fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 6 }}>
           Đặt lại mật khẩu thành công!
         </p>
-        <p
-          style={{
-            fontFamily: "'Nunito',sans-serif",
-            fontSize: 13,
-            color: C.sub,
-          }}
-        >
+        <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub }}>
           Đang chuyển về đăng nhập...
         </p>
       </motion.div>
@@ -1192,24 +1053,10 @@ function ResetView({ email: initEmail, onSwitch }) {
       >
         <ArrowLeft size={14} /> Quay lại
       </button>
-      <p
-        style={{
-          fontSize: 20,
-          fontWeight: 800,
-          color: C.text,
-          marginBottom: 4,
-        }}
-      >
+      <p style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>
         Đặt lại mật khẩu
       </p>
-      <p
-        style={{
-          fontFamily: "'Nunito',sans-serif",
-          fontSize: 13,
-          color: C.sub,
-          marginBottom: 22,
-        }}
-      >
+      <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: C.sub, marginBottom: 22 }}>
         Nhập mã OTP và mật khẩu mới của bạn.
       </p>
 
@@ -1289,12 +1136,11 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
-  // Cho phép Navbar điều hướng thẳng vào tab login/register qua location.state
   const [view, setView] = useState(
-    location.state?.view === "register" ? "register" : "login",
+    location.state?.view === "register" ? "register" : "login"
   );
-  const [otpData, setOtpData] = useState(null);           // login 2FA
-  const [registerOtpData, setRegisterOtpData] = useState(null); // register OTP
+  const [otpData, setOtpData] = useState(null);
+  const [registerOtpData, setRegisterOtpData] = useState(null);
   const [resetEmail, setResetEmail] = useState("");
 
   const handleSwitch = (next, data) => {
@@ -1307,13 +1153,11 @@ export default function LandingPage() {
     setView("otp");
   };
 
-  // Register bước 1 thành công → chuyển sang màn OTP xác nhận đăng ký
   const handleRegisterOtp = ({ email }) => {
     setRegisterOtpData({ email });
     setView("register-otp");
   };
 
-  // Xác nhận OTP đăng ký thành công → chuyển về login
   const handleRegisterSuccess = () => {
     setView("register-success");
     setTimeout(() => setView("login"), 2000);
@@ -1350,24 +1194,10 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span
-            style={{
-              fontSize: 22,
-              fontWeight: 900,
-              color: C.accent,
-              letterSpacing: "-0.02em",
-            }}
-          >
+          <span style={{ fontSize: 22, fontWeight: 900, color: C.accent, letterSpacing: "-0.02em" }}>
             UIA
           </span>
-          <span
-            style={{
-              fontSize: 18,
-              fontWeight: 700,
-              color: C.text,
-              letterSpacing: "0.06em",
-            }}
-          >
+          <span style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: "0.06em" }}>
             MOVIE
           </span>
         </div>
@@ -1409,7 +1239,6 @@ export default function LandingPage() {
           gap: 0,
         }}
       >
-        {/* LEFT — ẩn trên mobile */}
         {!isMobile && (
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -1429,14 +1258,7 @@ export default function LandingPage() {
                 border: "1px solid rgba(229,9,20,0.22)",
               }}
             >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: C.accent,
-                }}
-              />
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent }} />
               <span
                 style={{
                   fontSize: 11,
@@ -1460,10 +1282,7 @@ export default function LandingPage() {
                 marginBottom: 20,
               }}
             >
-              Trải nghiệm
-              <br />
-              phim ảnh
-              <br />
+              Trải nghiệm<br />phim ảnh<br />
               <span style={{ color: C.accent }}>đỉnh cao.</span>
             </h1>
 
@@ -1477,17 +1296,12 @@ export default function LandingPage() {
                 maxWidth: 380,
               }}
             >
-              Kho phim khổng lồ, chất lượng HD,
-              <br />
-              cộng đồng đánh giá sôi động.
+              Kho phim khổng lồ, chất lượng HD, cộng đồng đánh giá sôi động.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
               {FEATURES.map(({ icon: Icon, label }) => (
-                <div
-                  key={label}
-                  style={{ display: "flex", alignItems: "center", gap: 10 }}
-                >
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div
                     style={{
                       width: 30,
@@ -1503,13 +1317,7 @@ export default function LandingPage() {
                   >
                     <Icon size={14} style={{ color: C.accent }} />
                   </div>
-                  <span
-                    style={{
-                      fontFamily: "'Nunito',sans-serif",
-                      fontSize: 13,
-                      color: "#999",
-                    }}
-                  >
+                  <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 13, color: "#999" }}>
                     {label}
                   </span>
                 </div>
@@ -1518,7 +1326,7 @@ export default function LandingPage() {
           </motion.div>
         )}
 
-        {/* RIGHT — Auth card */}
+        {/* Auth card */}
         <motion.div
           initial={{ opacity: 0, x: isMobile ? 0 : 20, y: isMobile ? 20 : 0 }}
           animate={{ opacity: 1, x: 0, y: 0 }}
@@ -1541,17 +1349,10 @@ export default function LandingPage() {
               transition={{ duration: 0.18 }}
             >
               {view === "login" && (
-                <LoginView
-                  onSwitch={handleSwitch}
-                  onOtp={handleOtp}
-                  navigate={navigate}
-                />
+                <LoginView onSwitch={handleSwitch} onOtp={handleOtp} navigate={navigate} />
               )}
               {view === "register" && (
-                <RegisterView
-                  onSwitch={handleSwitch}
-                  onRegisterOtp={handleRegisterOtp}
-                />
+                <RegisterView onSwitch={handleSwitch} onRegisterOtp={handleRegisterOtp} />
               )}
               {view === "otp" && (
                 <OtpView
@@ -1601,9 +1402,7 @@ export default function LandingPage() {
                 </motion.div>
               )}
               {view === "forgot" && <ForgotView onSwitch={handleSwitch} />}
-              {view === "reset" && (
-                <ResetView email={resetEmail} onSwitch={handleSwitch} />
-              )}
+              {view === "reset" && <ResetView email={resetEmail} onSwitch={handleSwitch} />}
             </motion.div>
           </AnimatePresence>
         </motion.div>
@@ -1620,7 +1419,7 @@ export default function LandingPage() {
           color: C.dim,
         }}
       >
-        © 2025 UIA Movie — All rights reserved
+        © 2026 UIA Movie — All rights reserved
       </div>
     </div>
   );
