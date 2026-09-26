@@ -1,6 +1,7 @@
 // src/pages/user/AnnouncementsPage.jsx
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import {
   Search,
   ArrowLeft,
@@ -10,6 +11,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeTokens";
+import LoadingScreen from "../../components/ui/LoadingScreen";
 import notificationService from "../../services/notificationService";
 import Footer from "../../components/layout/Footer";
 import SeoMeta from "../../components/common/SeoMeta";
@@ -219,6 +221,30 @@ export default function AnnouncementsPage() {
   const [filterType, setFilterType] = useState("all");
   const [copied, setCopied] = useState(false);
 
+  // ── Màn hình LoadingScreen đồng bộ như AboutUs ──
+  const [loaded, setLoaded] = useState(
+    () => sessionStorage.getItem("uia_announcements_seen") === "1"
+  );
+
+  useEffect(() => {
+    if (loaded) return;
+    const timer = setTimeout(() => {
+      setLoaded(true);
+      sessionStorage.setItem("uia_announcements_seen", "1");
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [loaded]);
+
+  // Khóa cuộn trang khi đang hiển thị Loading
+  useEffect(() => {
+    if (loaded) return;
+    const prevOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prevOverflow;
+    };
+  }, [loaded]);
+
   const detailId = searchParams.get("id");
 
   const fetchNews = useCallback(async () => {
@@ -295,6 +321,9 @@ export default function AnnouncementsPage() {
         }
       `}</style>
 
+      {/* Màn hình Loading Screen điện ảnh chuyển cảnh */}
+      <AnimatePresence>{!loaded && <LoadingScreen key="loading" />}</AnimatePresence>
+
       <SeoMeta
         title={
           activeArticle
@@ -311,7 +340,7 @@ export default function AnnouncementsPage() {
           color: C.text,
           display: "flex",
           flexDirection: "column",
-          paddingTop: 84, // Cân bằng khoảng cách hoàn hảo ngay dưới thanh Navbar
+          paddingTop: 84, // Trừ hao khoảng cách Navbar mượt mà, không hở
         }}
       >
         {/* =========================================================================
@@ -321,7 +350,7 @@ export default function AnnouncementsPage() {
           <main style={{ flex: 1, paddingBottom: 100 }}>
             <article style={{ maxWidth: 920, margin: "0 auto", padding: "20px 24px 0" }}>
               
-              {/* Thanh thao tác mềm mại: Quay lại & Chia sẻ */}
+              {/* Nút Quay lại & Chia sẻ bo góc mềm mại */}
               <div
                 style={{
                   display: "flex",
@@ -394,7 +423,6 @@ export default function AnnouncementsPage() {
                 </button>
               </div>
 
-              {/* Nhãn thể loại bài viết */}
               <p
                 style={{
                   fontFamily: FONT_BODY,
@@ -409,7 +437,6 @@ export default function AnnouncementsPage() {
                 THÔNG BÁO CHÍNH THỨC
               </p>
 
-              {/* Tiêu đề bài viết */}
               <h1
                 style={{
                   fontFamily: FONT_DISPLAY,
@@ -424,7 +451,6 @@ export default function AnnouncementsPage() {
                 {activeArticle.title}
               </h1>
 
-              {/* Ngày đăng & Ban quản trị */}
               <div
                 style={{
                   display: "flex",
@@ -445,7 +471,6 @@ export default function AnnouncementsPage() {
                 <span>Ban Quản Trị UIA Movie</span>
               </div>
 
-              {/* Ảnh bìa bài viết nếu có */}
               {activeArticle.thumbnailUrl && (
                 <div
                   style={{
@@ -470,10 +495,8 @@ export default function AnnouncementsPage() {
                 </div>
               )}
 
-              {/* Nội dung bài viết */}
               <ArticleMarkdownRenderer content={activeArticle.message} />
 
-              {/* Nút quay lại cuối trang */}
               <div
                 style={{
                   marginTop: 64,
@@ -523,7 +546,6 @@ export default function AnnouncementsPage() {
               2. CHẾ ĐỘ DANH SÁCH BẢN TIN (LIST VIEW)
           ========================================================================== */
           <main style={{ flex: 1, paddingBottom: 100 }}>
-            {/* Header Danh sách */}
             <section
               style={{
                 backgroundColor: C.bg,
@@ -576,7 +598,6 @@ export default function AnnouncementsPage() {
               </div>
             </section>
 
-            {/* Bộ điều khiển tìm kiếm & Phân loại */}
             <div style={{ maxWidth: 1040, margin: "0 auto", padding: "28px 24px 0" }}>
               <div
                 style={{
@@ -590,7 +611,7 @@ export default function AnnouncementsPage() {
                   marginBottom: 28,
                 }}
               >
-                {/* Tabs phân loại bo tròn uyển chuyển */}
+                {/* Tabs bo góc mềm mại */}
                 <div style={{ display: "flex", gap: 8 }}>
                   {[
                     { id: "all", label: "Tất cả" },
@@ -689,7 +710,7 @@ export default function AnnouncementsPage() {
                 </div>
               </div>
 
-              {/* Danh sách các bài viết */}
+              {/* Danh sách bài viết bo viền mềm */}
               {loading ? (
                 <div
                   style={{
@@ -738,7 +759,7 @@ export default function AnnouncementsPage() {
                         display: "flex",
                         backgroundColor: C.surface,
                         border: `1px solid ${C.border}`,
-                        borderRadius: 12, // Bo cong 12px mềm mại đồng bộ với các poster phim
+                        borderRadius: 12,
                         overflow: "hidden",
                         cursor: "pointer",
                         transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -754,7 +775,6 @@ export default function AnnouncementsPage() {
                         e.currentTarget.style.transform = "translateY(0)";
                       }}
                     >
-                      {/* Ảnh Thumbnail bo cạnh trái */}
                       <div
                         style={{
                           width: 220,
@@ -797,7 +817,6 @@ export default function AnnouncementsPage() {
                         )}
                       </div>
 
-                      {/* Thông tin bài viết tóm tắt */}
                       <div
                         style={{
                           flex: 1,

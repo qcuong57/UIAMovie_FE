@@ -17,6 +17,7 @@ const ScrollToTop = () => {
   }, [pathname]);
   return null;
 };
+
 import HomePage from "../pages/user/Homepage";
 import MovieInfoPage from "../pages/user/MovieInfoPage";
 import MovieDetailPage from "../pages/user/MovieDetailPage";
@@ -67,7 +68,7 @@ const ProtectedRoute = ({ children }) => {
       warnedRef.current = true;
       toast.warning("Bạn cần đăng nhập để sử dụng tính năng này");
     }
-  }, [loggedIn]);
+  }, [loggedIn, toast]);
 
   return loggedIn ? children : <Navigate to="/" replace />;
 };
@@ -94,12 +95,10 @@ const AppRouter = () => (
 
       {/* ── Trang có Navbar ── */}
       <Route element={<WithNavbar />}>
-        {/* Công khai — không cần đăng nhập */}
+        {/* Các trang công khai — không yêu cầu đăng nhập */}
         <Route path="/" element={<HomePage />} />
-
-        {/* Về chúng tôi: Công khai cho cả khách lẫn người dùng đã đăng nhập */}
         <Route path="/about-us" element={<AboutUs />} />
-
+        <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/movie/:id/info" element={<MovieInfoPage />} />
@@ -107,20 +106,12 @@ const AppRouter = () => (
         <Route path="/person/:id" element={<PersonPage />} />
         <Route path="/coming-soon" element={<ComingSoonPage />} />
         <Route path="/premium" element={<PremiumPage />} />
-        <Route
-          path="/announcements"
-          element={
-            <ProtectedRoute>
-              <AnnouncementsPage />
-            </ProtectedRoute>
-          }
-        />
 
         {/* Xem phim */}
         <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/tvshow/:id" element={<TvShowDetailPage />} />
         
-        {/* Tính năng yêu cầu đăng nhập */}
+        {/* Các tính năng yêu cầu đăng nhập */}
         <Route
           path="/favorites"
           element={
@@ -157,7 +148,7 @@ const AppRouter = () => (
         }
       />
 
-      {/* ── Trang cài đặt ── */}
+      {/* ── Trang cài đặt tài khoản ── */}
       <Route
         path="/profile"
         element={
@@ -175,7 +166,7 @@ const AppRouter = () => (
         }
       />
 
-      {/* ── Fallback ── */}
+      {/* ── Tuyến dự phòng khi không khớp route ── */}
       <Route
         path="*"
         element={
