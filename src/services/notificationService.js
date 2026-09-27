@@ -57,23 +57,25 @@ const notificationService = {
   },
 
   /**
-   * Lấy tin tức/thông báo công khai (Dành cho trang Admin & Trang Tin tức)
+   * Lấy tin tức/thông báo công khai — không yêu cầu đăng nhập.
+   * (Dành cho trang Bản tin & trang Admin)
+   *
+   * axiosInstance an toàn với khách vãng lai: interceptor 401 chỉ redirect
+   * về /welcome khi có refreshToken hết hạn, không ảnh hưởng public endpoint.
+   *
+   * @param {number} page
+   * @param {number} pageSize
+   * @param {string|null} type - lọc theo loại thông báo, null = lấy tất cả
    */
   getPublicAnnouncements: async (page = 1, pageSize = 50, type = null) => {
     try {
       const params = { page, pageSize };
       if (type) params.type = type;
 
-      const res = await axiosInstance.get(
-        "/notification/public-announcements",
-        { params },
-      );
+      const res = await axiosInstance.get("/notification/public-announcements", { params });
 
-      // Log kiểm tra trực tiếp trên F12 Console
-      console.log("[DEBUG] Dữ liệu gốc từ API thông báo:", res);
-
-      // Bóc tách an toàn: hỗ trợ res.data.data, res.data và cả khi res đã unwrap
-      const rawData = res?.data?.data ?? res?.data ?? res;
+      // axiosInstance unwrap response.data qua interceptor, nên res có thể đã là data
+      const rawData = res?.data ?? res;
       const list =
         rawData?.items ??
         rawData?.Items ??
@@ -86,10 +88,7 @@ const notificationService = {
         pageSize: rawData?.pageSize ?? rawData?.PageSize ?? pageSize,
       };
     } catch (error) {
-      console.error(
-        "[notificationService] getPublicAnnouncements error:",
-        error,
-      );
+      console.error("[notificationService] getPublicAnnouncements error:", error);
       throw error;
     }
   },
