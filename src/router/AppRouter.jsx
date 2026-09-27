@@ -107,19 +107,12 @@ const AppRouter = () => (
         <Route path="/person/:id" element={<PersonPage />} />
         <Route path="/coming-soon" element={<ComingSoonPage />} />
         <Route path="/premium" element={<PremiumPage />} />
-        <Route
-          path="/announcements"
-          element={
-            <ProtectedRoute>
-              <AnnouncementsPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/announcements" element={<AnnouncementsPage />} />
 
         {/* Xem phim */}
         <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/tvshow/:id" element={<TvShowDetailPage />} />
-        
+
         {/* Tính năng yêu cầu đăng nhập */}
         <Route
           path="/favorites"
