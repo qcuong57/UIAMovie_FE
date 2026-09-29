@@ -16,19 +16,26 @@ const normalizeItem = (n) => {
   };
 };
 
+// axiosInstance có interceptor unwrap response.data, nên `res` có thể đã là payload.
+// Hàm này xử lý được cả 2 trường hợp: res.data.data | res.data | res
+const unwrap = (res) => {
+  const d = res?.data ?? res;
+  return d?.data ?? d;
+};
+
 const notificationService = {
   /**
-   * Lấy thông báo chuông (loại trừ admin_announcement)
+   * Lấy thông báo chuông (gồm cả phim mới và thông báo chung; truyền excludeType nếu muốn loại trừ)
    */
   getNotifications: async (
     page = 1,
     pageSize = 20,
-    excludeType = "admin_announcement",
+    excludeType = null,
   ) => {
     const res = await axiosInstance.get("/notification", {
       params: { page, pageSize, excludeType },
     });
-    const rawData = res.data?.data ?? res.data;
+    const rawData = unwrap(res);
     const list =
       rawData?.items ??
       rawData?.Items ??
@@ -44,16 +51,13 @@ const notificationService = {
   /**
    * Đếm số lượng chuông chưa đọc
    */
-  getUnreadCount: async (excludeType = "admin_announcement") => {
+  getUnreadCount: async (excludeType = null) => {
     const res = await axiosInstance.get("/notification/unread-count", {
       params: { excludeType },
     });
-    return (
-      res.data?.data?.unreadCount ??
-      res.data?.unreadCount ??
-      res.data?.data ??
-      (typeof res.data === "number" ? res.data : 0)
-    );
+    const raw = unwrap(res);
+    if (typeof raw === "number") return raw;
+    return raw?.unreadCount ?? raw?.UnreadCount ?? 0;
   },
 
   /**
@@ -74,8 +78,7 @@ const notificationService = {
 
       const res = await axiosInstance.get("/notification/public-announcements", { params });
 
-      // axiosInstance unwrap response.data qua interceptor, nên res có thể đã là data
-      const rawData = res?.data ?? res;
+      const rawData = unwrap(res);
       const list =
         rawData?.items ??
         rawData?.Items ??
@@ -95,17 +98,17 @@ const notificationService = {
 
   markAsRead: async (id) => {
     const res = await axiosInstance.put(`/notification/${id}/read`);
-    return res.data;
+    return unwrap(res);
   },
 
   markAllAsRead: async () => {
     const res = await axiosInstance.put("/notification/read-all");
-    return res.data;
+    return unwrap(res);
   },
 
   deleteNotification: async (id) => {
     const res = await axiosInstance.delete(`/notification/${id}`);
-    return res.data;
+    return unwrap(res);
   },
 
   // ══════════════ [ADMIN ONLY] ══════════════
@@ -124,7 +127,7 @@ const notificationService = {
       thumbnailUrl,
       type,
     });
-    return res.data;
+    return unwrap(res);
   },
 
   adminUpdateNotification: async (
@@ -138,12 +141,12 @@ const notificationService = {
       thumbnailUrl,
       type,
     });
-    return res.data;
+    return unwrap(res);
   },
 
   adminDeleteNotification: async (id) => {
     const res = await axiosInstance.delete(`/notification/admin/${id}`);
-    return res.data;
+    return unwrap(res);
   },
 };
 

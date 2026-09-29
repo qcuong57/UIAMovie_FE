@@ -1,35 +1,28 @@
 // src/components/ui/NotificationBell.jsx
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Bell,
-  Check,
-  CheckCheck,
-  Film,
-  Sparkles,
-  Trash2,
-  ExternalLink,
-} from "lucide-react";
+import { Bell } from "lucide-react";
 import * as signalR from "@microsoft/signalr";
 import { useNavigate } from "react-router-dom";
 import authService from "../../services/authService";
 import notificationService from "../../services/notificationService";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
+import { fmtDateTime } from "../../helper/format";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const HUB_URL = `${BASE_URL.replace(/\/+$/, "")}/hubs/notifications`;
 
-function formatVietnameseTime(dateStr) {
+function formatTimeAgo(dateStr) {
   if (!dateStr) return "";
   const date = new Date(dateStr);
   const now = new Date();
   const diffSec = Math.floor((now - date) / 1000);
 
-  if (diffSec < 45) return "Vừa xong";
+  if (diffSec < 60) return "Vừa xong";
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`;
   if (diffSec < 172800) return "Hôm qua";
-  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  return fmtDateTime ? fmtDateTime(dateStr) : date.toLocaleDateString("vi-VN");
 }
 
 export default function NotificationBell({ scrolled }) {
@@ -46,25 +39,26 @@ export default function NotificationBell({ scrolled }) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const loadData = useCallback(async () => {
     if (!authService.isLoggedIn()) return;
     try {
       const [res, unread] = await Promise.all([
-        notificationService.getNotifications(1, 25, "admin_announcement"),
-        notificationService.getUnreadCount("admin_announcement"),
+        notificationService.getNotifications(1, 25),
+        notificationService.getUnreadCount(),
       ]);
       if (!isMountedRef.current) return;
-      setNotifications(res.items || []);
-      setUnreadCount(unread);
+      setNotifications(res?.items || []);
+      setUnreadCount(unread || 0);
     } catch (e) {
       console.error("Không thể tải thông báo chuông:", e);
     }
   }, []);
 
-  // SignalR Hub listener
   useEffect(() => {
     if (!authService.isLoggedIn()) return;
     loadData();
@@ -83,9 +77,6 @@ export default function NotificationBell({ scrolled }) {
     connection.on("ReceiveNotification", (item) => {
       if (!item || !isMountedRef.current) return;
       const type = (item.type || item.Type || "general").toLowerCase();
-
-      // Chỉ hiển thị phim mới hoặc thông báo cá nhân ở chuông
-      if (type === "admin_announcement") return;
 
       const newObj = {
         id: item.id || item.Id,
@@ -107,7 +98,6 @@ export default function NotificationBell({ scrolled }) {
     };
   }, [loadData]);
 
-  // Click outside to close
   useEffect(() => {
     const handleOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -118,7 +108,8 @@ export default function NotificationBell({ scrolled }) {
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  const handleItemClick = async (notif) => {
+  // Xử lý khi rê chuột vào để tự động đánh dấu đã đọc
+  const handleItemHover = (notif) => {
     if (!notif.isRead) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
@@ -126,6 +117,10 @@ export default function NotificationBell({ scrolled }) {
       setUnreadCount((c) => Math.max(0, c - 1));
       notificationService.markAsRead(notif.id).catch(() => {});
     }
+  };
+
+  const handleItemClick = (notif) => {
+    handleItemHover(notif);
     setIsOpen(false);
     if (notif.linkUrl) {
       navigate(notif.linkUrl);
@@ -158,84 +153,91 @@ export default function NotificationBell({ scrolled }) {
     }
   };
 
-  const displayedList = tab === "unread"
-    ? notifications.filter((n) => !n.isRead)
-    : notifications;
+  const displayedList =
+    tab === "unread" ? notifications.filter((n) => !n.isRead) : notifications;
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative inline-block" ref={containerRef}>
       {/* Nút Chuông */}
-      <motion.button
+      <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.94 }}
-        className="relative flex items-center justify-center rounded-xl transition-all"
+        className="relative flex items-center justify-center rounded-full transition-colors"
         style={{
-          width: 40,
-          height: 40,
-          background: isOpen ? "rgba(229,24,30,0.14)" : "transparent",
-          border: isOpen ? `1px solid ${C.accent}` : "1px solid transparent",
-          color: isOpen ? C.accent : scrolled ? "#ffffff" : "rgba(255,255,255,0.75)",
+          width: 38,
+          height: 38,
+          background: isOpen ? "rgba(255,255,255,0.08)" : "transparent",
+          color: isOpen ? "#ffffff" : scrolled ? C.text : "rgba(255,255,255,0.8)",
+          border: "none",
           cursor: "pointer",
         }}
-        title="Thông báo phim mới"
+        title="Thông báo"
+        aria-label="Thông báo"
       >
-        <Bell size={19} strokeWidth={1.9} />
+        <Bell size={18} strokeWidth={1.5} />
 
         {unreadCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-0.5 -right-0.5 flex items-center justify-center font-black text-white rounded-full"
+          <span
+            className="absolute top-2 right-2 rounded-full"
             style={{
-              minWidth: 17,
-              height: 17,
-              padding: "0 4px",
+              width: 6,
+              height: 6,
               background: C.accent,
-              fontSize: 10,
-              boxShadow: `0 0 10px ${C.accentGlow}`,
-              fontFamily: FONT_DISPLAY,
+              boxShadow: `0 0 8px ${C.accentGlow}`,
             }}
-          >
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </motion.span>
+          />
         )}
-      </motion.button>
+      </button>
 
-      {/* Dropdown Menu */}
+      {/* Dropdown Modal Không Viền Trắng */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ duration: 0.16, ease: "easeOut" }}
-            className="absolute right-0 mt-3 rounded-2xl overflow-hidden"
+            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute right-0 mt-2 rounded-2xl overflow-hidden"
             style={{
-              width: 390,
-              background: "#0e0e11",
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.03)",
+              width: 360,
+              maxWidth: "calc(100vw - 28px)",
+              background: "#121214",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              boxShadow: "0 24px 60px rgba(0, 0, 0, 0.95)",
               zIndex: 9999,
               fontFamily: FONT_BODY,
             }}
           >
-            {/* Header Dropdown */}
+            {/* Header */}
             <div
-              className="p-3.5 flex items-center justify-between"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}
+              className="px-4 py-3.5 flex items-center justify-between"
+              style={{
+                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+              }}
             >
               <div className="flex items-center gap-2">
-                <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 15, color: "#fff" }}>
+                <span
+                  style={{
+                    fontFamily: FONT_DISPLAY,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    letterSpacing: "0.02em",
+                    color: "#f0f0f0",
+                    textTransform: "uppercase",
+                  }}
+                >
                   Thông báo
                 </span>
                 {unreadCount > 0 && (
                   <span
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                    style={{ background: "rgba(229,24,30,0.2)", color: C.accent }}
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{
+                      fontFamily: FONT_DISPLAY,
+                      background: "rgba(229, 24, 30, 0.15)",
+                      color: C.accent,
+                    }}
                   >
-                    {unreadCount} mới
+                    {unreadCount}
                   </span>
                 )}
               </div>
@@ -244,44 +246,47 @@ export default function NotificationBell({ scrolled }) {
                 <button
                   type="button"
                   onClick={handleMarkAll}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors"
+                  className="text-xs transition-opacity hover:opacity-100"
                   style={{
+                    fontFamily: FONT_DISPLAY,
                     background: "transparent",
-                    color: "rgba(255,255,255,0.6)",
+                    color: "rgba(255, 255, 255, 0.5)",
                     border: "none",
                     cursor: "pointer",
+                    padding: 0,
+                    fontWeight: 500,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
                 >
-                  <CheckCheck size={14} />
-                  <span>Đọc tất cả</span>
+                  Đọc tất cả
                 </button>
               )}
             </div>
 
             {/* Filter Tabs */}
             <div
-              className="flex px-3 pt-2 gap-2"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+              className="flex px-4 pt-2.5 gap-6"
+              style={{
+                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+              }}
             >
               <button
                 type="button"
                 onClick={() => setTab("all")}
-                className="pb-2 text-xs font-bold transition-all relative"
+                className="pb-2 text-xs transition-colors relative"
                 style={{
-                  color: tab === "all" ? "#fff" : "rgba(255,255,255,0.45)",
                   fontFamily: FONT_DISPLAY,
+                  fontWeight: tab === "all" ? 600 : 400,
+                  color: tab === "all" ? "#fff" : "rgba(255, 255, 255, 0.45)",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
                 }}
               >
-                Tất cả ({notifications.length})
+                Tất cả
                 {tab === "all" && (
                   <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                    layoutId="activeTabNotif"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
                     style={{ background: C.accent }}
                   />
                 )}
@@ -290,151 +295,197 @@ export default function NotificationBell({ scrolled }) {
               <button
                 type="button"
                 onClick={() => setTab("unread")}
-                className="pb-2 text-xs font-bold transition-all relative"
+                className="pb-2 text-xs transition-colors relative"
                 style={{
-                  color: tab === "unread" ? "#fff" : "rgba(255,255,255,0.45)",
                   fontFamily: FONT_DISPLAY,
+                  fontWeight: tab === "unread" ? 600 : 400,
+                  color: tab === "unread" ? "#fff" : "rgba(255, 255, 255, 0.45)",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
                 }}
               >
-                Chưa đọc ({unreadCount})
+                Chưa xem
                 {tab === "unread" && (
                   <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                    layoutId="activeTabNotif"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
                     style={{ background: C.accent }}
                   />
                 )}
               </button>
             </div>
 
-            {/* Body List */}
-            <div className="overflow-y-auto divide-y divide-white/[0.04]" style={{ maxHeight: 380 }}>
+            {/* Danh sách thông báo: Loại bỏ divide-y và viền trắng, cuộn mượt mà */}
+            <div
+              className="p-1.5 overflow-y-auto"
+              style={{
+                maxHeight: 380,
+                scrollbarWidth: "none", // Ẩn thanh cuộn thô trên Firefox
+                msOverflowStyle: "none", // IE / Edge
+              }}
+            >
+              <style>{`
+                div::-webkit-scrollbar {
+                  display: none;
+                }
+              `}</style>
+
               {displayedList.length === 0 ? (
-                <div className="py-12 px-6 flex flex-col items-center justify-center text-center">
-                  <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                <div className="py-12 px-6 text-center">
+                  <p
+                    className="text-xs font-medium"
+                    style={{ color: "rgba(255,255,255,0.4)", fontFamily: FONT_DISPLAY }}
                   >
-                    <Sparkles size={20} style={{ color: "rgba(255,255,255,0.25)" }} />
-                  </div>
-                  <p className="text-sm font-bold text-white mb-1" style={{ fontFamily: FONT_DISPLAY }}>
-                    Hộp thư rảnh rỗi
-                  </p>
-                  <p className="text-xs text-white/40 max-w-[240px] leading-relaxed">
-                    Khi có phim mới, tập phim cập nhật hoặc gợi ý dành riêng cho bạn, thông báo sẽ xuất hiện ở đây.
+                    Không có thông báo mới
                   </p>
                 </div>
               ) : (
                 displayedList.map((item) => (
                   <div
                     key={item.id}
+                    onMouseEnter={() => handleItemHover(item)} // Rê chuột vào lập tức chuyển thành đã đọc
                     onClick={() => handleItemClick(item)}
-                    className="group relative flex items-start gap-3 p-3.5 transition-all cursor-pointer"
+                    className="group relative flex items-start gap-3 p-2.5 rounded-xl transition-all cursor-pointer"
                     style={{
-                      background: item.isRead ? "transparent" : "rgba(229, 24, 30, 0.04)",
+                      background: item.isRead
+                        ? "transparent"
+                        : "rgba(255, 255, 255, 0.025)",
+                      marginBottom: 2,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = item.isRead ? "transparent" : "rgba(229, 24, 30, 0.04)";
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = item.isRead
+                        ? "transparent"
+                        : "rgba(255, 255, 255, 0.025)";
                     }}
                   >
-                    {/* Chấm tròn chưa đọc */}
-                    {!item.isRead && (
-                      <span
-                        className="w-1.5 h-1.5 rounded-full mt-2 shrink-0"
-                        style={{ background: C.accent, boxShadow: `0 0 6px ${C.accent}` }}
-                      />
-                    )}
-
-                    {/* Poster thumbnail */}
+                    {/* Poster phim */}
                     <div
-                      className="w-12 h-16 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
-                      style={{ background: "#1c1c24", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className="w-10 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+                      style={{
+                        background: "#1c1c20",
+                      }}
                     >
                       {item.thumbnailUrl ? (
                         <img
                           src={item.thumbnailUrl}
                           alt={item.title}
                           className="w-full h-full object-cover"
-                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
                         />
                       ) : (
-                        <Film size={20} className="text-white/30" />
+                        <span
+                          className="text-[9px] font-bold tracking-wider"
+                          style={{ color: "rgba(255, 255, 255, 0.25)", fontFamily: FONT_DISPLAY }}
+                        >
+                          FILM
+                        </span>
                       )}
                     </div>
 
-                    {/* Nội dung text */}
-                    <div className="flex-1 min-w-0 pr-6">
+                    {/* Nội dung tin */}
+                    <div className="flex-1 min-w-0 pr-5">
                       <div className="flex items-center gap-1.5 mb-1">
+                        {!item.isRead && (
+                          <span
+                            className="inline-block rounded-full"
+                            style={{
+                              width: 5,
+                              height: 5,
+                              background: C.accent,
+                              boxShadow: `0 0 5px ${C.accentGlow}`,
+                            }}
+                          />
+                        )}
                         <span
-                          className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded"
+                          className="text-[11px]"
                           style={{
-                            background: "rgba(70, 211, 105, 0.15)",
-                            color: "#46d369",
-                            fontFamily: FONT_DISPLAY,
+                            color: "rgba(255, 255, 255, 0.4)",
+                            fontFamily: FONT_BODY,
                           }}
                         >
-                          PHIM MỚI
-                        </span>
-                        <span className="text-[11px] text-white/35">
-                          {formatVietnameseTime(item.createdAt)}
+                          {formatTimeAgo(item.createdAt)}
                         </span>
                       </div>
 
                       <h4
-                        className="text-xs font-bold truncate text-white leading-snug mb-1"
-                        style={{ fontFamily: FONT_DISPLAY }}
+                        className="text-xs font-semibold truncate mb-0.5 leading-snug"
+                        style={{
+                          fontFamily: FONT_DISPLAY,
+                          color: item.isRead ? "rgba(255, 255, 255, 0.75)" : "#ffffff",
+                        }}
                       >
                         {item.title}
                       </h4>
 
-                      <p className="text-[12px] text-white/55 line-clamp-2 leading-relaxed">
+                      <p
+                        className="text-[12px] line-clamp-2 leading-relaxed"
+                        style={{
+                          color: item.isRead ? "rgba(255, 255, 255, 0.4)" : "rgba(255, 255, 255, 0.65)",
+                        }}
+                      >
                         {item.message}
                       </p>
                     </div>
 
-                    {/* Nút xóa nhanh khi hover */}
+                    {/* Nút xoá tinh tế dạng text '×' xuất hiện khi hover */}
                     <button
                       type="button"
                       onClick={(e) => handleDelete(e, item.id)}
                       disabled={deletingId === item.id}
-                      className="absolute right-3 top-3.5 opacity-0 group-hover:opacity-100 p-1.5 rounded-md transition-all"
+                      className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
                       style={{
-                        background: "rgba(255,255,255,0.06)",
-                        color: "rgba(255,255,255,0.5)",
+                        background: "transparent",
+                        color: "rgba(255, 255, 255, 0.4)",
                         border: "none",
                         cursor: "pointer",
+                        fontSize: 16,
+                        lineHeight: 1,
+                        padding: "2px 4px",
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = C.accent; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
-                      title="Xóa thông báo này"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = C.accent;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = "rgba(255, 255, 255, 0.4)";
+                      }}
+                      title="Xóa"
                     >
-                      <Trash2 size={13} />
+                      ×
                     </button>
                   </div>
                 ))
               )}
             </div>
 
-            {/* Footer Dropdown */}
+            {/* Footer */}
             <div
-              className="p-2.5 text-center"
+              className="p-3 text-center"
               style={{
-                borderTop: "1px solid rgba(255,255,255,0.05)",
-                background: "rgba(255,255,255,0.01)",
+                borderTop: "1px solid rgba(255, 255, 255, 0.04)",
               }}
             >
               <button
                 type="button"
-                onClick={() => { setIsOpen(false); navigate("/announcements"); }}
-                className="text-xs font-semibold text-white/60 hover:text-white inline-flex items-center gap-1 transition-colors"
-                style={{ background: "transparent", border: "none", cursor: "pointer" }}
+                onClick={() => {
+                  setIsOpen(false);
+                  navigate("/announcements");
+                }}
+                className="text-[11px] font-medium transition-colors hover:text-white"
+                style={{
+                  fontFamily: FONT_DISPLAY,
+                  color: "rgba(255, 255, 255, 0.45)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
               >
-                <span>Xem bản tin bảo trì & sự kiện hệ thống</span>
-                <ExternalLink size={11} />
+                Bản tin hệ thống &rarr;
               </button>
             </div>
           </motion.div>

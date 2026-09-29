@@ -1,5 +1,5 @@
 // src/pages/LandingPage.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
@@ -697,6 +697,13 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
   const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [cooldown, setCooldown] = useState(60); // giây chờ trước khi cho gửi lại OTP
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   const isRegister = mode === "register";
 
@@ -733,6 +740,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       } else {
         await authService.sendOtp(userId);
         setSent(true);
+        setCooldown(60);
       }
     } catch (e) {
       setError(extractErrorMessage(e, "Không thể gửi lại OTP"));
@@ -772,7 +780,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
           </>
         ) : (
           <>
-            Mã OTP đã gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />
+            Mã OTP đang được gửi đến <strong style={{ color: C.text }}>{email}</strong>.<br />
             Nhập mã 6 chữ số để tiếp tục.
           </>
         )}
@@ -827,11 +835,12 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <button
           onClick={resend}
-          disabled={resending}
+          disabled={resending || cooldown > 0}
           style={{
             background: "none",
             border: "none",
-            cursor: "pointer",
+            cursor: resending || cooldown > 0 ? "default" : "pointer",
+            opacity: cooldown > 0 ? 0.6 : 1,
             fontFamily: "'Nunito',sans-serif",
             fontSize: 12.5,
             color: C.sub,
@@ -839,7 +848,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
             textDecorationColor: C.dim,
           }}
         >
-          {resending ? "Đang gửi..." : "Gửi lại mã OTP"}
+          {resending ? "Đang gửi..." : cooldown > 0 ? `Gửi lại mã sau ${cooldown}s` : "Gửi lại mã OTP"}
         </button>
       </div>
     </>

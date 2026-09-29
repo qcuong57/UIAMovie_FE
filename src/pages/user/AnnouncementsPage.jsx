@@ -207,7 +207,11 @@ export default function AnnouncementsPage() {
   const fetchNews = useCallback(async () => {
     setLoading(true);
     try {
-      const { items } = await notificationService.getPublicAnnouncements(1, 100);
+      const { items } = await notificationService.getPublicAnnouncements(
+        1,
+        100,
+        "admin_announcement",
+      );
       setAnnouncements(items);
     } catch (err) {
       console.error("[AnnouncementsPage] Tải tin tức thất bại:", err);

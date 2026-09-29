@@ -34,7 +34,7 @@ import CountryMovieRows from "../../components/home/CountryMovieRows";
 import TrailerShowcaseSection from "../../components/home/TrailerShowcaseSection";
 import UserReviewsSection from "../../components/home/UserReviewsSection";
 import RecommendSection from "../../components/home/RecommendSection";
-import SectionReveal from "../../motion-configs/SectionReveal";
+import HomeReveal, { HOME_EASE } from "../../motion-configs/HomeReveal";
 import { LoadingScreen } from "../../components/ui";
 
 const VERCEL_DOMAIN = "https://uiamovie.vercel.app";
@@ -627,9 +627,9 @@ export default function HomePage() {
             <HeroBanner movie={movies[0]} movies={movies.slice(0, 5)} />
 
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.15, duration: 0.5 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.7, ease: HOME_EASE }}
             >
               <GenreSection
                 genres={genres}
@@ -648,17 +648,17 @@ export default function HomePage() {
               >
                 {/* ── Tiếp tục xem ── */}
                 {continueWatchingList.length > 0 && (
-                  <SectionReveal variant="slide-right" divider>
+                  <HomeReveal variant="row" divider>
                     <ContinueWatchingSection
                       items={continueWatchingList}
                       onRemoveItem={handleRemoveHistory}
                       onSeeAll={() => navigate("/watch-history")}
                     />
-                  </SectionReveal>
+                  </HomeReveal>
                 )}
 
                 {/* ── Top 10 ── */}
-                <SectionReveal variant="bounce" margin="-120px" divider>
+                <HomeReveal variant="feature" divider>
                   <TopRankedRow
                     title="Top 10 Hôm Nay"
                     movies={highlyRated}
@@ -666,13 +666,13 @@ export default function HomePage() {
                     onFavoriteToggle={toggleFavorite}
                     isFavorited={isFavorited}
                   />
-                </SectionReveal>
+                </HomeReveal>
 
                 {/* ── Trailer Mới Cập Nhật ── */}
                 {uploadedTrailers.length > 0 && (
-                  <SectionReveal variant="scale-fade" margin="-100px" divider>
+                  <HomeReveal variant="spotlight" divider>
                     <TrailerShowcaseSection items={uploadedTrailers} />
-                  </SectionReveal>
+                  </HomeReveal>
                 )}
 
                 <CountryMovieRows
@@ -689,7 +689,7 @@ export default function HomePage() {
                 />
 
                 {/* ── Được Đánh Giá Cao ── */}
-                <SectionReveal variant="slide-right" divider>
+                <HomeReveal variant="row" divider>
                   <MovieRow
                     title="Phim Được Đánh Giá Cao"
                     movies={highlyRated}
@@ -699,11 +699,11 @@ export default function HomePage() {
                     seeAllSort="rating"
                     badge={{ icon: Star, text: "Đánh giá cao" }}
                   />
-                </SectionReveal>
+                </HomeReveal>
 
                 {/* ── TV Series Nổi Bật ── */}
                 {tvTopRated.length > 0 && (
-                  <SectionReveal variant="slide-left" divider>
+                  <HomeReveal variant="row" divider>
                     <MovieRow
                       title="TV Series Nổi Bật"
                       items={tvTopRated}
@@ -713,11 +713,11 @@ export default function HomePage() {
                       seeAllPath="/browse/tvshows?sort=rating"
                       badge={{ icon: Tv, text: "TV Show" }}
                     />
-                  </SectionReveal>
+                  </HomeReveal>
                 )}
 
                 {/* ── Phim Mới Ra Mắt ── */}
-                <SectionReveal variant="slide-right" divider>
+                <HomeReveal variant="row" divider>
                   <MovieRow
                     title="Phim Mới Ra Mắt"
                     movies={newest}
@@ -727,11 +727,11 @@ export default function HomePage() {
                     seeAllSort="releaseDate"
                     badge={{ icon: CalendarDays, text: "Mới nhất" }}
                   />
-                </SectionReveal>
+                </HomeReveal>
 
                 {/* ── Series Mới Nhất ── */}
                 {tvNewest.length > 0 && (
-                  <SectionReveal variant="slide-left" divider>
+                  <HomeReveal variant="row" divider>
                     <MovieRow
                       title="Series Mới Nhất"
                       items={tvNewest}
@@ -741,7 +741,7 @@ export default function HomePage() {
                       seeAllPath="/browse/tvshows?sort=firstAirDate"
                       badge={{ icon: CalendarDays, text: "Mới nhất" }}
                     />
-                  </SectionReveal>
+                  </HomeReveal>
                 )}
 
                 {/* ── Dành Cho Bạn ── */}
@@ -968,7 +968,7 @@ export default function HomePage() {
                     )}
                   </div>
                 ) : (
-                  <SectionReveal variant="scale-fade" divider>
+                  <HomeReveal variant="spotlight" divider>
                     <RecommendSection
                       subtitle={forYouLabel}
                       items={forYou}
@@ -976,30 +976,30 @@ export default function HomePage() {
                       isFavorited={isFavorited}
                       favoritedIds={Array.from(favorites)}
                     />
-                  </SectionReveal>
+                  </HomeReveal>
                 )}
 
                 {/* ── User Reviews ── */}
-                <SectionReveal variant="fade" margin="-60px">
+                <HomeReveal variant="fade">
                   <UserReviewsSection
                     movies={reviewMovies}
                     onMovieClick={(movie) => {
                       window.location.href = `/movie/${movie.id}`;
                     }}
                   />
-                </SectionReveal>
+                </HomeReveal>
               </div>
 
               {/* ── AI CHAT WIDGET: LUÔN MOUNT ĐỂ BẢO TOÀN LỊCH SỬ TIN NHẮN ── */}
               <motion.div
                 animate={{
                   opacity: pastBanner ? 1 : 0,
-                  scale: pastBanner ? 1 : 0.85,
-                  y: pastBanner ? 0 : 16,
+                  scale: pastBanner ? 1 : 0.92,
+                  y: pastBanner ? 0 : 12,
                 }}
                 transition={{
-                  duration: 0.3,
-                  ease: [0.215, 0.61, 0.355, 1],
+                  duration: 0.35,
+                  ease: HOME_EASE,
                 }}
                 style={{
                   position: "fixed",
