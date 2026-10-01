@@ -12,7 +12,7 @@ import Pagination from "../../components/common/Pagination";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import MovieCard from "../../components/movie/MovieCard";
-import { SkeletonCard, NoResults } from "../../components/search/SearchUI";
+import { SkeletonCard, NoResults, GRID_STYLE } from "../../components/search/SearchUI";
 import { useToast } from "../../components/common/Toast";
 
 const ACCENT = '#e5181e';
@@ -26,11 +26,8 @@ function getCurrentUser() {
   }
 }
 
-const movieGrid = (isMobile) => ({
-  display: "grid",
-  gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(7, 1fr)",
-  gap: isMobile ? 10 : 12,
-});
+const movieGrid = (isMobile) =>
+  isMobile ? { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 } : GRID_STYLE;
 
 const toMovies = (res) => {
   if (Array.isArray(res)) return res;
@@ -434,7 +431,7 @@ export default function SearchPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, paddingTop: 68 }}>
-      <div style={{ maxWidth: 1300, margin: "0 auto", padding: isMobile ? "16px 14px 80px" : "36px 32px 100px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "16px 14px 60px" : "32px 48px 80px" }}>
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
@@ -482,7 +479,7 @@ export default function SearchPage() {
 
         {loading && allItems.length === 0 && (
           <div style={movieGrid(isMobile)}>
-            {Array.from({ length: isMobile ? 6 : 14 }).map((_, i) => (
+            {Array.from({ length: isMobile ? 6 : pageSize }).map((_, i) => (
               <div key={i}><SkeletonCard /></div>
             ))}
           </div>

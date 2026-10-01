@@ -1,7 +1,7 @@
 // src/pages/admin/AdminReviews.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, AlertTriangle, Star, Search, Film, Tv, Eye, EyeOff, BarChart2, MessageSquare, X, ChevronDown } from 'lucide-react';
+import { Trash2, AlertTriangle, Star, Search, Film, Tv, Eye, EyeOff, BarChart2, MessageSquare, X, ChevronDown, ChevronUp, CornerDownRight, MessageCircle } from 'lucide-react';
 import reviewService from '../../services/reviewService';
 import movieService  from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
@@ -11,6 +11,7 @@ import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 12;
+const REPLY_PAGE_SIZE = 10;   // phân trang theo reply gốc (server clamp tối đa 100)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const avg = (arr, key) =>
@@ -40,7 +41,7 @@ const StarRow = ({ rating, max = 10 }) => {
 // ── Skeleton row ──────────────────────────────────────────────────────────────
 const SkeletonRow = () => (
   <tr>
-    {[160, 80, 260, 80, 36].map((w, i) => (
+    {[160, 80, 260, 70, 80, 36].map((w, i) => (
       <td key={i} style={{ padding: '14px 18px' }}>
         <div style={{
           width: w, height: 13, borderRadius: 6,
@@ -401,6 +402,220 @@ const SearchableDropdown = ({
   );
 };
 
+// ── Reply panel (admin) ───────────────────────────────────────────────────────
+// Hiển thị reply của 1 review: reply gốc + reply con (lồng 1 cấp), phân trang theo reply gốc.
+const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
+  const toast = useToast();
+  const [replies,   setReplies]   = useState([]);
+  const [totalRoot, setTotalRoot] = useState(0);
+  const [page,      setPage]      = useState(1);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [delReply,  setDelReply]  = useState(null);
+  const [deleting,  setDeleting]  = useState(false);
+  const [delError,  setDelError]  = useState('');
+
+  const load = useCallback(async (pageNumber) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res  = await reviewService.getReplies(reviewId, pageNumber, REPLY_PAGE_SIZE);
+      const data = res?.data;
+      const incoming = data?.replies ?? [];
+      setTotalRoot(data?.totalRootReplies ?? 0);
+      setReplies([...incoming].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+      setPage(pageNumber);
+    } catch (e) {
+      console.error(e);
+      setError(e?.response?.data?.message ?? 'Không tải được danh sách trả lời');
+    } finally {
+      setLoading(false);
+    }
+  }, [reviewId]);
+
+  useEffect(() => { load(1); }, [load]);
+
+  const roots    = replies.filter(r => !r.parentReplyId);
+  const childrenOf = (id) => replies.filter(r => r.parentReplyId === id);
+  const totalPages = Math.ceil(totalRoot / REPLY_PAGE_SIZE);
+
+  const handleDeleteReply = async () => {
+    if (!delReply) return;
+    setDeleting(true); setDelError('');
+    try {
+      await reviewService.adminDeleteReply(delReply.id);
+      // Xóa reply gốc thì server xóa luôn các reply con
+      const isRoot  = !delReply.parentReplyId;
+      const removed = isRoot ? [delReply.id, ...childrenOf(delReply.id).map(c => c.id)] : [delReply.id];
+      onRemoved?.(reviewId, removed.length);
+      setDelReply(null);
+      // Tải lại để số trang/tổng khớp server; nếu trang hiện tại hết reply gốc thì lùi 1 trang
+      const rootsLeft = roots.length - (isRoot ? 1 : 0);
+      load(rootsLeft <= 0 && page > 1 ? page - 1 : page);
+      toast.success(isRoot && removed.length > 1
+        ? `Đã xóa trả lời và ${removed.length - 1} phản hồi con`
+        : 'Xóa trả lời thành công');
+    } catch (e) {
+      console.error(e);
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Xóa thất bại, vui lòng thử lại';
+      setDelError(msg); toast.error(msg);
+    } finally { setDeleting(false); }
+  };
+
+  const ReplyItem = ({ r, isChild }) => (
+    <div style={{
+      display: 'flex', gap: 10, alignItems: 'flex-start',
+      padding: '10px 12px', borderRadius: 10,
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      marginLeft: isChild ? 28 : 0,
+    }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, background: accentColor + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ fontFamily: FONT_TITLE, fontSize: 11, fontWeight: 700, color: accentColor }}>
+          {(r.userName ?? '?')[0]?.toUpperCase()}
+        </span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+          <span style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: T.text }}>{r.userName ?? 'Ẩn danh'}</span>
+          <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
+            {r.createdAt ? new Date(r.createdAt).toLocaleString('vi-VN') : ''}
+            {r.updatedAt ? ' · đã chỉnh sửa' : ''}
+          </span>
+        </div>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {r.replyToUserName && (
+            <span style={{ color: accentColor, fontWeight: 600, marginRight: 5 }}>@{r.replyToUserName}</span>
+          )}
+          {r.replyText}
+        </p>
+      </div>
+      <button
+        onClick={() => { setDelReply(r); setDelError(''); }}
+        title="Xóa trả lời"
+        style={{
+          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+          background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.16)',
+          cursor: 'pointer', color: T.red,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; }}
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+
+  const closeDel = () => { if (!deleting) { setDelReply(null); setDelError(''); } };
+  const childCount = delReply && !delReply.parentReplyId ? childrenOf(delReply.id).length : 0;
+
+  return (
+    <div style={{ padding: '14px 18px 16px 62px', background: T.surfaceAlt, borderTop: `1px dashed ${T.border}` }}>
+      {loading ? (
+        <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>Đang tải trả lời…</p>
+      ) : error ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</span>
+          <button onClick={() => load(1)} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: accentColor, background: 'none', border: 'none', cursor: 'pointer' }}>Thử lại</button>
+        </div>
+      ) : roots.length === 0 ? (
+        <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>Chưa có trả lời nào</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {roots.map(root => (
+            <React.Fragment key={root.id}>
+              <ReplyItem r={root} />
+              {childrenOf(root.id).map(c => <ReplyItem key={c.id} r={c} isChild />)}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <AdminPagination
+          page={page}
+          totalPages={totalPages}
+          total={totalRoot}
+          pageSize={REPLY_PAGE_SIZE}
+          onPageChange={load}
+          itemLabel="trả lời gốc"
+        />
+      )}
+
+      {/* Confirm delete reply */}
+      <AnimatePresence>
+        {!!delReply && (
+          <>
+            <motion.div key="reply-backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={closeDel}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
+            />
+            <motion.div key="reply-modal"
+              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+              style={{
+                position: 'fixed', inset: 0, margin: 'auto', width: 440, height: 'fit-content', zIndex: 300,
+                background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadowLg,
+                fontFamily: FONT, overflow: 'hidden',
+              }}
+            >
+              <div style={{ padding: '18px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 11, color: T.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 600 }}>Trả lời</p>
+                  <h2 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0, fontFamily: FONT_TITLE }}>Xác nhận xóa</h2>
+                </div>
+                <button onClick={closeDel} disabled={deleting}
+                  style={{ width: 32, height: 32, borderRadius: '50%', background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: deleting ? 'not-allowed' : 'pointer', color: T.textSub, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={15} />
+                </button>
+              </div>
+
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ padding: '12px 14px', borderRadius: 10, background: T.surfaceAlt, border: `1px solid ${T.border}` }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: '0 0 4px' }}>{delReply?.userName ?? 'Ẩn danh'}</p>
+                  <p style={{ fontSize: 12.5, color: T.textSub, lineHeight: 1.6, margin: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {delReply?.replyToUserName && <strong style={{ color: accentColor }}>@{delReply.replyToUserName} </strong>}
+                    {delReply?.replyText}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  <AlertTriangle size={15} color={T.red} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 13, color: '#991B1B', lineHeight: 1.6, margin: 0 }}>
+                    Hành động này <strong>không thể hoàn tác</strong>.
+                    {childCount > 0 && <> Trả lời gốc bị xóa sẽ kéo theo <strong>{childCount} phản hồi con</strong>.</>}
+                  </p>
+                </div>
+
+                {delError && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', fontSize: 12.5, color: T.red }}>
+                    {delError}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button onClick={closeDel} disabled={deleting}
+                  style={{ padding: '8px 16px', borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, color: T.textSub, fontFamily: FONT, opacity: deleting ? 0.6 : 1 }}>
+                  Hủy
+                </button>
+                <button onClick={handleDeleteReply} disabled={deleting}
+                  style={{ padding: '8px 18px', borderRadius: 8, background: deleting ? 'rgba(220,38,38,0.5)' : '#DC2626', border: '1px solid transparent', cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, color: 'white', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {deleting
+                    ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang xóa...</>
+                    : <><Trash2 size={13} /> Xóa trả lời</>}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AdminReviews() {
   const toast = useToast();
@@ -419,6 +634,7 @@ export default function AdminReviews() {
   const [deleting,    setDeleting]    = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [totalRev,  setTotalRev]  = useState(0);
+  const [expandedId, setExpandedId] = useState(null);   // review đang mở panel trả lời
 
   // ── Catalogue loads ─────────────────────────────────────────────
   useEffect(() => {
@@ -436,7 +652,7 @@ export default function AdminReviews() {
   }, []);
 
   // Reset selection when tab switches
-  useEffect(() => { setSelId(''); setSelEpId(''); setEpisodes([]); setReviews([]); setTotalRev(0); setSearch(''); }, [tab]);
+  useEffect(() => { setSelId(''); setSelEpId(''); setEpisodes([]); setReviews([]); setTotalRev(0); setSearch(''); setExpandedId(null); }, [tab]);
 
   // ── Load episodes khi chọn tvshow ──────────────────────────────
   useEffect(() => {
@@ -461,14 +677,15 @@ export default function AdminReviews() {
   // ── Fetch reviews ───────────────────────────────────────────────
   useEffect(() => {
     if (!selId) { setReviews([]); setTotalRev(0); return; }
+    setExpandedId(null);
     setLoading(true);
     let fetcher;
     if (tab === 'movie') {
-      fetcher = reviewService.getMovieReviews(selId, 1, 200);
+      fetcher = reviewService.getMovieReviews(selId, 1, 100);
     } else if (selEpId) {
-      fetcher = reviewService.getEpisodeReviews(selEpId, 1, 200);
+      fetcher = reviewService.getEpisodeReviews(selEpId, 1, 100);
     } else {
-      fetcher = reviewService.getTvShowReviews(selId, 1, 200);
+      fetcher = reviewService.getTvShowReviews(selId, 1, 100);
     }
 
     fetcher.then(res => {
@@ -500,6 +717,7 @@ export default function AdminReviews() {
       setTotalRev(prev => prev - 1);
       setDeleteId(null);
       setDeleteReview(null);
+      setExpandedId(prev => (prev === id ? null : prev));
       toast.success('Xóa đánh giá thành công');
     } catch (e) {
       console.error(e);
@@ -509,9 +727,17 @@ export default function AdminReviews() {
     } finally { setDeleting(false); }
   };
 
+  // ── Reply đã bị xóa → cập nhật replyCount của review ────────────
+  const handleRepliesRemoved = useCallback((reviewId, n) => {
+    setReviews(prev => prev.map(r =>
+      r.id === reviewId ? { ...r, replyCount: Math.max(0, (r.replyCount ?? 0) - n) } : r
+    ));
+  }, []);
+
   // ── Derived stats ───────────────────────────────────────────────
   const spoilerCount = reviews.filter(r => r.isSpoiler).length;
   const avgRating    = avg(reviews, 'rating');
+  const totalReplies = reviews.reduce((s, r) => s + (r.replyCount ?? 0), 0);
   const catalogue    = tab === 'movie' ? movies : tvShows;
   const accentColor  = tab === 'movie' ? T.accent : '#7C3AED';
   const selectedTitle = catalogue.find(c => c.id === selId)?.title ?? '';
@@ -631,6 +857,7 @@ export default function AdminReviews() {
             <StatChip icon={MessageSquare} label={selEpId ? 'Đánh giá tập này' : 'Tổng đánh giá'} value={totalRev}        accent={accentColor} />
             <StatChip icon={BarChart2}    label="Đang hiển thị"                                    value={filtered.length} accent={accentColor} />
             <StatChip icon={Star}         label="Điểm trung bình"                                  value={avgRating}       accent={T.gold}      />
+            <StatChip icon={CornerDownRight} label="Lượt trả lời"                                   value={totalReplies}    accent={accentColor} />
             <StatChip icon={EyeOff}       label="Có spoiler"                                        value={spoilerCount}    accent={T.red}       />
           </motion.div>
         )}
@@ -662,7 +889,7 @@ export default function AdminReviews() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: T.surfaceAlt }}>
-                {['Người dùng', 'Đánh giá', 'Nội dung', 'Ngày', ''].map(h => (
+                {['Người dùng', 'Đánh giá', 'Nội dung', 'Trả lời', 'Ngày', ''].map(h => (
                   <th key={h} style={{ padding: '12px 18px', textAlign: 'left', fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>{h}</th>
                 ))}
               </tr>
@@ -688,7 +915,7 @@ export default function AdminReviews() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: T.surfaceAlt }}>
-                  {['Người dùng', 'Đánh giá', 'Nội dung', 'Ngày', ''].map(h => (
+                  {['Người dùng', 'Đánh giá', 'Nội dung', 'Trả lời', 'Ngày', ''].map(h => (
                     <th key={h} style={{
                       padding: '12px 18px', textAlign: 'left',
                       fontFamily: FONT, fontSize: 11, fontWeight: 600,
@@ -700,7 +927,8 @@ export default function AdminReviews() {
               </thead>
               <tbody>
                 {pageReviews.map((r, i) => (
-                  <motion.tr key={r.id}
+                  <React.Fragment key={r.id}>
+                  <motion.tr
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.025 }}
@@ -754,6 +982,31 @@ export default function AdminReviews() {
                       </p>
                     </td>
 
+                    {/* Replies */}
+                    <td style={{ padding: '13px 18px', whiteSpace: 'nowrap' }}>
+                      {(r.replyCount ?? 0) > 0 ? (
+                        <button
+                          onClick={() => setExpandedId(prev => (prev === r.id ? null : r.id))}
+                          title={expandedId === r.id ? 'Ẩn trả lời' : 'Xem trả lời'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
+                            fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                            background: expandedId === r.id ? accentColor + '14' : T.surface,
+                            color: expandedId === r.id ? accentColor : T.textSub,
+                            border: `1px solid ${expandedId === r.id ? accentColor + '40' : T.border}`,
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          <MessageCircle size={12} />
+                          {r.replyCount}
+                          {expandedId === r.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </button>
+                      ) : (
+                        <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>—</span>
+                      )}
+                    </td>
+
                     {/* Date */}
                     <td style={{ padding: '13px 18px', whiteSpace: 'nowrap' }}>
                       <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>
@@ -780,6 +1033,18 @@ export default function AdminReviews() {
                       </button>
                     </td>
                   </motion.tr>
+                  {expandedId === r.id && (
+                    <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td colSpan={6} style={{ padding: 0 }}>
+                        <ReplyPanel
+                          reviewId={r.id}
+                          accentColor={accentColor}
+                          onRemoved={handleRepliesRemoved}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -869,7 +1134,7 @@ export default function AdminReviews() {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)' }}>
                   <AlertTriangle size={15} color={T.red} style={{ flexShrink: 0, marginTop: 1 }} />
                   <p style={{ fontFamily: FONT, fontSize: 13, color: '#991B1B', lineHeight: 1.6, margin: 0 }}>
-                    Hành động này <strong>không thể hoàn tác</strong>. Đánh giá sẽ bị xóa vĩnh viễn.
+                    Hành động này <strong>không thể hoàn tác</strong>. Đánh giá{(deleteReview?.replyCount ?? 0) > 0 ? <> cùng <strong>{deleteReview.replyCount} trả lời</strong></> : ''} sẽ bị xóa vĩnh viễn.
                   </p>
                 </div>
 

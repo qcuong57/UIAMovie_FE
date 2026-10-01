@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
 import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
@@ -51,7 +51,13 @@ export default function TvShowInfoPage() {
   const [isFav, setIsFav] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("cast");
+  // Mở từ thông báo (?reviewId=...) thì vào thẳng tab Đánh giá
+  const [searchParams] = useSearchParams();
+  const reviewIdParam = searchParams.get("reviewId");
+  const [activeTab, setActiveTab] = useState(reviewIdParam ? "reviews" : "cast");
+  useEffect(() => {
+    if (reviewIdParam) setActiveTab("reviews");
+  }, [reviewIdParam]);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
