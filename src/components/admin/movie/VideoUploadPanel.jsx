@@ -26,12 +26,10 @@ const T = {
 
 const VIDEO_TYPES = ['main', 'trailer', 'clip', 'behind'];
 const TYPE_LABEL  = { main: 'Phim chính', trailer: 'Trailer', clip: 'Clip', behind: 'Hậu trường' };
-const QUALITIES   = ['1080p', '720p', '480p', '360p'];
 
 // ── UploadZone ────────────────────────────────────────────────────────────────
 export function UploadZone({ movieId, onUploaded }) {
   const [videoType, setVideoType] = useState('main');
-  const [quality,   setQuality]   = useState('1080p');
   const [file,      setFile]      = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress,  setProgress]  = useState(0);
@@ -60,7 +58,7 @@ export function UploadZone({ movieId, onUploaded }) {
       const fd = new FormData();
       fd.append('VideoFile', file);       // ✅ khớp VideoFile
       fd.append('VideoType', videoType);  // ✅ khớp VideoType
-      fd.append('Quality', quality);      // ✅ khớp Quality
+      // Quality không còn chọn tay: HLS tự chọn chất lượng theo băng thông người xem
 
       // ✅ URL đúng: /movies/{id}/videos  (không có /upload)
       const response = await axiosInstance.post(
@@ -103,13 +101,6 @@ export function UploadZone({ movieId, onUploaded }) {
           <select value={videoType} onChange={e => setVideoType(e.target.value)}
             style={{ height: 40, padding: '0 12px', borderRadius: 9, background: T.surface, border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13, color: T.text, outline: 'none', cursor: 'pointer' }}>
             {VIDEO_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-          </select>
-        </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Chất lượng</label>
-          <select value={quality} onChange={e => setQuality(e.target.value)}
-            style={{ height: 40, padding: '0 12px', borderRadius: 9, background: T.surface, border: `1px solid ${T.border}`, fontFamily: FONT, fontSize: 13, color: T.text, outline: 'none', cursor: 'pointer' }}>
-            {QUALITIES.map(q => <option key={q} value={q}>{q}</option>)}
           </select>
         </div>
       </div>

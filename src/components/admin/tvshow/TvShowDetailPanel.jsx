@@ -220,8 +220,55 @@ function VideoList({ videos, onDelete }) {
   );
 }
 
+// ── HlsPreview ────────────────────────────────────────────────────────────────
+// Xem thử video tập qua /api/playback (HLS, có chọn chất lượng tự động).
+function HlsPreview({ tvShowId, episodeId }) {
+  const videoRef = React.useRef(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let hls;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(`/playback/tv/${tvShowId}/episode/${episodeId}`);
+        const body = res?.data ?? res;
+        const pb = body?.data ?? body;
+        if (cancelled) return;
+        if (!pb?.canWatch || !pb?.playbackUrl) { setError(pb?.blockReason ?? 'Không lấy được link phát'); return; }
+        const video = videoRef.current;
+        if (!video) return;
+        if (!pb.playbackUrl.includes('.m3u8') || video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = pb.playbackUrl;
+          video.play().catch(() => {});
+          return;
+        }
+        const { default: Hls } = await import('hls.js');
+        if (cancelled) return;
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(pb.playbackUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+        } else {
+          video.src = pb.playbackUrl;
+        }
+      } catch (err) {
+        if (!cancelled) setError(err?.response?.data?.message ?? 'Không phát được video');
+      }
+    })();
+    return () => { cancelled = true; if (hls) hls.destroy(); };
+  }, [tvShowId, episodeId]);
+
+  if (error) return <div style={{ color: '#fff', padding: 24, textAlign: 'center', background: '#000', borderRadius: 12 }}>{error}</div>;
+  return (
+    <video ref={videoRef} controls
+      style={{ width: '100%', borderRadius: 12, display: 'block', background: '#000', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }} />
+  );
+}
+
 // ── EpisodeVideoZone ─────────────────────────────────────────────────────────
-function EpisodeVideoZone({ episode, onUpdated }) {
+function EpisodeVideoZone({ episode, tvShowId, onUpdated }) {
   const [uploading, setUploading] = useState(false);
   const [progress,  setProgress]  = useState(0);
   const [deleting,  setDeleting]  = useState(false);
@@ -229,7 +276,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
   const [preview,   setPreview]   = useState(false);
   const inputRef = React.useRef(null);
 
-  const hasVideo = !!episode.videoUrl;
+  const hasVideo = !!(episode.hasVideo || episode.videoUrl);
 
   const doUpload = async (file) => {
     if (!file) return;
@@ -248,7 +295,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
         }
       );
       const data = (res?.data ?? res)?.data ?? (res?.data ?? res);
-      onUpdated?.({ ...episode, videoUrl: data?.videoUrl ?? episode.videoUrl });
+      onUpdated?.({ ...episode, hasVideo: true, videoUrl: null });
     } catch (err) {
       alert(err?.response?.data?.message ?? 'Upload thất bại');
     } finally {
@@ -263,7 +310,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
     setDeleting(true);
     try {
       await axiosInstance.delete(`/tvshows/episodes/${episode.id}/video`);
-      onUpdated?.({ ...episode, videoUrl: null });
+      onUpdated?.({ ...episode, hasVideo: false, videoUrl: null });
     } catch (err) {
       alert(err?.response?.data?.message ?? 'Xóa thất bại');
     } finally {
@@ -282,8 +329,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 500, backdropFilter: 'blur(7px)' }} />
             <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
               style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 501, width: 'min(90vw, 820px)' }}>
-              <video src={episode.videoUrl} controls autoPlay
-                style={{ width: '100%', borderRadius: 12, display: 'block', background: '#000', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }} />
+              <HlsPreview tvShowId={tvShowId} episodeId={episode.id} />
               <button onClick={() => setPreview(false)}
                 style={{ position: 'absolute', top: -14, right: -14, width: 32, height: 32, borderRadius: '50%', background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={14} />
@@ -300,7 +346,7 @@ function EpisodeVideoZone({ episode, onUpdated }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 1 }}>Video tập phim</p>
             <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {episode.videoUrl}
+              Đã có video (HLS — người xem tự chọn chất lượng)
             </p>
           </div>
           <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
@@ -655,7 +701,7 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
                                 {new Date(ep.airDate).toLocaleDateString("vi-VN")}
                               </span>
                             )}
-                            {ep.videoUrl && (
+                            {(ep.hasVideo || ep.videoUrl) && (
                               <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: T.accentText, background: T.accentLight, border: `1px solid ${T.accent}30`, padding: '1px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
                                 <Play size={8} style={{ fill: T.accentText }} /> Có video
                               </span>
@@ -684,7 +730,7 @@ const SeasonAccordion = ({ season, showId, invalidated }) => {
                         )}
                       </div>
                       {/* Video upload zone — luôn hiển thị bên dưới info row */}
-                      {ep.id && <EpisodeVideoZone episode={ep} onUpdated={handleEpisodeUpdated} />}
+                      {ep.id && <EpisodeVideoZone episode={ep} tvShowId={showId} onUpdated={handleEpisodeUpdated} />}
                       {/* Subtitle panel — quản lý subtitle cho tập phim */}
                       {ep.id && (
                         <div style={{

@@ -136,5 +136,5 @@ export const useDashboardData = () => {
     load();
   }, [load]);
 
-  return data;
+  return { ...data, reload: load };
 };

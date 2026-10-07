@@ -301,9 +301,10 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
     <div
       style={{
         display: "flex",
-        minHeight: "100vh",
+        height: "100vh",
         background: T.bg,
         fontFamily: FONT,
+        overflow: "hidden",
       }}
     >
       <style>{ADMIN_GOOGLE_FONTS}</style>
@@ -318,9 +319,7 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           borderRight: `1px solid ${T.border}`,
           display: "flex",
           flexDirection: "column",
-          position: "sticky",
-          top: 0,
-          height: "100vh",
+          height: "100%",
           overflow: "hidden",
           zIndex: 50,
           boxShadow: T.shadow,
@@ -485,6 +484,7 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
+          height: "100%",
           overflow: "hidden",
         }}
       >

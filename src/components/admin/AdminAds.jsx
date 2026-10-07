@@ -218,15 +218,11 @@ export default function AdminAds() {
     [page, search, filterActive],
   );
 
+  // Một effect duy nhất: fetchAds đổi identity khi page/search/filter đổi.
+  // Đổi search/filter đã setPage(1) trong handler nên không bị fetch đôi.
   useEffect(() => {
-    fetchAds(page);
-  }, [page]);
-
-  // Reset page + refetch on filter change
-  useEffect(() => {
-    setPage(1);
-    fetchAds(1);
-  }, [search, filterActive]);
+    fetchAds();
+  }, [fetchAds]);
 
   const handleToggleActive = async (ad) => {
     setTogglingId(ad.id);
@@ -293,7 +289,7 @@ export default function AdminAds() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <GhostBtn onClick={() => fetchAds(page)} icon={RefreshCw}>
+          <GhostBtn onClick={() => fetchAds()} icon={RefreshCw}>
             Làm mới
           </GhostBtn>
           <GhostBtn onClick={() => setShowCreate(true)} accent icon={Plus}>
@@ -327,7 +323,10 @@ export default function AdminAds() {
           />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Tìm theo tên quảng cáo..."
             style={{
               width: "100%",
@@ -362,7 +361,10 @@ export default function AdminAds() {
           {FILTER_OPTS.map((opt) => (
             <button
               key={String(opt.value)}
-              onClick={() => setFilterActive(opt.value)}
+              onClick={() => {
+                setFilterActive(opt.value);
+                setPage(1);
+              }}
               style={{
                 padding: "5px 14px",
                 borderRadius: 8,
@@ -775,8 +777,8 @@ export default function AdminAds() {
         onClose={() => setShowCreate(false)}
         onCreated={() => {
           setShowCreate(false);
-          fetchAds(1);
-          setPage(1);
+          if (page === 1) fetchAds(1);
+          else setPage(1);
         }}
       />
 

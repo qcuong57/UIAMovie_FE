@@ -3,68 +3,59 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SkipForward } from "lucide-react";
 
+// Hiện đúng `countdownSecs` giây cuối của tập (bám theo thời gian thật của video, không tự đếm riêng):
+//   - secondsLeft = số giây còn lại của video (player cập nhật theo timeupdate)
+//   - Pause → số đếm đứng yên; tua → số đếm nhảy theo; hết tập (secondsLeft = 0) → tự chuyển tập.
+// Prop `triggerAt` không còn dùng (bỏ khỏi props; code cũ truyền vào cũng không lỗi).
 const NextEpisodeCountdown = ({
   nextEpisode   = null,
   secondsLeft   = Infinity,
-  triggerAt     = 30,
   countdownSecs = 10,
   onNext        = () => {},
   onDismiss     = () => {},
 }) => {
-  const [countdown, setCountdown] = useState(countdownSecs);
   const [dismissed, setDismissed] = useState(false);
-  const [triggered, setTriggered] = useState(false);
 
-  const intervalRef = useRef(null);
-  const onNextRef   = useRef(onNext);
+  const firedRef  = useRef(false);
+  const onNextRef = useRef(onNext);
   onNextRef.current = onNext;
 
+  // Đổi tập → reset
   useEffect(() => {
-    clearInterval(intervalRef.current);
     setDismissed(false);
-    setTriggered(false);
-    setCountdown(countdownSecs);
-  }, [nextEpisode?.id, countdownSecs]);
+    firedRef.current = false;
+  }, [nextEpisode?.id]);
 
-  useEffect(() => {
-    if (triggered || dismissed || !nextEpisode) return;
-    if (secondsLeft <= triggerAt) setTriggered(true);
-  }, [secondsLeft, triggerAt, triggered, dismissed, nextEpisode]);
+  // Còn lại bao nhiêu giây (làm tròn lên: 10,9,...,1)
+  const remaining = Number.isFinite(secondsLeft) ? Math.max(0, Math.ceil(secondsLeft)) : Infinity;
+  const inWindow  = remaining > 0 && remaining <= countdownSecs;
+  const countdown = inWindow ? remaining : 0;
 
+  // Hết tập → chuyển sang tập tiếp theo (đúng 1 lần), trừ khi user đã bấm "Bỏ qua"
   useEffect(() => {
-    if (!triggered || dismissed) return;
-    setCountdown(countdownSecs);
-    intervalRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current);
-          onNextRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(intervalRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggered, dismissed]);
+    if (!nextEpisode || dismissed || firedRef.current) return;
+    if (Number.isFinite(secondsLeft) && secondsLeft <= 0) {
+      firedRef.current = true;
+      onNextRef.current();
+    }
+  }, [secondsLeft, nextEpisode, dismissed]);
 
   const handleDismiss = useCallback(() => {
-    clearInterval(intervalRef.current);
     setDismissed(true);
     onDismiss();
   }, [onDismiss]);
 
   const handleNext = useCallback(() => {
-    clearInterval(intervalRef.current);
+    firedRef.current = true;
     onNext();
   }, [onNext]);
 
-  const shouldShow = triggered && !dismissed && !!nextEpisode;
+  const shouldShow = inWindow && !dismissed && !!nextEpisode;
 
   // SVG progress ring
   const r = 18;
   const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - countdown / countdownSecs);
+  const offset = circ * (1 - Math.min(1, Math.max(0, secondsLeft / countdownSecs)));
 
   const episodeLabel = nextEpisode?.episodeNumber != null
     ? `Tập ${nextEpisode.episodeNumber}${nextEpisode.name ? `: ${nextEpisode.name}` : ""}`

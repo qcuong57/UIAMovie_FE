@@ -272,13 +272,14 @@ const tvShowService = {
 
   /**
    * GET /api/tvshows/{id}/seasons/{seasonNumber}/episodes/{episodeNumber}/watch
-   * Lấy videoUrl của một episode cụ thể.
+   * [Cũ] Kiểm tra quyền xem một episode. KHÔNG còn trả videoUrl;
+   * để phát tập dùng playbackService.getEpisodePlayback(tvShowId, episodeId).
    *   - Show FREE    → trả về videoUrl cho mọi user
    *   - Show PREMIUM → cần đăng nhập + có Premium hợp lệ → 401/403 nếu không đủ
    * @param {string} tvShowId     - GUID
    * @param {number} seasonNumber
    * @param {number} episodeNumber
-   * @returns {{ canWatch: boolean, videoUrl: string }}
+   * @returns {{ canWatch: boolean, hasVideo: boolean, episodeId: string }}
    */
   watchEpisode: async (tvShowId, seasonNumber, episodeNumber) => {
     try {
@@ -495,7 +496,7 @@ const tvShowService = {
 
   /**
    * POST /api/tvshows/{id}/videos — upload video lên Cloudinary (Admin only).
-   * Gửi multipart/form-data: videoFile, videoType, quality?.
+   * Gửi multipart/form-data: videoFile, videoType, quality? (nhãn tuỳ chọn; HLS tự chọn chất lượng).
    * @param {string}   tvShowId  - GUID
    * @param {File}     videoFile - File object từ <input type="file">
    * @param {string}   videoType - "trailer" | "full" | ...

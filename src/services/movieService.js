@@ -248,16 +248,16 @@ const movieService = {
    * @param {string}   movieId
    * @param {File}     videoFile  - File video (mp4, mkv, ...)
    * @param {string}   videoType  - "main" | "trailer" | "clip" | "behind"
-   * @param {string}   quality    - "1080p" | "720p" | "480p" | "360p"
+   * @param {string}   [_quality] - DEPRECATED, không còn gửi lên server (HLS tự chọn chất lượng).
+   *                                Giữ tham số để không đổi vị trí các tham số sau.
    * @param {Function} onProgress - callback(percent: number)
    */
-  uploadVideo: async (movieId, videoFile, videoType, quality, onProgress) => {
+  uploadVideo: async (movieId, videoFile, videoType, _quality, onProgress) => {
     try {
       // ✅ Field name viết hoa chữ đầu để khớp với C# DTO
       const formData = new FormData();
       formData.append("VideoFile", videoFile);
       formData.append("VideoType", videoType);
-      formData.append("Quality", quality);
 
       const response = await axiosInstance.post(
         `/movies/${movieId}/videos`,
@@ -349,8 +349,8 @@ const movieService = {
   },
 
   /**
-   * Lấy stream URL để phát phim (Premium gate)
-   * GET /api/movies/{id}/watch
+   * [Cũ] Kiểm tra quyền xem phim (Premium gate) — GET /api/movies/{id}/watch.
+   * KHÔNG còn trả link video chính; để phát phim dùng playbackService.getMoviePlayback(id).
    * @param {string} movieId
    */
   watchMovie: async (movieId) => {

@@ -73,80 +73,113 @@ export default function AdminDashboard() {
     users,
     reviews,
     loading,
+    reload,
   } = useDashboardData();
 
   // ── Derived: Content ────────────────────────────────────────────────────────
-  const missingMovies = movies
-    .filter(
-      (m) =>
-        !m.posterUrl ||
-        !hasVideoType(m.videos, "main") ||
-        !hasVideoType(m.videos, "trailer"),
-    )
-    .map((m) => computeMissingFlags(m, false))
-    .slice(0, 50);
+  // Bọc useMemo: trước đây các phép filter/sort/map này chạy lại ở MỖI lần
+  // render (ví dụ chỉ đổi donutTab/userTab/reviewTab cũng khiến toàn bộ các
+  // khối này tính lại trên mảng có thể tới 500 phần tử, dù dữ liệu gốc
+  // movies/tvShows/users/reviews không đổi) → giờ chỉ tính lại khi dữ liệu
+  // nguồn thực sự thay đổi.
+  const missingMovies = React.useMemo(
+    () =>
+      movies
+        .filter(
+          (m) =>
+            !m.posterUrl ||
+            !hasVideoType(m.videos, "main") ||
+            !hasVideoType(m.videos, "trailer"),
+        )
+        .map((m) => computeMissingFlags(m, false))
+        .slice(0, 50),
+    [movies],
+  );
 
-  const missingShows = tvShows
-    .filter((s) => !s.posterUrl || !hasVideoType(s.videos, "trailer"))
-    .map((s) => computeMissingFlags(s, true))
-    .slice(0, 50);
+  const missingShows = React.useMemo(
+    () =>
+      tvShows
+        .filter((s) => !s.posterUrl || !hasVideoType(s.videos, "trailer"))
+        .map((s) => computeMissingFlags(s, true))
+        .slice(0, 50),
+    [tvShows],
+  );
 
-  const mergedGenreFreq = { ...buildGenreFreq(movies) };
-  Object.entries(buildGenreFreq(tvShows)).forEach(([k, v]) => {
-    mergedGenreFreq[k] = (mergedGenreFreq[k] || 0) + v;
-  });
+  const genreChart = React.useMemo(() => {
+    const mergedGenreFreq = { ...buildGenreFreq(movies) };
+    Object.entries(buildGenreFreq(tvShows)).forEach(([k, v]) => {
+      mergedGenreFreq[k] = (mergedGenreFreq[k] || 0) + v;
+    });
 
-  const finalGenreFreq = Object.keys(mergedGenreFreq).length
-    ? mergedGenreFreq
-    : Object.fromEntries(
-        genres.map((g) => [g.name ?? String(g), g.movieCount ?? 0]),
-      );
+    const finalGenreFreq = Object.keys(mergedGenreFreq).length
+      ? mergedGenreFreq
+      : Object.fromEntries(
+          genres.map((g) => [g.name ?? String(g), g.movieCount ?? 0]),
+        );
 
-  const genreChart = Object.entries(finalGenreFreq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 12)
-    .map(([label, value], i) => ({
-      label,
-      value,
-      color: PALETTE[i % PALETTE.length],
-    }));
+    return Object.entries(finalGenreFreq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([label, value], i) => ({
+        label,
+        value,
+        color: PALETTE[i % PALETTE.length],
+      }));
+  }, [movies, tvShows, genres]);
 
-  const donutSlices = genreChart.slice(0, 6);
+  const donutSlices = React.useMemo(() => genreChart.slice(0, 6), [genreChart]);
 
-  const showStatusChart = Object.entries(
-    tvShows.reduce((acc, s) => {
-      const st = s.status ?? "Unknown";
-      acc[st] = (acc[st] || 0) + 1;
-      return acc;
-    }, {}),
-  )
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, value], i) => ({
-      label:
-        label === "Returning Series"
-          ? "Đang chiếu"
-          : label === "Ended"
-            ? "Kết thúc"
-            : label,
-      value,
-      color: PALETTE[i % PALETTE.length],
-    }));
+  const showStatusChart = React.useMemo(
+    () =>
+      Object.entries(
+        tvShows.reduce((acc, s) => {
+          const st = s.status ?? "Unknown";
+          acc[st] = (acc[st] || 0) + 1;
+          return acc;
+        }, {}),
+      )
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, value], i) => ({
+          label:
+            label === "Returning Series"
+              ? "Đang chiếu"
+              : label === "Ended"
+                ? "Kết thúc"
+                : label,
+          value,
+          color: PALETTE[i % PALETTE.length],
+        })),
+    [tvShows],
+  );
 
-  const moviePremiumCount = movies.filter((m) => m.isPremium).length;
-  const showPremiumCount = tvShows.filter((s) => s.isPremium).length;
+  const moviePremiumCount = React.useMemo(
+    () => movies.filter((m) => m.isPremium).length,
+    [movies],
+  );
+  const showPremiumCount = React.useMemo(
+    () => tvShows.filter((s) => s.isPremium).length,
+    [tvShows],
+  );
 
   // ── Derived: Users ──────────────────────────────────────────────────────────
   const totalUsers = users.length;
-  const premiumUsers = users.filter((u) => u.subscriptionType).length;
-  const activeToday = users.filter((u) => {
-    if (!u.lastLoginAt && !u.lastActiveAt) return false;
-    return (
-      Date.now() - new Date(u.lastLoginAt ?? u.lastActiveAt).getTime() <
-      1000 * 60 * 60 * 24
-    );
-  }).length;
+  const premiumUsers = React.useMemo(
+    () => users.filter((u) => u.subscriptionType).length,
+    [users],
+  );
+  const activeToday = React.useMemo(
+    () =>
+      users.filter((u) => {
+        if (!u.lastLoginAt && !u.lastActiveAt) return false;
+        return (
+          Date.now() - new Date(u.lastLoginAt ?? u.lastActiveAt).getTime() <
+          1000 * 60 * 60 * 24
+        );
+      }).length,
+    [users],
+  );
 
-  const userGrowth = buildUserGrowth(users);
+  const userGrowth = React.useMemo(() => buildUserGrowth(users), [users]);
   const newThisMonth = userGrowth[userGrowth.length - 1]?.new ?? 0;
   const newLastMonth = userGrowth[userGrowth.length - 2]?.new ?? 0;
   const userGrowthPct =
@@ -156,21 +189,29 @@ export default function AdminDashboard() {
         ? 100
         : 0;
 
-  const recentUsers = [...users]
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt ?? b.joinedAt ?? 0) -
-        new Date(a.createdAt ?? a.joinedAt ?? 0),
-    )
-    .slice(0, 50);
-  const activeUsers = [...users]
-    .filter((u) => u.lastLoginAt ?? u.lastActiveAt)
-    .sort(
-      (a, b) =>
-        new Date(b.lastLoginAt ?? b.lastActiveAt) -
-        new Date(a.lastLoginAt ?? a.lastActiveAt),
-    )
-    .slice(0, 50);
+  const recentUsers = React.useMemo(
+    () =>
+      [...users]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? b.joinedAt ?? 0) -
+            new Date(a.createdAt ?? a.joinedAt ?? 0),
+        )
+        .slice(0, 50),
+    [users],
+  );
+  const activeUsers = React.useMemo(
+    () =>
+      [...users]
+        .filter((u) => u.lastLoginAt ?? u.lastActiveAt)
+        .sort(
+          (a, b) =>
+            new Date(b.lastLoginAt ?? b.lastActiveAt) -
+            new Date(a.lastLoginAt ?? a.lastActiveAt),
+        )
+        .slice(0, 50),
+    [users],
+  );
 
   // ── Derived: Reviews ────────────────────────────────────────────────────────
   const movieMap = React.useMemo(
@@ -206,11 +247,13 @@ export default function AdminDashboard() {
     [reviews, movieMap, tvShowMap],
   );
 
-  const movieReviews = enrichedReviews.filter(
-    (r) => !r.tvShowId && r.contentType !== "TvShow",
+  const movieReviews = React.useMemo(
+    () => enrichedReviews.filter((r) => !r.tvShowId && r.contentType !== "TvShow"),
+    [enrichedReviews],
   );
-  const tvReviews = enrichedReviews.filter(
-    (r) => r.tvShowId || r.contentType === "TvShow",
+  const tvReviews = React.useMemo(
+    () => enrichedReviews.filter((r) => r.tvShowId || r.contentType === "TvShow"),
+    [enrichedReviews],
   );
   const avgRating = (list) =>
     list.length
@@ -219,43 +262,50 @@ export default function AdminDashboard() {
           list.length
         ).toFixed(2)
       : "—";
-  const positiveReviews = enrichedReviews.filter(
-    (r) => (r.rating ?? r.score ?? r.stars ?? 0) >= 7,
-  ).length;
-  const negativeReviews = enrichedReviews.filter(
-    (r) => (r.rating ?? r.score ?? r.stars ?? 0) < 5,
-  ).length;
+  const positiveReviews = React.useMemo(
+    () => enrichedReviews.filter((r) => (r.rating ?? r.score ?? r.stars ?? 0) >= 7).length,
+    [enrichedReviews],
+  );
+  const negativeReviews = React.useMemo(
+    () => enrichedReviews.filter((r) => (r.rating ?? r.score ?? r.stars ?? 0) < 5).length,
+    [enrichedReviews],
+  );
   const positiveRatio =
     enrichedReviews.length > 0
       ? Math.round((positiveReviews / enrichedReviews.length) * 100)
       : 0;
 
-  const ratingDist = buildRatingDist(enrichedReviews);
-  const movieReviewTrend = buildMonthlyReviewTrend(enrichedReviews);
-  const topReviewedMovies = buildTopReviewed(
-    movieReviews,
-    "movieId",
-    "movieTitle",
-  ).map((item) => ({
-    ...item,
-    posterUrl:
-      movieReviews.find((r) => (r.movieId ?? r.contentId) === item.id)?.posterUrl ??
-      movieMap[item.id]?.posterUrl ??
-      null,
-  }));
+  const ratingDist = React.useMemo(
+    () => buildRatingDist(enrichedReviews),
+    [enrichedReviews],
+  );
+  const movieReviewTrend = React.useMemo(
+    () => buildMonthlyReviewTrend(enrichedReviews),
+    [enrichedReviews],
+  );
+  const topReviewedMovies = React.useMemo(
+    () =>
+      buildTopReviewed(movieReviews, "movieId", "movieTitle").map((item) => ({
+        ...item,
+        posterUrl:
+          movieReviews.find((r) => (r.movieId ?? r.contentId) === item.id)?.posterUrl ??
+          movieMap[item.id]?.posterUrl ??
+          null,
+      })),
+    [movieReviews, movieMap],
+  );
 
-  const topReviewedShows = buildTopReviewed(
-    tvReviews,
-    "tvShowId",
-    "tvShowTitle",
-  ).map((item) => ({
-    ...item,
-    posterUrl:
-      tvReviews.find((r) => (r.tvShowId ?? r.contentId) === item.id)?.posterUrl ??
-      tvShowMap[item.id]?.posterUrl ??
-      null,
-  }));
-  console.log(ratingDist);
+  const topReviewedShows = React.useMemo(
+    () =>
+      buildTopReviewed(tvReviews, "tvShowId", "tvShowTitle").map((item) => ({
+        ...item,
+        posterUrl:
+          tvReviews.find((r) => (r.tvShowId ?? r.contentId) === item.id)?.posterUrl ??
+          tvShowMap[item.id]?.posterUrl ??
+          null,
+      })),
+    [tvReviews, tvShowMap],
+  );
   // ── UI State ────────────────────────────────────────────────────────────────
   const [donutTab, setDonutTab] = useState("genres");
   const [userTab, setUserTab] = useState("recent");
@@ -365,29 +415,70 @@ export default function AdminDashboard() {
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{ marginBottom: 24 }}
+        style={{
+          marginBottom: 24,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
       >
-        <p
+        <div>
+          <p
+            style={{
+              fontFamily: FONT,
+              fontSize: 13,
+              color: T.textMuted,
+              marginBottom: 2,
+            }}
+          >
+            Chào mừng trở lại
+          </p>
+          <h2
+            style={{
+              fontFamily: FONT_TITLE,
+              fontSize: 22,
+              fontWeight: 800,
+              color: T.text,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Tổng quan hệ thống
+          </h2>
+        </div>
+
+        {/* Làm mới dữ liệu — gọi lại các API thay vì phải F5 cả trang */}
+        <button
+          onClick={reload}
+          disabled={loading}
+          title="Làm mới dữ liệu"
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
             fontFamily: FONT,
-            fontSize: 13,
-            color: T.textMuted,
-            marginBottom: 2,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: loading ? T.textMuted : T.text,
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            padding: "8px 14px",
+            cursor: loading ? "default" : "pointer",
+            opacity: loading ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
-          Chào mừng trở lại
-        </p>
-        <h2
-          style={{
-            fontFamily: FONT_TITLE,
-            fontSize: 22,
-            fontWeight: 800,
-            color: T.text,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          Tổng quan hệ thống
-        </h2>
+          <span
+            style={{
+              display: "inline-block",
+              animation: loading ? "spin 0.8s linear infinite" : "none",
+            }}
+          >
+            ↻
+          </span>
+          {loading ? "Đang tải..." : "Làm mới"}
+        </button>
       </motion.div>
 
       {/* ════════════════════════════════════════════════════════════════════ */}

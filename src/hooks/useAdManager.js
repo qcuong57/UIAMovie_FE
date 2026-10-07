@@ -1,233 +1,193 @@
 // src/hooks/useAdManager.js
-// Hook chứa toàn bộ logic quảng cáo — dùng chung cho
-// EpisodeVideoPlayer và MovieVideoPlayer.
+// Logic quảng cáo dùng chung cho EpisodeVideoPlayer và MovieVideoPlayer.
 //
-// KIẾN TRÚC: SINGLE-VIDEO.
-//   Ad và nội dung chính (phim/tập phim) phát trên CÙNG MỘT <video>
-//   (videoRef truyền vào từ component cha). Hook không tạo video
-//   element riêng cho ad — toàn bộ listener (timeupdate, ended...)
-//   gắn trực tiếp lên videoRef.current.
+// KIẾN TRÚC: SINGLE-VIDEO — ad và phim phát trên CÙNG một <video> (videoRef).
+// Khi vào ad break: swap v.src = ad.videoUrl. Hết ad: swap lại contentUrl,
+// seek về vị trí cũ (midroll) rồi play tiếp.
 //
-//   Khi vào ad break: hook lưu lại currentTime của phim, swap
-//   v.src = ad.videoUrl, phát ad. Khi ad kết thúc (hoặc bị skip):
-//   hook swap v.src lại về contentUrl, seek về đúng currentTime đã
-//   lưu (với midroll) rồi resume play.
+// Các lỗi của bản cũ được xử lý ở đây:
+//  1. Side-effect (playAdOnVideo / resumeContent) nằm TRONG hàm updater của
+//     setState → React có thể gọi updater 2 lần (StrictMode) hoặc trì hoãn,
+//     khiến ad phát đôi / isAdPlayingRef đổi sai thời điểm. Nay queue + phase
+//     nằm trong ref, state chỉ dùng để render UI.
+//  2. Ended của ad và onEnded của player cùng bắn trên 1 <video>; nếu hook
+//     reset isAdPlayingRef đồng bộ thì player tưởng PHIM vừa hết → postroll /
+//     lưu 100%. Nay chuyển ad kế tiếp ở tick sau (setTimeout 0).
+//  3. Ad có skipAfterSeconds = 0 giờ skip được ngay.
+//  4. Bỏ state/tham số thừa (adQueue, adPhase, videoReady).
 //
-//   isAdPlayingRef cho phép component cha (vd EpisodeVideoPlayer)
-//   kiểm tra nhanh trong các listener của riêng nó (onEnded, onPause...)
-//   để biết video hiện tại đang là ad hay là nội dung chính, tránh
-//   chạy nhầm logic save-progress / next-episode trong lúc ad đang chạy.
-//
-// Usage:
-//   const adManager = useAdManager({
-//     isFreeUser,
-//     contentType,   // "Episode" | "Movie"
-//     contentId,     // episode.id | movie.id
-//     parentId,      // tvShow.id  | null (movie không cần)
-//     videoRef,      // ref đến <video> chính — DÙNG CHUNG cho cả ad
-//     videoReady,    // boolean — true sau khi <video> fire canplay lần đầu
-//     contentUrl,    // url phim hiện tại — để hook biết swap lại khi hết ad
-//   });
-//
-//   <AdOverlay adManager={adManager} showControls={show} />
-//   // trong onEnded của video chính:
-//   if (adManager.isAdPlayingRef.current) return;
-//   if (adManager.triggerPostRoll()) return;
+// Player PHẢI: (a) gọi tryStartPreRoll() đồng bộ trong gesture của lần Play đầu,
+// (b) bỏ qua mọi logic của phim khi isAdPlayingRef.current === true
+//     (onCanPlay/onTimeUpdate/onPause/onEnded).
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import adService from "../services/adService";
 
-/**
- * @param {{
- *   isFreeUser: boolean,
- *   contentType: "Episode" | "Movie",
- *   contentId: number | null,
- *   parentId: number | null,
- *   videoRef: React.RefObject,
- *   videoReady: boolean,
- *   contentUrl: string | null,
- * }} opts
- */
+const FETCH_TIMEOUT_MS = 5000; // quá hạn vẫn mở khoá nút Play
+
+// Log chẩn đoán: chạy localStorage.setItem("debugAds","1") trong Console rồi tải lại trang.
+const log = (...args) => {
+  try {
+    if (localStorage.getItem("debugAds")) console.info("[ads]", ...args);
+  } catch {
+    /* ignore */
+  }
+};
+
 export function useAdManager({
   isFreeUser,
-  contentType,
+  contentType, // "Episode" | "Movie"
   contentId,
   parentId,
   videoRef,
-  videoReady,
   contentUrl,
 }) {
   const [allAds, setAllAds] = useState(null); // ContentAdsDTO | null
-  const [adQueue, setAdQueue] = useState([]); // AdPlaybackDTO[]
-  const [currentAd, setCurrentAd] = useState(null); // AdPlaybackDTO | null
-  const [adPhase, setAdPhase] = useState(null); // "preroll"|"midroll"|"postroll"|null
-  const [adProgress, setAdProgress] = useState(0); // % 0-100
-  const [adTimeLeft, setAdTimeLeft] = useState(0); // giây còn lại
+  const [adsFetchDone, setAdsFetchDone] = useState(false);
+  const [currentAd, setCurrentAd] = useState(null);
+  const [adProgress, setAdProgress] = useState(0);
+  const [adTimeLeft, setAdTimeLeft] = useState(0);
   const [adSkippable, setAdSkippable] = useState(false);
   const [adSkipCountdown, setAdSkipCountdown] = useState(0);
-  // BUG FIX: cờ riêng đánh dấu "đã fetch xong" (dù thành công/lỗi/rỗng) —
-  // KHÔNG được suy ra từ `allAds !== null`, vì .catch() cũng set allAds về
-  // null. Nếu dùng allAds !== null làm điều kiện "ready", một request ads bị
-  // lỗi mạng (mất mạng, timeout, CORS, 401...) sẽ khiến nút Play xoay spinner
-  // vĩnh viễn không bao giờ bấm được — đúng bug "nút play cứ xoay không phát
-  // được phim".
-  const [adsFetchDone, setAdsFetchDone] = useState(false);
 
-  // true trong suốt thời gian video đang phát ad (kể cả giữa 2 ad liên tiếp
-  // trong cùng 1 break) — component cha dùng để bỏ qua logic riêng của nó
-  // (vd onEnded, onPause, save-progress) trong lúc ad đang chạy trên cùng videoRef.
+  // true suốt thời gian đang ở ad break (kể cả giữa 2 ad liên tiếp)
   const isAdPlayingRef = useRef(false);
-
-  const midRollFiredRef = useRef(new Set());
+  const queueRef = useRef([]); // các ad còn lại trong break
+  const phaseRef = useRef(null); // "preroll" | "midroll" | "postroll"
+  const mainResumeTimeRef = useRef(0);
   const preRollFiredRef = useRef(false);
   const postRollFiredRef = useRef(false);
-  const mainResumeTimeRef = useRef(0); // currentTime của phim lúc bắt đầu midroll
-  const contentUrlRef = useRef(contentUrl); // luôn giữ url phim mới nhất, kể cả khi đang ad
+  const midRollFiredRef = useRef(new Set());
+  const contentUrlRef = useRef(contentUrl);
 
   useEffect(() => {
     contentUrlRef.current = contentUrl;
   }, [contentUrl]);
 
-  // ── Fetch ads khi content thay đổi ──────────────────────────
+  // ── Fetch ads khi content đổi ───────────────────────────────
   useEffect(() => {
-    if (!isFreeUser || !contentId) {
-      setAllAds(null);
-      setAdsFetchDone(true); // premium hoặc chưa có contentId → không cần chờ ads
-      midRollFiredRef.current = new Set();
-      preRollFiredRef.current = false;
-      postRollFiredRef.current = false;
-      return;
-    }
-    // Reset flags TRƯỚC khi fetch để tránh race condition
-    midRollFiredRef.current = new Set();
     preRollFiredRef.current = false;
     postRollFiredRef.current = false;
+    midRollFiredRef.current = new Set();
     setAllAds(null);
-    setAdsFetchDone(false);
 
+    if (!isFreeUser || !contentId) {
+      log("bỏ qua, không fetch ads:", { isFreeUser, contentId });
+      setAdsFetchDone(true); // premium / chưa có content → không cần chờ
+      return;
+    }
+
+    setAdsFetchDone(false);
     let cancelled = false;
-    // An toàn: nếu request treo quá lâu (mạng mobile chập chờn, request không
-    // bao giờ resolve/reject), vẫn mở khóa nút Play sau 5s thay vì để user
-    // kẹt cứng không xem được phim chỉ vì ads không load được.
     const safetyTimer = setTimeout(() => {
       if (!cancelled) setAdsFetchDone(true);
-    }, 5000);
+    }, FETCH_TIMEOUT_MS);
 
     adService
       .getAdsForContent(contentType, contentId, parentId)
       .then((data) => {
+        log("đã fetch ads", contentType, contentId, {
+          pre: data?.preRoll?.length,
+          mid: data?.midRoll?.length,
+          post: data?.postRoll?.length,
+          raw: data,
+        });
         if (!cancelled) setAllAds(data);
       })
-      .catch(() => {
-        if (!cancelled) setAllAds(null);
-      })
+      .catch((e) =>
+        log("fetch ads LỖI", e?.message, e?.response?.status, e?.code),
+      )
       .finally(() => {
-        if (!cancelled) setAdsFetchDone(true);
         clearTimeout(safetyTimer);
+        if (!cancelled) setAdsFetchDone(true);
       });
 
     return () => {
       cancelled = true;
       clearTimeout(safetyTimer);
     };
-  }, [isFreeUser, contentType, contentId, parentId]);
+  }, [isFreeUser, contentType, contentId]);
 
-  // ── Phát 1 ad cụ thể trên videoRef (swap src + state) ───────
+  // ── Phát 1 ad trên videoRef ─────────────────────────────────
+  // play() phải gọi đồng bộ ngay sau load() để còn nằm trong user gesture (iOS).
   const playAdOnVideo = useCallback(
     (ad) => {
       const v = videoRef.current;
-      if (!v || !ad?.videoUrl) return false;
+      if (!v) return false;
       isAdPlayingRef.current = true;
       setCurrentAd(ad);
       setAdProgress(0);
       setAdTimeLeft(ad.durationSeconds ?? 0);
-      setAdSkippable(false);
+      setAdSkippable((ad.skipAfterSeconds ?? Infinity) <= 0);
       setAdSkipCountdown(ad.skipAfterSeconds ?? 0);
 
       v.pause();
       v.src = ad.videoUrl;
       v.currentTime = 0;
       v.load();
-      // QUAN TRỌNG (mobile Safari/Chrome): play() phải được gọi ĐỒNG BỘ,
-      // ngay trong cùng call stack của user gesture — không chờ event
-      // "loadedmetadata" rồi mới play(), vì lúc đó gesture đã kết thúc và
-      // trình duyệt sẽ âm thầm chặn play() (không throw lỗi, video đứng
-      // hình, "ended" không bao giờ bắn ra → isAd kẹt true → toàn bộ
-      // controls bị khoá vĩnh viễn). Gọi play() ngay sau load() là đúng
-      // chuẩn HTML5 video — trình duyệt tự xử lý buffer nội bộ.
-      v.play().catch(() => {});
+      log("phát ad", ad.videoUrl);
+      v.addEventListener(
+        "error",
+        () => log("video ad LỖI code", v.error?.code, v.currentSrc),
+        { once: true },
+      );
+      v.play().catch((e) => log("ad play() bị từ chối", e?.name, e?.message));
       return true;
     },
     [videoRef],
   );
 
-  // ── Bắt đầu 1 ad break từ 1 queue ────────────────────────────
-  const playNextAd = useCallback(
-    (queue, phase) => {
-      if (!queue?.length) return false;
-      const [ad, ...remaining] = queue;
-      setAdQueue(remaining);
-      setAdPhase(phase);
-      return playAdOnVideo(ad);
+  // ── Bắt đầu 1 ad break ──────────────────────────────────────
+  const startBreak = useCallback(
+    (ads, phase, resumeAt = 0) => {
+      const playable = (ads ?? []).filter((a) => a?.videoUrl);
+      if (!playable.length) return false;
+      const [first, ...rest] = playable;
+      queueRef.current = rest;
+      phaseRef.current = phase;
+      mainResumeTimeRef.current = resumeAt;
+      return playAdOnVideo(first);
     },
     [playAdOnVideo],
   );
 
-  // ── Quay lại phát nội dung chính sau khi hết ad break ───────
-  const resumeContent = useCallback(
-    (phaseEnded) => {
-      const v = videoRef.current;
-      isAdPlayingRef.current = false;
-      setCurrentAd(null);
-      setAdPhase(null);
-      setAdProgress(0);
-      setAdTimeLeft(0);
-      setAdSkippable(false);
-      setAdSkipCountdown(0);
-      if (!v) return;
+  // ── Hết break → trả video về phim ───────────────────────────
+  const resumeContent = useCallback(() => {
+    const v = videoRef.current;
+    const phase = phaseRef.current;
+    phaseRef.current = null;
+    queueRef.current = [];
+    isAdPlayingRef.current = false;
+    setCurrentAd(null);
+    setAdProgress(0);
+    setAdTimeLeft(0);
+    setAdSkippable(false);
+    setAdSkipCountdown(0);
+    if (!v) return;
 
-      const url = contentUrlRef.current;
-      if (url) v.src = url;
-      v.load();
-      const onReady = () => {
-        if (phaseEnded === "midroll") {
-          v.currentTime = mainResumeTimeRef.current;
-        }
+    // Đặt lại src phim. Với MSE, useHlsSource tự attachMedia (ghi đè src bằng blob)
+    // khi isAd chuyển về false, nên không cần cầu nối ở đây.
+    if (contentUrlRef.current) v.src = contentUrlRef.current;
+    v.load();
+    v.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (phase === "midroll") v.currentTime = mainResumeTimeRef.current;
         v.play().catch(() => {});
-        v.removeEventListener("loadedmetadata", onReady);
-      };
-      v.addEventListener("loadedmetadata", onReady);
-    },
-    [videoRef],
-  );
+      },
+      { once: true },
+    );
+  }, [videoRef]);
 
-  // ── Khi 1 ad video kết thúc (hoặc bị skip) ──────────────────
-  // Dùng functional update để luôn đọc adQueue mới nhất, tránh stale
-  // closure giữa nhiều ad liên tiếp trong cùng 1 break.
-  const advanceQueueRef = useRef(null);
-  advanceQueueRef.current = () => {
-    setAdQueue((prev) => {
-      if (prev.length > 0) {
-        const [next, ...rest] = prev;
-        playAdOnVideo(next);
-        return rest;
-      }
-      // Hết queue → kết thúc ad break, quay lại phim
-      setAdPhase((phase) => {
-        resumeContent(phase);
-        return null;
-      });
-      return prev;
-    });
-  };
-  const onAdEnded = useCallback(() => {
-    advanceQueueRef.current?.();
-  }, []);
+  // ── Ad kết thúc / bị skip → ad kế tiếp hoặc quay về phim ────
+  const advance = useCallback(() => {
+    if (!isAdPlayingRef.current) return;
+    const next = queueRef.current.shift();
+    if (next) playAdOnVideo(next);
+    else resumeContent();
+  }, [playAdOnVideo, resumeContent]);
 
-  // ── Listener gắn trên videoRef khi đang ở chế độ ad ─────────
-  // Bật/tắt theo currentAd nên không xung đột với listener của component
-  // cha (vốn cũng lắng nghe các event này trên cùng videoRef) — component
-  // cha tự bỏ qua nhờ isAdPlayingRef.
+  // ── Listener trên videoRef chỉ khi đang có ad ───────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !currentAd) return;
@@ -238,157 +198,94 @@ export function useAdManager({
       setAdProgress(Math.min(100, (elapsed / dur) * 100));
       setAdTimeLeft(Math.max(0, Math.ceil(dur - elapsed)));
       if (currentAd.skipAfterSeconds != null) {
-        const countdown = Math.max(
-          0,
-          Math.ceil(currentAd.skipAfterSeconds - elapsed),
+        setAdSkipCountdown(
+          Math.max(0, Math.ceil(currentAd.skipAfterSeconds - elapsed)),
         );
-        setAdSkipCountdown(countdown);
         if (elapsed >= currentAd.skipAfterSeconds) setAdSkippable(true);
       }
     };
+    // Trì hoãn 1 tick để các listener "ended" khác (player) vẫn thấy
+    // isAdPlayingRef = true và bỏ qua.
+    const onEnded = () => setTimeout(advance, 0);
 
     v.addEventListener("timeupdate", onTime);
-    v.addEventListener("ended", onAdEnded);
+    v.addEventListener("ended", onEnded);
     return () => {
       v.removeEventListener("timeupdate", onTime);
-      v.removeEventListener("ended", onAdEnded);
+      v.removeEventListener("ended", onEnded);
     };
-  }, [currentAd, onAdEnded, videoRef]);
+  }, [currentAd, advance, videoRef]);
 
-  // ── PreRoll: KHÔNG tự động trigger qua useEffect ────────────
-  // LƯU Ý QUAN TRỌNG (iOS Safari): video.play() chỉ được phép chạy mà
-  // không bị chặn khi nó nằm trong cùng call stack đồng bộ với 1 user
-  // gesture thật (click/tap). Nếu preroll tự bắn ra từ useEffect (phản
-  // ứng theo videoReady) mà không có gesture nào, Safari/iOS sẽ reject
-  // play() ÂM THẦM (không throw lỗi rõ ràng) — video/ad kẹt cứng, không
-  // phát được gì, dù Chrome desktop vẫn chạy bình thường (policy autoplay
-  // của desktop khoan dung hơn).
-  //
-  // Thay vào đó, component cha PHẢI gọi tryStartPreRoll() ngay bên trong
-  // handler của lần tap Play đầu tiên (vd onClick nút Play / onClick video)
-  // — KHÔNG qua setTimeout/Promise.then/useEffect — để play() của ad vẫn
-  // còn nằm trong cùng "user activation" của cú tap đó.
-  //
-  // Trả về true nếu đã bắt đầu phát 1 ad break (component cha không cần
-  // tự gọi v.play() cho content nữa — playAdOnVideo đã swap src + play()).
-  // Trả về false nếu không có preroll (hoặc đã fire rồi) — component cha
-  // tự gọi v.play() cho content như bình thường.
+  // ── PreRoll: player gọi đồng bộ trong gesture của lần Play đầu ──
   const tryStartPreRoll = useCallback(() => {
     if (preRollFiredRef.current) return false;
-    // allAds chưa load kịp lúc user tap (fetch ads thường rất nhanh so với
-    // thời gian user chờ video buffer, nhưng vẫn có thể race) — chấp nhận
-    // bỏ qua preroll cho lượt xem này thay vì giữ video treo chờ, vì chờ
-    // rồi tự động play() sau đó lại quay về đúng vấn đề autoplay-without-
-    // gesture ban đầu.
-    if (!allAds?.preRoll?.length) {
-      preRollFiredRef.current = true;
-      return false;
-    }
     preRollFiredRef.current = true;
-    mainResumeTimeRef.current = 0;
-    return playNextAd([...allAds.preRoll], "preroll");
-  }, [allAds, playNextAd]);
+    log("tryStartPreRoll", { adsLoaded: !!allAds, count: allAds?.preRoll?.length ?? 0 });
+    return startBreak(allAds?.preRoll, "preroll");
+  }, [allAds, startBreak]);
 
-  // ── MidRoll: check khi video chính đang chạy ────────────────
-  // BUG FIX: trước đây chỉ check `currentTime >= offsetSeconds` trên mỗi
-  // timeupdate. Khi resume phim từ WatchHistory (hoặc user tua/seek), v.currentTime
-  // có thể NHẢY THẲNG tới 1 vị trí đã vượt qua offset của midroll (vd offset=300s
-  // nhưng resume ở giây 600) → timeupdate đầu tiên sau resume thấy t >= 300 và
-  // phát ad NGAY LẬP TỨC, trông như midroll bị phát ở đầu video.
-  // Fix: mỗi khi currentTime "nhảy" (mount lần đầu hoặc seeked — bao gồm cả
-  // việc hook resume set currentTime), các midroll ad có offset đã nằm phía
-  // sau vị trí hiện tại được coi là đã "bỏ lỡ" trong lượt xem này → đánh dấu
-  // fired luôn (skip), KHÔNG phát, thay vì phát dồn. Ad chỉ thực sự phát khi
-  // video tiến tới offset của nó một cách tự nhiên trong lúc đang xem.
+  // ── MidRoll ─────────────────────────────────────────────────
+  // Resume/seek vượt qua offset → coi như đã bỏ lỡ, KHÔNG phát dồn.
   useEffect(() => {
     if (!isFreeUser || !allAds?.midRoll?.length) return;
     const v = videoRef.current;
     if (!v) return;
 
-    const markPassedAds = (t) => {
+    const keyOf = (ad) => ad.slotId ?? ad.adId;
+    const markPassed = () => {
+      if (isAdPlayingRef.current) return;
+      const t = v.currentTime;
       allAds.midRoll.forEach((ad) => {
-        if (
-          ad.midRollOffsetSeconds != null &&
-          t >= ad.midRollOffsetSeconds &&
-          !midRollFiredRef.current.has(ad.scheduleId)
-        ) {
-          midRollFiredRef.current.add(ad.scheduleId);
-        }
+        if (ad.midRollOffsetSeconds != null && t >= ad.midRollOffsetSeconds)
+          midRollFiredRef.current.add(keyOf(ad));
       });
     };
-    // Vị trí hiện tại lúc effect này gắn vào (vd 0 nếu chưa resume)
-    markPassedAds(v.currentTime);
-    // Resume (set currentTime trong onCanPlay) hoặc user tua tay đều bắn "seeked"
-    const onSeeked = () => markPassedAds(v.currentTime);
-
     const onTime = () => {
       if (isAdPlayingRef.current) return;
       const t = v.currentTime;
       const pending = allAds.midRoll.filter(
         (ad) =>
-          !midRollFiredRef.current.has(ad.scheduleId) &&
           ad.midRollOffsetSeconds != null &&
-          t >= ad.midRollOffsetSeconds,
+          t >= ad.midRollOffsetSeconds &&
+          !midRollFiredRef.current.has(keyOf(ad)),
       );
       if (!pending.length) return;
-      pending.forEach((ad) => midRollFiredRef.current.add(ad.scheduleId));
-      mainResumeTimeRef.current = v.currentTime;
-      playNextAd([...pending], "midroll");
+      pending.forEach((ad) => midRollFiredRef.current.add(keyOf(ad)));
+      startBreak(pending, "midroll", t);
     };
+
+    markPassed();
+    v.addEventListener("seeked", markPassed);
     v.addEventListener("timeupdate", onTime);
-    v.addEventListener("seeked", onSeeked);
     return () => {
+      v.removeEventListener("seeked", markPassed);
       v.removeEventListener("timeupdate", onTime);
-      v.removeEventListener("seeked", onSeeked);
     };
-  }, [isFreeUser, allAds, playNextAd, videoRef]);
+  }, [isFreeUser, allAds, startBreak, videoRef]);
 
-  // ── PostRoll reset khi content đổi ──────────────────────────
-  useEffect(() => {
-    postRollFiredRef.current = false;
-  }, [contentId]);
-
-  // ── triggerPostRoll — gọi từ onEnded của video chính ────────
+  // ── PostRoll: gọi từ onEnded của phim ───────────────────────
   const triggerPostRoll = useCallback(() => {
-    if (!isFreeUser || !allAds?.postRoll?.length) return false;
-    if (postRollFiredRef.current) return false;
+    if (!isFreeUser || postRollFiredRef.current) return false;
     postRollFiredRef.current = true;
-    mainResumeTimeRef.current = 0;
-    return playNextAd([...allAds.postRoll], "postroll");
-  }, [isFreeUser, allAds, playNextAd]);
+    return startBreak(allAds?.postRoll, "postroll");
+  }, [isFreeUser, allAds, startBreak]);
 
-  // ── Skip ad hiện tại ─────────────────────────────────────────
   const skipAd = useCallback(() => {
-    if (!adSkippable) return;
-    advanceQueueRef.current?.();
-  }, [adSkippable]);
+    if (adSkippable) advance();
+  }, [adSkippable, advance]);
 
-  // true khi đã sẵn sàng để user bấm Play mà không lo miss preroll:
-  //   - user premium (isFreeUser=false) → không cần chờ ads
-  //   - hoặc allAds đã fetch xong (dù rỗng hay có data)
-  // Component cha dùng cờ này để disable/hiện spinner trên nút Play cho tới
-  // khi sẵn sàng — đảm bảo lúc user THỰC SỰ tap được thì allAds đã có data,
-  // tránh race trên mạng chậm (mobile) khiến tryStartPreRoll() bỏ qua preroll
-  // vĩnh viễn vì allAds chưa kịp load lúc tap (ads hiện trên PC, mất trên mobile).
-  // true khi đã sẵn sàng để user bấm Play mà không lo miss preroll:
-  //   - user premium (isFreeUser=false) → không cần chờ ads
-  //   - hoặc fetch ads đã KẾT THÚC (adsFetchDone) — dù thành công, lỗi, hay
-  //     rỗng. Cố tình KHÔNG dùng `allAds !== null` vì .catch() cũng set
-  //     allAds về null khi fetch lỗi → sẽ khiến nút Play kẹt spinner mãi mãi.
+  // Sẵn sàng cho user bấm Play: premium, hoặc fetch ads đã kết thúc
+  // (thành công / lỗi / rỗng — KHÔNG suy ra từ allAds !== null).
   const adsReady = !isFreeUser || adsFetchDone;
 
   return {
-    // refs
     isAdPlayingRef,
-    // state (chỉ đọc từ bên ngoài)
     currentAd,
-    adPhase,
     adProgress,
     adTimeLeft,
     adSkippable,
     adSkipCountdown,
     adsReady,
-    // actions
     triggerPostRoll,
     skipAd,
     tryStartPreRoll,
