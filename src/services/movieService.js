@@ -446,12 +446,15 @@ const movieService = {
     movieId,
     progressMinutes,
     isCompleted = false,
+    extra = {}, // { progressSeconds, durationSeconds } — BE (UpdateWatchProgressDTO) hỗ trợ lưu theo giây
   ) => {
     try {
       const response = await axiosInstance.post("/movies/history", {
         movieId,
         progressMinutes,
         isCompleted,
+        ...(extra.progressSeconds != null && { progressSeconds: extra.progressSeconds }),
+        ...(extra.durationSeconds != null && { durationSeconds: extra.durationSeconds }),
       });
       return response.data;
     } catch (error) {

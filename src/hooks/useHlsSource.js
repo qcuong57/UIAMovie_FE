@@ -1,7 +1,7 @@
 // src/hooks/useHlsSource.js
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { supportsMse } from "../utils/hls";
+import { shouldUseMse } from "../utils/hls";
 
 const MAX_NET_RETRY = 3;
 
@@ -21,8 +21,8 @@ const MAX_NET_RETRY = 3;
  *     mainResumeTime + play() vẫn do resumeContent() của useAdManager làm (listener
  *     loadedmetadata), nên hook này không tự seek/play.
  */
-export default function useHlsSource({ videoRef, url, isHls, isAd, onFatalError }) {
-  const useMse = !!url && !!isHls && supportsMse();
+export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef, onFatalError }) {
+  const useMse = shouldUseMse(url, isHls);
 
   const hlsRef = useRef(null);
   const errRef = useRef(onFatalError);
@@ -70,7 +70,8 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, onFatalError 
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (!data.fatal) return;
       // Đang ad: <video> đang phát file của ad, đừng để hls "cứu" và giành lại element.
-      if (isAdRef.current) return;
+      // adPlayingRef đổi đồng bộ (không chờ render) → không bị race lúc vừa swap sang ad
+      if (isAdRef.current || adPlayingRef?.current) return;
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR && netRetry < MAX_NET_RETRY) {
         netRetry += 1;
         hls.startLoad();

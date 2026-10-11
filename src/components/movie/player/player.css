@@ -346,3 +346,68 @@
 
 /* Backdrop trước lần phát đầu */
 .vp-backdrop { object-fit: cover; opacity: 0.5; }
+
+/* ── Mobile / cảm ứng ── */
+.vp-root, .vp-root * { -webkit-tap-highlight-color: transparent; }
+.vp-root { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.vp-video { -webkit-touch-callout: none; }
+.vp-progress-wrap { touch-action: none; }
+@media (pointer: coarse) {
+  .vp-progress-wrap { padding: 14px 0; margin: -14px 0 2px; }
+  .vp-ctrl-btn { padding: 12px; margin: -12px; }
+  .vp-controls__group, .vp-controls--mobile .vp-controls__group--left { gap: 16px; }
+  .vp-root--idle { cursor: auto; }
+}
+@supports not (height: 100dvh) {
+  .vp-root--fake-fs { height: 100vh; }
+}
+
+/* ── Popup "Tiếp tục xem?" ── */
+.vp-resume {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.vp-resume__card {
+  width: min(100%, 340px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px 20px;
+  text-align: center;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.vp-resume__title { margin: 0; font-size: 18px; font-weight: 800; }
+.vp-resume__desc { margin: 0 0 8px; font-size: 13px; color: var(--vp-text-dim); }
+.vp-resume__desc b { color: #fff; }
+.vp-resume__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px; /* ≥44px cao cho ngón tay */
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: #fff;
+  font-family: var(--vp-font);
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+.vp-resume__btn--primary { background: var(--vp-accent); border-color: transparent; }
+@media (max-height: 320px) {
+  .vp-resume__card { padding: 12px 16px; gap: 6px; }
+  .vp-resume__desc { margin-bottom: 2px; }
+  .vp-resume__btn { padding: 8px 14px; }
+}

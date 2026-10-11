@@ -7,6 +7,7 @@ import NextEpisodeCountdown from "./NextEpisodeCountdown";
 import playbackService from "../../../services/playbackService";
 import tvShowService from "../../../services/tvShowService";
 import episodeSubtitleService from "../../../services/episodeSubtitleService";
+import useResumeOffer, { toResumeSeconds, resumeLog } from "../../../hooks/useResumeOffer";
 import { C } from "../ui/movieConstants";
 
 // Normalize bất kỳ TMDB size nào → w1280
@@ -18,10 +19,36 @@ export default function EpisodeVideoPlayer({
   nextEpisode = null,
   onNextEpisode = null,
   isFreeUser = true,
+  isLoggedIn = true,
 }) {
   const location = useLocation();
-  const resumeSeconds =
-    location.state?.resumeEpisodeId === episode?.id ? (location.state?.resumeSeconds ?? 0) : 0;
+  const resumeSeconds = toResumeSeconds({
+    seconds:
+      location.state?.resumeEpisodeId === episode?.id ? (location.state?.resumeSeconds ?? 0) : 0,
+    completed: location.state?.isCompleted,
+  });
+
+  // Không có resume từ Lịch sử xem (hoặc sai tập) → hỏi server, hiện popup "xem tiếp"
+  const resumeOffer = useResumeOffer({
+    enabled: isLoggedIn && resumeSeconds === 0 && !!tvShow?.id && !!episode?.id,
+    id: episode?.id,
+    load: async () => {
+      const res = await tvShowService.getWatchHistory();
+      const list = Array.isArray(res) ? res : res?.data ?? [];
+      const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+      const h = list.find((x) => same(x.tvShowId, tvShow.id) && same(x.episodeId, episode.id));
+      if (!h) {
+        resumeLog("KHÔNG có bản ghi cho tập này", { tvShowId: tvShow.id, episodeId: episode.id, soBanGhi: list.length });
+        return 0;
+      }
+      resumeLog("bản ghi tìm thấy", h);
+      return toResumeSeconds({
+        seconds: h.progressSeconds,
+        totalSec: (h.episodeRuntime ?? episode.runtime ?? 0) * 60,
+        completed: h.isCompleted,
+      }, "tập");
+    },
+  });
 
   return (
     <VideoPlayer
@@ -35,7 +62,8 @@ export default function EpisodeVideoPlayer({
       backdropUrl={tmdbImg(episode?.stillUrl ?? tvShow?.backdropUrl ?? null)}
       accent={C.accent}
       fallbackDurationSec={episode?.runtime ? episode.runtime * 60 : 0}
-      resumeSeconds={resumeSeconds}
+      resumeSeconds={0} // luôn để popup hỏi; vị trí do popup quyết định
+      resumeOffer={resumeSeconds > 0 ? resumeSeconds : resumeOffer}
       skipMarkers={episode}
       onHeartbeat={(secs) =>
         playbackService.sendEpisodeHeartbeat(tvShow.id, episode.id, secs)

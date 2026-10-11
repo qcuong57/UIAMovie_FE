@@ -123,6 +123,22 @@ const formatSeconds = (seconds) => {
   return formatMinutes(Math.floor(value / 60));
 };
 
+// Giây → "1g 12p" / "12p 30s" / "45s" (chính xác tới giây)
+const formatClock = (seconds) => {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (!total) return null;
+
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  const parts = [];
+  if (h) parts.push(`${h}g`);
+  if (m) parts.push(`${m}p`);
+  if (s && !h) parts.push(`${s}s`);
+  return parts.join(' ');
+};
+
 const getResponseItems = (response) => {
   if (Array.isArray(response)) return response;
   if (Array.isArray(response?.data)) return response.data;
@@ -146,7 +162,12 @@ const getResponseItems = (response) => {
  */
 const normalizeHistoryItem = (item, type) => {
   if (type === 'movie') {
-    const progressMinutes = Math.max(0, Number(item.progressMinutes) || 0);
+    // BE trả progressSeconds (giây thật) + duration (giây). Bản ghi cũ chỉ có phút → quy đổi.
+    const progressSeconds = Math.max(
+      0,
+      Number(item.progressSeconds) || (Number(item.progressMinutes) || 0) * 60,
+    );
+    const durationSeconds = Number(item.duration) > 0 ? Number(item.duration) : null;
 
     return {
       ...item,
@@ -155,10 +176,9 @@ const normalizeHistoryItem = (item, type) => {
       _historyId: item.id,
       _title: item.movieTitle || 'Không có tên',
       _subtitle: null,
-      _progressSeconds: progressMinutes * 60,
-      // Movie history DTO hiện không có duration → không giả định duration.
-      _durationSeconds: null,
-      _progressMinutes: progressMinutes,
+      _progressSeconds: progressSeconds,
+      _durationSeconds: durationSeconds,
+      _progressMinutes: Math.floor(progressSeconds / 60),
       _dateKey: getDateKey(item.watchedAt),
     };
   }
@@ -190,7 +210,10 @@ const normalizeHistoryItem = (item, type) => {
 
 const getProgressPercent = (item) => {
   if (item.isCompleted) return 100;
-  if (!item._durationSeconds || item._durationSeconds <= 0) return null;
+  if (!item._durationSeconds || item._durationSeconds <= 0) {
+    const pct = Number(item.progressPercentage);
+    return pct > 0 ? Math.min(99, Math.round(pct)) : null;
+  }
 
   return Math.min(
     99,
@@ -204,7 +227,8 @@ const getProgressPercent = (item) => {
 const getResumeState = (item) => {
   if (item._type === 'movie') {
     return {
-      resumeMinutes: item.isCompleted ? 0 : item.progressMinutes ?? 0,
+      resumeSeconds: item.isCompleted ? 0 : item._progressSeconds ?? 0,
+      resumeMinutes: item.isCompleted ? 0 : Math.floor((item._progressSeconds ?? 0) / 60),
       isCompleted: Boolean(item.isCompleted),
     };
   }
@@ -277,10 +301,8 @@ function Poster({ item }) {
 
 function HistoryCard({ item, index, onDelete, onOpen, reducedMotion }) {
   const progress = getProgressPercent(item);
-  const watchedText =
-    item._progressMinutes > 0
-      ? `${formatMinutes(item._progressMinutes)} đã xem`
-      : 'Đã bắt đầu xem';
+  const watchedClock = formatClock(item._progressSeconds);
+  const watchedText = watchedClock ? `${watchedClock} đã xem` : 'Đã bắt đầu xem';
 
   const durationText =
     item._durationSeconds != null

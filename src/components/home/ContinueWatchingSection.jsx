@@ -75,7 +75,7 @@ function ContinueWatchingCard({ item, onRemove }) {
     if (item.currentTime && item.duration) {
       return Math.min(100, Math.max(0, Math.round((item.currentTime / item.duration) * 100)));
     }
-    return 50;
+    return 0; // không biết duration → không bịa tiến độ
   }, [item]);
 
   const handleCardClick = () => {

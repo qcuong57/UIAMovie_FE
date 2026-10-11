@@ -68,6 +68,7 @@ export default function useVideoPlayerCore({
     url: videoUrl,
     isHls: playback?.isHls,
     isAd,
+    adPlayingRef: isAdPlayingRef,
     onFatalError: setVideoError,
   });
   const { useMse } = hls;

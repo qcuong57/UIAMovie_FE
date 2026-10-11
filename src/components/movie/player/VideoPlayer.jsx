@@ -2,11 +2,13 @@
 // Shell dùng chung cho Movie + Episode: chỉ ghép hook + component, không biết phim hay tập.
 // Khác biệt giữa hai loại nằm hết ở props (xem MovieVideoPlayer / EpisodeVideoPlayer).
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import "./player.css";
 
 import { useIsMobile } from "../../../hooks/useIsMobile";
+import { useIsTouch } from "../../../hooks/useIsTouch";
+import { shouldUseMse } from "../../../utils/hls";
 import { useAdManager } from "../../../hooks/useAdManager";
 import usePlayback from "../../../hooks/usePlayback";
 import useSubtitles from "../../../hooks/useSubtitles";
@@ -27,6 +29,7 @@ import SkipFlash from "./controls/SkipFlash";
 import SkipButton from "./controls/SkipButton";
 import SubtitleOverlay from "./controls/SubtitleOverlay";
 import ErrorOverlay from "./controls/ErrorOverlay";
+import ResumePrompt from "./controls/ResumePrompt";
 
 /**
  * @param {{
@@ -60,13 +63,16 @@ export default function VideoPlayer({
   accent,
   fallbackDurationSec = 0,
   resumeSeconds = 0,
+  resumeOffer = 0, // giây đã xem lấy từ server → hiện popup hỏi (chỉ khi resumeSeconds = 0)
   onSaveProgress,
   skipMarkers,
   onHeartbeat,
   onHeartbeatFlush,
   renderOverlay,
 }) {
-  const isMobile = useIsMobile();
+  const narrow = useIsMobile();
+  const touch = useIsTouch();
+  const isMobile = narrow || touch; // điện thoại xoay ngang / iPad vẫn là mobile
   const videoRef = useRef(null);
   const wrapRef = useRef(null);
   const saveRef = useRef(null);
@@ -75,6 +81,11 @@ export default function VideoPlayer({
   const [openMenu, setOpenMenu] = useState(null);
   const toggleMenu = useCallback((n) => setOpenMenu((m) => (m === n ? null : n)), []);
   const closeMenu = useCallback(() => setOpenMenu(null), []);
+
+  // Lựa chọn trong popup: null = chưa chọn | "resume" | "restart"
+  const [resumeChoice, setResumeChoice] = useState(null);
+  const effectiveResume =
+    resumeSeconds > 0 ? resumeSeconds : resumeChoice === "resume" ? resumeOffer : 0;
 
   // ── Dữ liệu: playback → ads → core ──
   const { status, playback, error, reload } = usePlayback(playbackLoader, playbackKey);
@@ -87,6 +98,8 @@ export default function VideoPlayer({
     parentId: adContent.parentId ?? null,
     videoRef,
     contentUrl: videoUrl,
+    useMse: shouldUseMse(videoUrl, playback?.isHls),
+    resumeSeconds: effectiveResume,
   });
 
   const { show, setShow, resetTimer, hideNow } = useControlsVisibility(videoRef);
@@ -96,7 +109,7 @@ export default function VideoPlayer({
     videoUrl,
     playback,
     adManager,
-    resumeSeconds,
+    resumeSeconds: effectiveResume,
     fallbackDurationSec,
     onPause: (pct) => saveRef.current?.(pct),
     onEnded: () => {
@@ -106,13 +119,23 @@ export default function VideoPlayer({
   });
   const { hasVideo, isAd, playing } = core;
 
+  // Popup chỉ hiện khi chưa phát gì (nếu user đã bấm play trước khi lịch sử tải xong thì thôi)
+  const promptOpen =
+    resumeOffer > 0 && resumeSeconds === 0 && resumeChoice === null &&
+    !core.hasStarted && !playing && !isAd;
+
   // ── Đếm view: chỉ tính khi nội dung chính đang phát (không tính quảng cáo / pause / tab ẩn) ──
   // Phải gọi TRƯỚC early-return `if (!videoUrl)` để không vi phạm rules of hooks.
+  // Callback bọc qua ref → identity ổn định, hook heartbeat không bị reset timer mỗi lần render
+  const hbRef = useRef({});
+  hbRef.current = { onHeartbeat, onHeartbeatFlush };
+  const sendHb = useCallback((s) => hbRef.current.onHeartbeat?.(s), []);
+  const flushHb = useCallback((s) => hbRef.current.onHeartbeatFlush?.(s), []);
   usePlaybackHeartbeat({
     enabled: !!onHeartbeat && !!videoUrl,
     isPlaying: !!playing && !isAd,
-    send: onHeartbeat,
-    flush: onHeartbeatFlush,
+    send: sendHb,
+    flush: flushHb,
   });
 
   const { save } = useWatchProgress({
@@ -141,7 +164,7 @@ export default function VideoPlayer({
   const skip = useSkipMarkers({ videoRef, hasVideo, markers: skipMarkers });
 
   usePlayerShortcuts({
-    enabled: hasVideo,
+    enabled: hasVideo && !promptOpen, // popup đang mở → khoá phím Space/mũi tên
     handlers: {
       onTogglePlay: core.togglePlay,
       onSeekBack: () => core.skipBy(-10),
@@ -155,10 +178,29 @@ export default function VideoPlayer({
   // Mobile: chạm video chỉ hiện/ẩn controls (tránh pause nhầm); desktop: toggle play
   const handleVideoTap = () => {
     if (isAd) return;
-    if (!isMobile) return core.togglePlay();
+    // Desktop, hoặc lần chạm đầu khi chưa phát (phải play() ngay trong user gesture của iOS)
+    if (!isMobile || (!core.hasStarted && videoRef.current?.paused)) return core.togglePlay();
     if (!show) resetTimer();
     else hideNow();
   };
+
+  // Bấm nút trong popup = user gesture → play() ngay (iOS bắt buộc)
+  const chooseResume = () => {
+    setResumeChoice("resume");
+    const v = videoRef.current;
+    // Đã có metadata → seek ngay; chưa có → applyResume ở loadedmetadata sẽ lo (effectiveResume đã đổi)
+    if (v && v.readyState >= 1) v.currentTime = resumeOffer;
+    core.togglePlay();
+  };
+  const chooseRestart = () => {
+    setResumeChoice("restart");
+    core.togglePlay();
+  };
+
+  // Mobile không có mousemove → tự hẹn giờ ẩn controls khi bắt đầu phát
+  useEffect(() => {
+    if (isMobile && playing && !isAd) resetTimer();
+  }, [isMobile, playing, isAd, resetTimer]);
 
   // ── Chưa có link phát: đang tải / paywall / lỗi ──
   if (!videoUrl) {
@@ -188,8 +230,12 @@ export default function VideoPlayer({
       ref={wrapRef}
       className={rootClass}
       style={accent ? { "--vp-accent": accent } : undefined}
-      onMouseMove={resetTimer}
-      onMouseLeave={() => !videoRef.current?.paused && setShow(false)}
+      // Chỉ chuột mới dùng hover. Trên cảm ứng, "mousemove" giả sinh ngay trước click sẽ bật
+      // controls lên rồi handleVideoTap lại ẩn đi → không bao giờ gọi lại được controls.
+      onPointerMove={(e) => e.pointerType === "mouse" && resetTimer()}
+      onPointerLeave={(e) =>
+        e.pointerType === "mouse" && !videoRef.current?.paused && setShow(false)
+      }
     >
       <video
         ref={videoRef}
@@ -197,6 +243,9 @@ export default function VideoPlayer({
         src={core.useMse ? undefined : videoUrl} // hls.js tự gắn blob khi useMse
         preload="auto" // iOS Safari cần "auto" để tải metadata sớm
         playsInline
+        webkit-playsinline="true"
+        x-webkit-airplay="allow"
+        disableRemotePlayback
         onClick={handleVideoTap}
       />
 
@@ -243,6 +292,7 @@ export default function VideoPlayer({
         {show && (
           <PlayerControls
             isMobile={isMobile}
+            onActivity={resetTimer}
             transport={{
               playing,
               isAd,
@@ -283,6 +333,13 @@ export default function VideoPlayer({
           />
         )}
       </AnimatePresence>
+
+      <ResumePrompt
+        open={promptOpen}
+        seconds={resumeOffer}
+        onResume={chooseResume}
+        onRestart={chooseRestart}
+      />
     </div>
   );
 }

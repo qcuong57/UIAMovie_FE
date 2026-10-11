@@ -41,6 +41,8 @@ export function useAdManager({
   parentId,
   videoRef,
   contentUrl,
+  useMse = false, // hls.js đang quản lý nguồn phim (Android/desktop)
+  resumeSeconds = 0, // vị trí resume (để seek lại sau pre-roll)
 }) {
   const [allAds, setAllAds] = useState(null); // ContentAdsDTO | null
   const [adsFetchDone, setAdsFetchDone] = useState(false);
@@ -60,9 +62,13 @@ export function useAdManager({
   const midRollFiredRef = useRef(new Set());
   const contentUrlRef = useRef(contentUrl);
 
+  const useMseRef = useRef(useMse);
+  const resumeSecRef = useRef(resumeSeconds);
   useEffect(() => {
     contentUrlRef.current = contentUrl;
-  }, [contentUrl]);
+    useMseRef.current = useMse;
+    resumeSecRef.current = resumeSeconds;
+  }, [contentUrl, useMse, resumeSeconds]);
 
   // ── Fetch ads khi content đổi ───────────────────────────────
   useEffect(() => {
@@ -167,12 +173,19 @@ export function useAdManager({
 
     // Đặt lại src phim. Với MSE, useHlsSource tự attachMedia (ghi đè src bằng blob)
     // khi isAd chuyển về false, nên không cần cầu nối ở đây.
-    if (contentUrlRef.current) v.src = contentUrlRef.current;
-    v.load();
+    // MSE: KHÔNG đặt src m3u8 (Android Chrome có thể tự phát native song song với hls.js →
+    // 2 nguồn tranh nhau). useHlsSource sẽ attachMedia lại khi isAd = false, loadedmetadata
+    // bên dưới bắn khi stream của hls.js sẵn sàng. Native (iOS) / MP4: đặt lại src như cũ.
+    if (!useMseRef.current) {
+      if (contentUrlRef.current) v.src = contentUrlRef.current;
+      v.load();
+    }
     v.addEventListener(
       "loadedmetadata",
       () => {
         if (phase === "midroll") v.currentTime = mainResumeTimeRef.current;
+        else if (phase === "preroll" && resumeSecRef.current > 0)
+          v.currentTime = resumeSecRef.current; // load() lại đã đưa currentTime về 0
         v.play().catch(() => {});
       },
       { once: true },

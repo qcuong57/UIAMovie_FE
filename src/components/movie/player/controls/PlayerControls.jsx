@@ -28,7 +28,7 @@ const SPEED_ITEMS = SPEED_OPTIONS.map((r) => ({ id: r, label: r === 1 ? "Bình t
  *  menu      {open, toggle, close}
  */
 export default function PlayerControls({
-  isMobile, transport, volume, time, seekbar, subtitles, speed, quality, fullscreen, menu,
+  isMobile, transport, volume, time, seekbar, subtitles, speed, quality, fullscreen, menu, onActivity,
 }) {
   const { playing, adsReady, isAd, onTogglePlay, onSkip } = transport;
   const volPct = volume.muted ? 0 : volume.vol;
@@ -55,6 +55,7 @@ export default function PlayerControls({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      onPointerDown={onActivity} // chạm vào controls → gia hạn thời gian tự ẩn
     >
       <ProgressBar {...seekbar} isAd={isAd} locked={isAd} />
 
