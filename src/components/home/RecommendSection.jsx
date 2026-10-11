@@ -93,6 +93,37 @@ function calculateMatchPercentage(item) {
   return Math.min(99, Math.max(76, baseScore + variance - 2));
 }
 
+
+// ── Chuẩn hoá item gợi ý từ AI ─────────────────────────────────────
+// Item từ BE (AiCatalogItem) có thể thiếu/khác tên field ảnh so với movie ở trang chủ.
+// Ưu tiên dữ liệu đầy đủ đã có ở props (cùng id), rồi mới tới các tên field phổ biến.
+const firstString = (...values) =>
+  values.find((v) => typeof v === "string" && v.trim()) || null;
+
+function normalizeItem(raw, known = {}) {
+  const posterUrl = firstString(
+    known.posterUrl, raw.posterUrl, raw.poster, raw.posterPath, raw.thumbnailUrl, raw.imageUrl,
+  );
+  const backdropUrl = firstString(
+    known.backdropUrl, raw.backdropUrl, raw.backdrop, raw.backdropPath, posterUrl,
+  );
+  return {
+    ...raw,
+    posterUrl: posterUrl || backdropUrl,
+    backdropUrl,
+    isTvShow: raw.isTvShow ?? known.isTvShow ?? false,
+    isPremium: raw.isPremium ?? known.isPremium ?? false,
+    description: raw.description || known.description || "",
+    year: raw.year || known.year,
+    rating: raw.rating ?? known.rating,
+  };
+}
+
+// Ảnh lỗi: ẩn đi để nền card hiển thị thay vì icon vỡ + alt text
+const hideBrokenImage = (e) => {
+  e.currentTarget.style.visibility = "hidden";
+};
+
 function ModalPortal({ children }) {
   if (typeof document === "undefined") return null;
   return createPortal(children, document.body);
@@ -158,15 +189,25 @@ export default function RecommendSection({
     return () => { isMounted = false; };
   }, [user?.id]);
 
+  // Tra cứu nhanh item đầy đủ (có ảnh) từ props theo id
+  const knownById = useMemo(() => {
+    const map = new Map();
+    movies.filter(Boolean).forEach((m) => map.set(String(m.id), m));
+    tvShows.filter(Boolean).forEach((t) => map.set(String(t.id), { isTvShow: true, ...t }));
+    return map;
+  }, [movies, tvShows]);
+
   // Trộn phim theo seed ngày hôm nay và chốt danh sách 10 phim (2 lượt carousel)[cite: 1]
   const list = useMemo(() => {
-    const raw = aiItems.length > 0 ? aiItems : (items ?? [...movies, ...tvShows]);
+    const raw = aiItems.length > 0
+      ? aiItems.filter(Boolean).map((it) => normalizeItem(it, knownById.get(String(it.id))))
+      : (items ?? [...movies, ...tvShows]);
     const valid = (raw || []).filter(Boolean);
     if (!valid.length) return [];
 
     const shuffled = seededShuffle(valid, getTodaySeed());
     return shuffled.slice(0, 10);
-  }, [aiItems, items, movies, tvShows]);
+  }, [aiItems, items, movies, tvShows, knownById]);
 
   // Đảm bảo activeIndex hợp lệ khi list thay đổi
   useEffect(() => {
@@ -354,6 +395,7 @@ export default function RecommendSection({
                 key={`poster-${activeItem.id}`}
                 src={activeItem.posterUrl || activeItem.backdropUrl}
                 alt={activeItem.title}
+                onError={hideBrokenImage}
                 initial={{ opacity: 0, scale: 1.05 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
@@ -750,6 +792,7 @@ export default function RecommendSection({
                         <img
                           src={item.backdropUrl || item.posterUrl}
                           alt={item.title}
+                onError={hideBrokenImage}
                           style={{
                             width: "100%",
                             height: "100%",
@@ -874,6 +917,7 @@ export default function RecommendSection({
                   <img
                     src={item.posterUrl || item.backdropUrl}
                     alt={item.title}
+                onError={hideBrokenImage}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                   {item.isPremium && (

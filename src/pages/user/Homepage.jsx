@@ -14,7 +14,6 @@ import Footer from "../../components/layout/Footer";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import genreService from "../../services/genreService";
-import aiService from "../../services/aiService";
 import authService from "../../services/authService";
 import AiChatWidget from "../../components/ai/AiChatWidget";
 import ContinueWatchingSection from "../../components/home/ContinueWatchingSection";
@@ -357,22 +356,11 @@ export default function HomePage() {
     }
   };
 
+  // Gợi ý AI do chính RecommendSection gọi (/recommendation/personalized).
+  // Ở đây chỉ dựng danh sách fallback phía client, dùng khi AI chưa có dữ liệu.
   const fetchForYou = useCallback(
-    async (normalizedMovies, normalizedTvShows, rawHistory) => {
+    (normalizedMovies, normalizedTvShows, rawHistory) => {
       setForYouLoading(true);
-      try {
-        const aiRec = await aiService.getRecommendations();
-
-        if (Array.isArray(aiRec?.movies) && aiRec.movies.length > 0) {
-          setForYou(aiRec.movies.map(normalizeMovie));
-          setForYouLabel(aiRec.message || "Gợi ý AI cho bạn");
-          setForYouLoading(false);
-          return;
-        }
-      } catch {
-        // Fallback nếu chưa đăng nhập (401) hoặc AI lỗi
-      }
-
       const allItems = [...normalizedMovies, ...normalizedTvShows];
       const highlyRated = byRating(allItems).slice(0, 20);
       const fallback = buildForYouFallback(allItems, rawHistory, highlyRated);
@@ -502,6 +490,16 @@ export default function HomePage() {
 
   const tvTopRated = useMemo(() => byRating(tvShows).slice(0, 20), [tvShows]);
   const tvNewest = useMemo(() => byNewest(tvShows).slice(0, 20), [tvShows]);
+
+  // Nguồn tra cứu ảnh/metadata đầy đủ cho RecommendSection (item AI từ BE có thể thiếu ảnh)
+  const recommendLookupMovies = useMemo(
+    () => [...trailerSourceMovies, ...movies],
+    [trailerSourceMovies, movies],
+  );
+  const recommendLookupTvShows = useMemo(
+    () => [...trailerSourceTvShows, ...tvShows],
+    [trailerSourceTvShows, tvShows],
+  );
 
   const uploadedTrailers = useMemo(() => {
     const all = [
@@ -972,6 +970,8 @@ export default function HomePage() {
                     <RecommendSection
                       subtitle={forYouLabel}
                       items={forYou}
+                      movies={recommendLookupMovies}
+                      tvShows={recommendLookupTvShows}
                       onFavoriteToggle={toggleFavorite}
                       isFavorited={isFavorited}
                       favoritedIds={Array.from(favorites)}

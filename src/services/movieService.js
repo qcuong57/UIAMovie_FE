@@ -51,7 +51,6 @@ const movieService = {
       // genreIds là mảng → append nhiều lần để backend nhận List<Guid>
       (genreIds ?? []).forEach((id) => params.append("genreIds", id));
 
-      console.log("[movieService] GET /movies?" + params.toString());
       const response = await axiosInstance.get(`/movies?${params}`);
       // Đồng bộ với tvShowService: controller trả Ok(ApiResponseDTO<object> { Data = result }) — unwrap .data
       const envelope = response.data ?? response;
@@ -60,6 +59,22 @@ const movieService = {
       console.error("[movieService] Error fetching movies:", error);
       console.error("[movieService] Response data:", error?.response?.data);
       console.error("[movieService] Request URL:", error?.config?.url);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Tổng số phim trong DB (số liệu chính xác từ BE, không bị giới hạn pageSize).
+   * GET /api/movies/stats/count
+   * @returns {Promise<number>}
+   */
+  getTotalCount: async () => {
+    try {
+      const response = await axiosInstance.get("/movies/stats/count");
+      const envelope = response.data ?? response;
+      return envelope?.data?.total ?? envelope?.total ?? 0;
+    } catch (error) {
+      console.error("[movieService] Error fetching total count:", error);
       throw error;
     }
   },

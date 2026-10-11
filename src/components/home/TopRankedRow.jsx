@@ -7,9 +7,36 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BEBAS } from "../../context/homeTokens";
 import movieService from "../../services/movieService";
+import tvShowService from "../../services/tvShowService";
 import MovieCard from "../movie/MovieCard";
 
 const PER_PAGE = 5;
+const TOP_N = 10;
+// Ít hơn ngưỡng này item có lượt xem thật thì mới chịu bù thêm item 0 view (tránh row trống ở site ít traffic)
+const MIN_SCORED = 5;
+
+const toList = (res) => {
+  const list = res?.data ?? res ?? [];
+  return Array.isArray(list) ? list : [];
+};
+
+// MovieCard dựa vào `isTvShow` để chọn route (/tvshow/... hay /movie/...) và API yêu thích.
+// `year` MovieCard cần nhưng DTO trending không có → suy ra từ ngày phát hành.
+const tag = (item, isTvShow) => {
+  const date = item.releaseDate ?? item.firstAirDate;
+  const y = date ? new Date(date).getFullYear() : null;
+  return {
+    ...item,
+    isTvShow: item.isTvShow ?? isTvShow,
+    year: item.year ?? (Number.isFinite(y) ? y : undefined),
+  };
+};
+
+// Thứ tự toàn phần: điểm trending → lượt xem 30 ngày → rating. Item không có điểm xếp sau item có điểm.
+const byTrending = (a, b) =>
+  (b.trendingScore ?? -1) - (a.trendingScore ?? -1) ||
+  (b.views30d ?? 0) - (a.views30d ?? 0) ||
+  (Number(b.rating) || 0) - (Number(a.rating) || 0);
 
 const rankStroke = (rank) =>
   rank === 1
@@ -171,7 +198,7 @@ const RankedMovieItem = ({
 // TopRankedRow
 // ══════════════════════════════════════════════════════════════════════════════
 export default function TopRankedRow({
-  title = "Top 10 Hôm Nay",
+  title = "Top 10 Thịnh Hành",
   movies = [],
   tvShows = [],
   isFavorited,
@@ -183,52 +210,49 @@ export default function TopRankedRow({
   const [direction, setDirection] = useState(1);
   const [trendingItems, setTrendingItems] = useState([]);
 
-  // Tự động gọi API Trending nếu trang cha không truyền sẵn props
+  // Trang cha không truyền props → tự gọi cả 2 API trending (phim + TV show), một bên lỗi vẫn hiện bên kia
   useEffect(() => {
+    if (movies.length > 0 || tvShows.length > 0) return;
     let isMounted = true;
-    if (movies.length === 0 && tvShows.length === 0) {
-      movieService
-        .getTrendingMovies()
-        .then((res) => {
-          const list = res?.data || res || [];
-          if (isMounted && Array.isArray(list)) {
-            setTrendingItems(list);
-          }
-        })
-        .catch((err) => {
-          console.warn("[TopRankedRow] Lỗi tải phim trending:", err);
-        });
-    }
+
+    Promise.allSettled([
+      movieService.getTrendingMovies(),
+      tvShowService.getTrendingTvShows(),
+    ]).then(([m, t]) => {
+      if (!isMounted) return;
+      if (m.status === "rejected") console.warn("[TopRankedRow] Lỗi tải phim trending:", m.reason);
+      if (t.status === "rejected") console.warn("[TopRankedRow] Lỗi tải TV show trending:", t.reason);
+      setTrendingItems([
+        ...(m.status === "fulfilled" ? toList(m.value).map((x) => tag(x, false)) : []),
+        ...(t.status === "fulfilled" ? toList(t.value).map((x) => tag(x, true)) : []),
+      ]);
+    });
+
     return () => {
       isMounted = false;
     };
   }, [movies.length, tvShows.length]);
 
-  // Xếp hạng: Ưu tiên điểm Trending thực tế từ Backend -> Fallback rating
+  // Xếp hạng chung phim + TV show theo điểm trending của BE (cùng công thức nên so sánh được)
   const top10 = useMemo(() => {
-    const raw =
-      trendingItems.length > 0 ? trendingItems : [...movies, ...tvShows];
-    const uniqueMap = new Map();
+    const fromApi = trendingItems.length > 0;
+    const raw = fromApi
+      ? trendingItems
+      : [...movies.map((x) => tag(x, false)), ...tvShows.map((x) => tag(x, true))];
 
+    // Khoá gồm loại nội dung để phim và show trùng id (nếu có) không đè nhau
+    const uniqueMap = new Map();
     raw.filter(Boolean).forEach((item) => {
-      if (item.id && !uniqueMap.has(item.id)) {
-        uniqueMap.set(item.id, item);
-      }
+      const key = `${item.isTvShow ? "tv" : "movie"}:${item.id}`;
+      if (item.id && !uniqueMap.has(key)) uniqueMap.set(key, item);
     });
 
-    const uniqueItems = Array.from(uniqueMap.values());
+    const sorted = Array.from(uniqueMap.values()).sort(byTrending);
 
-    return uniqueItems
-      .sort((a, b) => {
-        if (a.trendingScore != null && b.trendingScore != null) {
-          return b.trendingScore - a.trendingScore;
-        }
-        if (a.trendingRank != null && b.trendingRank != null) {
-          return a.trendingRank - b.trendingRank;
-        }
-        return (Number(b.rating) || 0) - (Number(a.rating) || 0);
-      })
-      .slice(0, 10);
+    // Bỏ các mục BE chỉ "bù chỗ trống" (score = 0) để không gắn hạng cho nội dung chưa có lượt xem;
+    // nếu quá ít mục có view thật thì giữ cả danh sách để row không trống.
+    const scored = sorted.filter((x) => (x.trendingScore ?? 0) > 0);
+    return (fromApi && scored.length >= MIN_SCORED ? scored : sorted).slice(0, TOP_N);
   }, [trendingItems, movies, tvShows]);
 
   const pages = Math.ceil(top10.length / PER_PAGE_RESP) || 1;
@@ -387,7 +411,7 @@ export default function TopRankedRow({
           >
             {slice.map((item, i) => (
               <motion.div
-                key={item.id}
+                key={`${item.isTvShow ? "tv" : "movie"}:${item.id}`}
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{

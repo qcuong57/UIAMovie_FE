@@ -48,6 +48,7 @@ import {
 import { Card } from "../../components/admin/dashboard/Card";
 import { ContentCard } from "../../components/admin/dashboard/ContentCard";
 import { GenreDonutCard } from "../../components/admin/dashboard/GenreDonutCard";
+import { ViewStatsSection } from "../../components/admin/dashboard/ViewStatsSection";
 import {
   UserGrowthCard,
   UserListCard,
@@ -67,6 +68,8 @@ export default function AdminDashboard() {
   const {
     movies,
     tvShows,
+    totalMovies,
+    totalTvShows,
     trendingMovies,
     trendingShows,
     genres,
@@ -310,26 +313,28 @@ export default function AdminDashboard() {
   const [donutTab, setDonutTab] = useState("genres");
   const [userTab, setUserTab] = useState("recent");
   const [reviewTab, setReviewTab] = useState("movie");
+  // Tăng mỗi lần bấm "Làm mới" để ViewStatsSection (tự quản lý state riêng) cũng tải lại
+  const [statsReloadKey, setStatsReloadKey] = useState(0);
 
   // ── KPI configs ─────────────────────────────────────────────────────────────
   const CONTENT_KPI = [
     {
       label: "Tổng phim",
-      value: movies.length,
+      value: totalMovies,
       sub: "movies trong DB",
       featured: true,
       index: 0,
     },
     {
       label: "TV Shows",
-      value: tvShows.length,
+      value: totalTvShows,
       sub: "series trong DB",
       accentColor: ACCENT4,
       index: 1,
     },
     {
       label: "Tổng nội dung",
-      value: movies.length + tvShows.length,
+      value: totalMovies + totalTvShows,
       sub: "phim + series",
       index: 2,
     },
@@ -449,7 +454,10 @@ export default function AdminDashboard() {
 
         {/* Làm mới dữ liệu — gọi lại các API thay vì phải F5 cả trang */}
         <button
-          onClick={reload}
+          onClick={() => {
+            reload();
+            setStatsReloadKey((k) => k + 1);
+          }}
           disabled={loading}
           title="Làm mới dữ liệu"
           style={{
@@ -747,6 +755,15 @@ export default function AdminDashboard() {
           loading={loading}
         />
       </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 4 — LƯỢT XEM                                                */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <SectionHeader
+        title="Lượt xem"
+        subtitle="Thống kê view & thời lượng xem theo ngày / tuần / tháng / quý / năm"
+      />
+      <ViewStatsSection reloadKey={statsReloadKey} />
     </div>
   );
 }

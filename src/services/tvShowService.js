@@ -60,7 +60,6 @@ const tvShowService = {
       (genreIds ?? []).forEach(id => params.append('genreIds', id));
       (ids ?? []).forEach(id => params.append('ids', id));
 
-      console.log('[tvShowService] GET /tvshows?' + params.toString());
       const response = await axiosInstance.get(`/tvshows?${params}`);
       // Controller: Ok(ApiResponseDTO<object> { Data = result }) — unwrap .data
       const envelope = response.data ?? response;
@@ -68,6 +67,22 @@ const tvShowService = {
     } catch (error) {
       console.error('[tvShowService] Error fetching tvshows:', error);
       console.error('[tvShowService] Response data:', error?.response?.data);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Tổng số TV show trong DB (số liệu chính xác từ BE, không bị giới hạn pageSize).
+   * GET /api/tvshows/stats/count
+   * @returns {Promise<number>}
+   */
+  getTotalCount: async () => {
+    try {
+      const response = await axiosInstance.get('/tvshows/stats/count');
+      const envelope = response.data ?? response;
+      return envelope?.data?.total ?? envelope?.total ?? 0;
+    } catch (error) {
+      console.error('[tvShowService] Error fetching total count:', error);
       throw error;
     }
   },
@@ -85,6 +100,22 @@ const tvShowService = {
       return envelope?.data ?? envelope;
     } catch (error) {
       console.error('[tvShowService] Error fetching tvshow details:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * GET /api/tvshows/trending — top TV show thịnh hành nội bộ (view hợp lệ, time-decay 30 ngày).
+   * Trả về TrendingTvShowDTO[] { ..., trendingRank, trendingScore, views7d, views30d }.
+   * (Khác getTmdbTrending — cái đó lấy từ TMDB.)
+   */
+  getTrendingTvShows: async () => {
+    try {
+      const response = await axiosInstance.get('/tvshows/trending');
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error fetching trending tvshows:', error);
       throw error;
     }
   },

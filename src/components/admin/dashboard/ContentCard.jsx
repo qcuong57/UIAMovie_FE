@@ -94,6 +94,12 @@ export const ContentRow = ({ item, index, badge, badgeColor, isShow }) => (
           </span>
         )}
       </div>
+      {/* Chỉ item từ API trending mới có views30d → admin thấy số liệu thật đằng sau thứ hạng */}
+      {item.views30d != null && (
+        <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, margin: '3px 0 0' }}>
+          {item.views7d ?? 0} view / 7 ngày · {item.views30d} view / 30 ngày
+        </p>
+      )}
     </div>
 
     {/* Optional rank badge */}
@@ -112,8 +118,12 @@ export const ContentRow = ({ item, index, badge, badgeColor, isShow }) => (
 );
 
 // ── Content Card (Movies or TV Shows panel) ────────────────────────────────────
-export const ContentCard = ({ title, items, trending, missing, loading, isShow }) => {
+export const ContentCard = ({ title, items, trending: trendingRaw = [], missing, loading, isShow }) => {
   const [tab, setTab] = useState('recent');
+
+  // BE bù các mục "chỗ trống" với trendingScore = 0 cho đủ danh sách → không gắn hạng cho nội dung chưa có view.
+  // Nếu dữ liệu không có trendingScore (nguồn khác) thì giữ nguyên.
+  const trending = trendingRaw.filter((x) => (x.trendingScore ?? 1) > 0);
 
   const recentItems = [...items].sort((a, b) => {
     const da = new Date(a.releaseDate ?? a.firstAirDate ?? 0);
@@ -181,16 +191,20 @@ export const ContentCard = ({ title, items, trending, missing, loading, isShow }
                 <Paginated
                   items={tabContent[tab]}
                   pageSize={6}
-                  renderItem={(item, i) => (
-                    <ContentRow
-                      key={item.id ?? i}
-                      item={item}
-                      index={i}
-                      isShow={isShow}
-                      badge={tab === 'trending' ? `#${tabContent[tab].indexOf(item) + 1}` : undefined}
-                      badgeColor={tab === 'trending' ? TRENDING_COLORS[i] : undefined}
-                    />
-                  )}
+                  renderItem={(item, i) => {
+                    // Hạng tính theo vị trí trong cả danh sách, không phải vị trí trong trang
+                    const rank = tabContent[tab].indexOf(item);
+                    return (
+                      <ContentRow
+                        key={item.id ?? i}
+                        item={item}
+                        index={i}
+                        isShow={isShow}
+                        badge={tab === 'trending' ? `#${rank + 1}` : undefined}
+                        badgeColor={tab === 'trending' ? TRENDING_COLORS[rank] : undefined}
+                      />
+                    );
+                  }}
                 />
               )}
             </motion.div>

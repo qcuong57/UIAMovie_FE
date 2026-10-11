@@ -7,9 +7,14 @@ import userService from "../../../services/userService";
 import reviewService from "../../../services/reviewService";
 import { toArray } from "../../../helper/format";
 
+const LIST_PAGE_SIZE = 500;
+
 const INITIAL_STATE = {
   movies: [],
   tvShows: [],
+  // Tổng thật từ BE; danh sách movies/tvShows bên trên chỉ là tối đa LIST_PAGE_SIZE bản ghi.
+  totalMovies: 0,
+  totalTvShows: 0,
   trendingMovies: [],
   trendingShows: [],
   genres: [],
@@ -35,39 +40,30 @@ const buildEpisodeLabel = (ep) => {
 };
 
 /**
- * Fetch episode info for all TV-show reviews that have an episodeId
- * but a null episodeLabel. Results are deduplicated by episodeId.
+ * Gắn episodeLabel ("S1E3") cho review TV show có episodeId nhưng chưa có nhãn.
+ *
+ * BE không có endpoint "lấy tập theo id", nên lấy toàn bộ tập của từng show liên quan
+ * (tvShowService.getEpisodesByTvShow: 1 call show + 1 call/season) rồi tra theo episodeId.
+ * Mỗi show chỉ gọi 1 lần dù có nhiều review; show nào lỗi thì bỏ qua, review đó giữ nguyên.
  */
 const enrichEpisodeLabels = async (reviews) => {
-  // Collect unique episodeIds that need resolution
-  const missingIds = [
-    ...new Set(
-      reviews
-        .filter((r) => r.tvShowId && r.episodeId && !r.episodeLabel)
-        .map((r) => r.episodeId),
-    ),
-  ];
+  const needs = reviews.filter((r) => r.tvShowId && r.episodeId && !r.episodeLabel);
+  if (needs.length === 0) return reviews;
 
-  if (missingIds.length === 0) return reviews;
-
-  // Fetch all in parallel; swallow individual failures
-  const fetched = await Promise.allSettled(
-    missingIds.map(
-      (id) => tvShowService.getEpisodeById(id).catch(() => null),
-      // ↑ Replace with your actual episode-fetch method, e.g.:
-      //   episodeService.getById(id)
-      //   tvShowService.getEpisode(id)
-    ),
+  const showIds = [...new Set(needs.map((r) => r.tvShowId))];
+  const results = await Promise.allSettled(
+    showIds.map((id) => tvShowService.getEpisodesByTvShow(id)),
   );
 
-  // Build episodeId → label map
+  // episodeId → label
   const labelMap = {};
-  fetched.forEach((result, i) => {
-    const ep = result.status === "fulfilled" ? result.value : null;
-    labelMap[missingIds[i]] = buildEpisodeLabel(ep);
+  results.forEach((res) => {
+    if (res.status !== "fulfilled") return;
+    (res.value ?? []).forEach((ep) => {
+      if (ep?.id) labelMap[ep.id] = buildEpisodeLabel(ep);
+    });
   });
 
-  // Inject episodeLabel into each matching review
   return reviews.map((r) =>
     r.episodeId && labelMap[r.episodeId]
       ? { ...r, episodeLabel: labelMap[r.episodeId] }
@@ -79,6 +75,8 @@ export const useDashboardData = () => {
   const [data, setData] = useState(INITIAL_STATE);
 
   const load = useCallback(async () => {
+    // Bấm "Làm mới" cũng phải bật loading để nút/skeleton phản hồi (lần đầu đã là true)
+    setData((prev) => (prev.loading ? prev : { ...prev, loading: true }));
     try {
       const [
         movRes,
@@ -88,16 +86,20 @@ export const useDashboardData = () => {
         genreRes,
         userRes,
         reviewRes,
+        movieCountRes,
+        showCountRes,
       ] = await Promise.allSettled([
-        movieService.getMovies({ pageSize: 500 }),
-        tvShowService.getTvShows({ pageSize: 500 }),
+        movieService.getMovies({ pageSize: LIST_PAGE_SIZE }),
+        tvShowService.getTvShows({ pageSize: LIST_PAGE_SIZE }),
         movieService.getTrendingMovies().catch(() => []),
-        tvShowService
-          .getTvShows({ pageSize: 20, sortBy: "rating", sortDesc: true })
-          .catch(() => ({ items: [] })),
+        // Trending nội bộ (view hợp lệ, time-decay) — cùng nguồn với trang chủ,
+        // thay cho cách cũ là lấy top rating rồi gọi nó là trending.
+        tvShowService.getTrendingTvShows().catch(() => []),
         genreService.getAllGenres().catch(() => []),
         userService.getAllUsers({ pageSize: 500 }).catch(() => []),
-        reviewService.getAllReviews({ pageSize: 500 }).catch(() => []),
+        reviewService.getAllReviews({ pageSize: LIST_PAGE_SIZE }).catch(() => []),
+        movieService.getTotalCount(),
+        tvShowService.getTotalCount(),
       ]);
 
       const rawReviews = toArray(
@@ -109,9 +111,17 @@ export const useDashboardData = () => {
         () => rawReviews,
       );
 
+      const movies = toArray(movRes.status === "fulfilled" ? movRes.value : []);
+      const tvShows = toArray(showRes.status === "fulfilled" ? showRes.value : []);
+
       setData({
-        movies: toArray(movRes.status === "fulfilled" ? movRes.value : []),
-        tvShows: toArray(showRes.status === "fulfilled" ? showRes.value : []),
+        movies,
+        tvShows,
+        // Endpoint đếm lỗi (vd. chưa deploy BE) → lùi về độ dài danh sách đã tải.
+        totalMovies:
+          movieCountRes.status === "fulfilled" ? movieCountRes.value : movies.length,
+        totalTvShows:
+          showCountRes.status === "fulfilled" ? showCountRes.value : tvShows.length,
         trendingMovies: toArray(
           trendMovRes.status === "fulfilled" ? trendMovRes.value : [],
         ),
@@ -122,7 +132,7 @@ export const useDashboardData = () => {
           ? genreRes.value
           : (genreRes.value?.data ?? []),
         users: toArray(userRes.status === "fulfilled" ? userRes.value : []),
-        reviews: enrichedReviews, // ← was: toArray(reviewRes...)
+        reviews: enrichedReviews,
         loading: false,
         error: null,
       });

@@ -26,6 +26,8 @@ export default function MovieVideoPlayer({ movie, isFreeUser = true }) {
       fallbackDurationSec={movie?.duration ? movie.duration * 60 : 0}
       resumeSeconds={resumeSeconds}
       skipMarkers={movie}
+      onHeartbeat={(secs) => playbackService.sendMovieHeartbeat(movie.id, secs)}
+      onHeartbeatFlush={(secs) => playbackService.flushMovieHeartbeat(movie.id, secs)}
       onSaveProgress={({ seconds, completed }) => {
         const mins = Math.floor(seconds / 60); // API phim lưu theo phút
         if (mins < 1) return;

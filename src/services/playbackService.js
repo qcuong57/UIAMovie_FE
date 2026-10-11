@@ -3,6 +3,30 @@
 // axiosInstance đã có baseURL = ".../api" nên chỉ cần "/playback/...".
 
 import axiosInstance from "../config/axios";
+import { guestHeaders } from "../utils/guestId";
+
+// axiosInstance có response interceptor trả thẳng response.data → body đã được bóc sẵn.
+// Heartbeat BE trả DTO trần (không có envelope) nên `res.data` sẽ là undefined: phải lấy `res`.
+const bodyOf = (res) => res?.data ?? res;
+
+// Gửi nốt heartbeat khi đóng tab/đổi trang. fetch + keepalive không đi qua interceptor axios
+// nên tự gắn token, X-Guest-Id và credentials. Best-effort: không refresh token, không chờ kết quả.
+function flushBeat(path, body) {
+  try {
+    const headers = { "Content-Type": "application/json", ...guestHeaders() };
+    const token = localStorage.getItem("accessToken");
+    if (token) headers.Authorization = `Bearer ${token}`;
+    fetch(`${axiosInstance.defaults.baseURL}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      keepalive: true,
+      credentials: "include",
+    }).catch(() => {});
+  } catch {
+    /* best-effort */
+  }
+}
 
 // ── Chuẩn hoá response + bắt 401/403 (đặt cùng file để không phụ thuộc utils/playback.js) ──
 /**
@@ -81,6 +105,37 @@ async function fetchPlayback(requestFn) {
 }
 
 const playbackService = {
+  /**
+   * POST /api/playback/heartbeat — đếm view phim.
+   * withCredentials BẮT BUỘC: guest được định danh bằng cookie HttpOnly "guest_id".
+   * Không đi qua fetchPlayback → trả thẳng { accumulatedSeconds, isCountedAsView }.
+   */
+  sendMovieHeartbeat: async (movieId, secondsSinceLastBeat) => {
+    const res = await axiosInstance.post(
+      "/playback/heartbeat",
+      { movieId, secondsSinceLastBeat },
+      { withCredentials: true, headers: guestHeaders() },
+    );
+    return bodyOf(res);
+  },
+
+  /** Gửi nốt giây dư khi đóng tab/đổi trang (fetch keepalive, không chờ kết quả). */
+  flushMovieHeartbeat: (movieId, secondsSinceLastBeat) =>
+    flushBeat("playback/heartbeat", { movieId, secondsSinceLastBeat }),
+
+  /** POST /api/playback/heartbeat/tvshow — đếm view phim bộ (tính theo show/ngày, runtime theo tập). */
+  sendEpisodeHeartbeat: async (tvShowId, episodeId, secondsSinceLastBeat) => {
+    const res = await axiosInstance.post(
+      "/playback/heartbeat/tvshow",
+      { tvShowId, episodeId, secondsSinceLastBeat },
+      { withCredentials: true, headers: guestHeaders() },
+    );
+    return bodyOf(res);
+  },
+
+  flushEpisodeHeartbeat: (tvShowId, episodeId, secondsSinceLastBeat) =>
+    flushBeat("playback/heartbeat/tvshow", { tvShowId, episodeId, secondsSinceLastBeat }),
+
   /** GET /api/playback/movie/{movieId} */
   getMoviePlayback: (movieId) =>
     fetchPlayback(() => axiosInstance.get(`/playback/movie/${movieId}`)),

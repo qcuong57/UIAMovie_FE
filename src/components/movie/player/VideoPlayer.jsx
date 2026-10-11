@@ -19,6 +19,7 @@ import useControlsVisibility from "../../../hooks/useControlsVisibility";
 import usePlayerShortcuts from "../../../hooks/usePlayerShortcuts";
 import useWatchProgress from "../../../hooks/useWatchProgress";
 import useSkipMarkers from "../../../hooks/useSkipMarkers";
+import usePlaybackHeartbeat from "../../../hooks/usePlaybackHeartbeat";
 
 import PlayerControls from "./controls/PlayerControls";
 import CenterPlayIcon from "./controls/CenterPlayIcon";
@@ -40,6 +41,8 @@ import ErrorOverlay from "./controls/ErrorOverlay";
  *   resumeSeconds?: number,
  *   onSaveProgress?: (p: { seconds: number, completed: boolean }) => Promise<any> | void,
  *   skipMarkers?: { introStart, introEnd, recapStart, recapEnd },
+ *   onHeartbeat?: (secondsSinceLastBeat: number) => Promise<{ isCountedAsView: boolean }>, // đếm view (BE)
+ *   onHeartbeatFlush?: (secondsSinceLastBeat: number) => void, // gửi nốt giây dư khi đóng tab/đổi trang
  *   renderOverlay?: (ctx: { isAd: boolean, secondsLeft: number }) => React.ReactNode,
  * }} props
  *
@@ -59,6 +62,8 @@ export default function VideoPlayer({
   resumeSeconds = 0,
   onSaveProgress,
   skipMarkers,
+  onHeartbeat,
+  onHeartbeatFlush,
   renderOverlay,
 }) {
   const isMobile = useIsMobile();
@@ -100,6 +105,15 @@ export default function VideoPlayer({
     },
   });
   const { hasVideo, isAd, playing } = core;
+
+  // ── Đếm view: chỉ tính khi nội dung chính đang phát (không tính quảng cáo / pause / tab ẩn) ──
+  // Phải gọi TRƯỚC early-return `if (!videoUrl)` để không vi phạm rules of hooks.
+  usePlaybackHeartbeat({
+    enabled: !!onHeartbeat && !!videoUrl,
+    isPlaying: !!playing && !isAd,
+    send: onHeartbeat,
+    flush: onHeartbeatFlush,
+  });
 
   const { save } = useWatchProgress({
     videoRef,

@@ -37,6 +37,12 @@ export default function EpisodeVideoPlayer({
       fallbackDurationSec={episode?.runtime ? episode.runtime * 60 : 0}
       resumeSeconds={resumeSeconds}
       skipMarkers={episode}
+      onHeartbeat={(secs) =>
+        playbackService.sendEpisodeHeartbeat(tvShow.id, episode.id, secs)
+      }
+      onHeartbeatFlush={(secs) =>
+        playbackService.flushEpisodeHeartbeat(tvShow.id, episode.id, secs)
+      }
       onSaveProgress={({ seconds, completed }) =>
         tvShowService.updateWatchProgress({
           tvShowId: tvShow.id,
