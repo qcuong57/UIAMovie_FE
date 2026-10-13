@@ -5,339 +5,141 @@
 // chính videoRef đó. AdOverlay chỉ render UI overlay thuần, không có
 // <video> riêng và không cần biết gì về việc phát video.
 //
-// Thiết kế: Netflix thật — phẳng tuyệt đối. Không glass, không backdrop-blur,
-// không gradient, không glow, không đổi màu khi hover, không accent màu mè.
-// Chỉ đen/trắng/xám theo đúng thang độ mờ mà Netflix dùng cho overlay UI
-// (nhãn, nút, chip). Font hệ thống — không dùng font tròn kiểu bo góc dễ
-// nhận ra là "AI-made". Chuyển động chỉ có fade nhẹ, không easing phô trương.
+// Thiết kế: Netflix thật — phẳng tuyệt đối (không glass, gradient, glow, accent màu mè).
+// Style nằm trong AdOverlay.css; responsive qua prop `compact` + `showControls`.
 //
 // Layout:
 //   TOP-LEFT    : nhãn "Quảng cáo" + giây còn lại
 //   TOP-RIGHT   : link "Bỏ quảng cáo"
-//   BOTTOM-LEFT : thẻ thương hiệu (logo + tên + domain) — click → mở link QC
-//   BOTTOM-RIGHT: nút skip / đếm ngược / không thể bỏ qua
+//   BOTTOM      : hàng flex — thẻ thương hiệu (trái, tự co) + nút skip / đếm ngược (phải)
 //
 // Usage:
-//   <AdOverlay adManager={adManager} showControls={show} />
+//   <AdOverlay adManager={adManager} showControls={show} compact={isMobile} />
 
 import React from "react";
 import { SkipForward, Lock } from "lucide-react";
+import "./AdOverlay.css";
 
-const FONT = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
-const SCRIM = "rgba(0,0,0,0.75)";
-const HAIRLINE = "1px solid rgba(255,255,255,0.14)";
-const TEXT = "#fff";
-const TEXT_DIM = "rgba(255,255,255,0.62)";
-const TEXT_FAINT = "rgba(255,255,255,0.42)";
+const getDomain = (link) => {
+  if (!link) return null;
+  try {
+    return new URL(link).hostname.replace(/^www\./, "");
+  } catch {
+    return link;
+  }
+};
 
 // ── Brand tag (logo + tên + domain) ────────────────────────────────────────
-const BrandTag = ({ ad, bottom }) => {
+const BrandTag = ({ ad }) => {
   const logoUrl = ad.brandImageUrl ?? ad.advertiserLogoUrl;
   const brandName = ad.title ?? ad.advertiserName;
   const link = ad.clickThroughUrl;
-
   if (!brandName && !link) return null;
 
-  const domain = (() => {
-    if (!link) return null;
-    try {
-      return new URL(link).hostname.replace("www.", "");
-    } catch {
-      return link;
-    }
-  })();
+  const domain = getDomain(link);
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: 24,
-        bottom,
-        pointerEvents: "all",
-      }}
+    <a
+      className="ad-brand"
+      href={link ?? "#"}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
     >
-      <a
-        href={link ?? "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          textDecoration: "none",
-          maxWidth: 340,
-          padding: "8px 12px",
-          borderRadius: 3,
-          background: "rgba(0,0,0,0.45)",
-        }}
-      >
-        {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt=""
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 3,
-              objectFit: "cover",
-              flexShrink: 0,
-              background: "#fff",
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 3,
-              background: "rgba(255,255,255,0.12)",
-              border: HAIRLINE,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
+      {logoUrl ? (
+        <img className="ad-brand__logo" src={logoUrl} alt="" />
+      ) : (
+        <div className="ad-brand__logo ad-brand__logo--placeholder">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-          {brandName && (
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 14,
-                fontWeight: 600,
-                color: TEXT,
-                lineHeight: 1.3,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: 260,
-              }}
-            >
-              {brandName}
-            </span>
-          )}
-          {domain && (
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 11.5,
-                fontWeight: 400,
-                color: TEXT_FAINT,
-                lineHeight: 1.3,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: 260,
-              }}
-            >
-              {domain}
-            </span>
-          )}
-          {link && (
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 11.5,
-                fontWeight: 600,
-                color: TEXT_DIM,
-                lineHeight: 1.5,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Tìm hiểu thêm
-            </span>
-          )}
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
         </div>
-      </a>
-    </div>
+      )}
+
+      <div className="ad-brand__text">
+        {brandName && <span className="ad-brand__name">{brandName}</span>}
+        {domain && <span className="ad-brand__domain">{domain}</span>}
+        {link && <span className="ad-brand__cta">Tìm hiểu thêm</span>}
+      </div>
+    </a>
   );
 };
 
-const AdOverlay = ({ adManager, showControls = false }) => {
-  const {
-    currentAd,
-    adTimeLeft,
-    adSkippable,
-    adSkipCountdown,
-    skipAd,
-  } = adManager;
-
-  // Chiều cao thanh điều khiển player — để các khối nổi dịch lên đúng vị trí
-  // khi controls đang hiện, tránh đè lên nhau.
-  const CONTROLS_H = 64;
-  const floatBottom = showControls ? CONTROLS_H + 16 : 24;
-
-  if (!currentAd) return null;
-
+// ── Skip / countdown / non-skippable ───────────────────────────────────────
+const SkipControl = ({ ad, skippable, countdown, onSkip }) => {
+  if (ad.skipAfterSeconds == null) {
+    return (
+      <div className="ad-chip">
+        <span className="ad-chip__text ad-chip__text--faint">Không thể bỏ qua</span>
+      </div>
+    );
+  }
+  if (!skippable) {
+    return (
+      <div className="ad-chip">
+        <span className="ad-chip__text">Bỏ qua sau {countdown}s</span>
+      </div>
+    );
+  }
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 20,
-        pointerEvents: "none",
-        opacity: 1,
-        transition: "opacity 0.2s linear",
+    <button
+      className="ad-skip"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onSkip();
       }}
     >
-      {/* Top-left: nhãn ad + giây còn lại */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 24,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          fontFamily: FONT,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12.5,
-            fontWeight: 600,
-            color: TEXT,
-            letterSpacing: "0.01em",
-          }}
-        >
-          Quảng cáo
-        </span>
-        <span
-          style={{
-            fontSize: 12.5,
-            fontWeight: 400,
-            color: TEXT_FAINT,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          · {adTimeLeft}s
-        </span>
+      Bỏ qua quảng cáo
+      <SkipForward size={13} color="#000" strokeWidth={2} />
+    </button>
+  );
+};
+
+const AdOverlay = ({ adManager, showControls = false, compact = false }) => {
+  const { currentAd, adTimeLeft, adSkippable, adSkipCountdown, skipAd } = adManager;
+  if (!currentAd) return null;
+
+  const rootClass = [
+    "ad-overlay",
+    compact && "ad-overlay--compact",
+    showControls && "ad-overlay--lifted", // đẩy hàng dưới lên khỏi thanh điều khiển
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={rootClass}>
+      <div className="ad-overlay__label">
+        <span className="ad-overlay__label-title">Quảng cáo</span>
+        <span className="ad-overlay__label-time">· {adTimeLeft}s</span>
       </div>
 
-      {/* Top-right: link bỏ quảng cáo */}
-      <a
-        href="/premium"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          position: "absolute",
-          top: 18,
-          right: 24,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          fontFamily: FONT,
-          fontSize: 12.5,
-          fontWeight: 600,
-          color: TEXT_DIM,
-          textDecoration: "none",
-          pointerEvents: "all",
-        }}
-      >
+      <a className="ad-overlay__premium" href="/premium" target="_blank" rel="noopener noreferrer">
         <Lock size={12} strokeWidth={2} />
         Bỏ quảng cáo
       </a>
 
-      {/* Bottom-left: thẻ thương hiệu */}
-      <BrandTag ad={currentAd} bottom={floatBottom} />
-
-      {/* Bottom-right: skip / countdown / non-skippable */}
-      <div
-        style={{
-          position: "absolute",
-          right: 24,
-          bottom: floatBottom,
-          pointerEvents: "all",
-        }}
-      >
-        {currentAd.skipAfterSeconds != null ? (
-          adSkippable ? (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                skipAd();
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "9px 16px",
-                border: "none",
-                borderRadius: 2,
-                background: "#fff",
-                cursor: "pointer",
-                fontFamily: FONT,
-                fontWeight: 600,
-                fontSize: 13,
-                color: "#000",
-              }}
-            >
-              Bỏ qua quảng cáo
-              <SkipForward size={13} color="#000" strokeWidth={2} />
-            </button>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "9px 16px",
-                borderRadius: 2,
-                background: SCRIM,
-                border: HAIRLINE,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: FONT,
-                  fontWeight: 400,
-                  fontSize: 12.5,
-                  color: TEXT_DIM,
-                }}
-              >
-                Bỏ qua sau {adSkipCountdown}s
-              </span>
-            </div>
-          )
-        ) : (
-          <div
-            style={{
-              padding: "9px 16px",
-              borderRadius: 2,
-              background: SCRIM,
-              border: HAIRLINE,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: FONT,
-                fontWeight: 400,
-                fontSize: 12.5,
-                color: TEXT_FAINT,
-              }}
-            >
-              Không thể bỏ qua
-            </span>
-          </div>
-        )}
+      <div className="ad-overlay__bottom">
+        <BrandTag ad={currentAd} />
+        <div className="ad-overlay__action">
+          <SkipControl
+            ad={currentAd}
+            skippable={adSkippable}
+            countdown={adSkipCountdown}
+            onSkip={skipAd}
+          />
+        </div>
       </div>
     </div>
   );

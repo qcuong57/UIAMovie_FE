@@ -79,7 +79,7 @@ export default function VideoPlayer({
   const wrapRef = useRef(null);
   const saveRef = useRef(null);
 
-  // Menu đang mở: "sub" | "speed" | "quality" | null — mở cái này tự đóng cái kia
+  // Menu đang mở: "sub" | "speed" | "quality" | "settings" (mobile) | null — mở cái này tự đóng cái kia
   const [openMenu, setOpenMenu] = useState(null);
   const toggleMenu = useCallback((n) => setOpenMenu((m) => (m === n ? null : n)), []);
   const closeMenu = useCallback(() => setOpenMenu(null), []);
@@ -291,7 +291,7 @@ export default function VideoPlayer({
       />
       <SkipFlash skipFlash={core.skipFlash} isMobile={isMobile} />
 
-      <AdOverlay adManager={adManager} showControls={show} />
+      <AdOverlay adManager={adManager} showControls={show} compact={isMobile} />
 
       <AnimatePresence>
         {show && (

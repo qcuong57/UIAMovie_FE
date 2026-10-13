@@ -75,12 +75,17 @@
   transition: bottom 0.25s ease;
   z-index: 10;
 }
-:fullscreen .vp-subtitle-overlay,
-:-webkit-full-screen .vp-subtitle-overlay,
-:-moz-full-screen .vp-subtitle-overlay,
-.vp-root--fake-fs .vp-subtitle-overlay {
-  bottom: 96px !important;
+/* Vị trí dọc theo trạng thái thanh điều khiển: ẩn → sát đáy, hiện → nâng lên trên thanh.
+   Fullscreen chỉ đổi biến, không còn ép `bottom !important` (lỗi cũ: phụ đề luôn lơ lửng cao). */
+.vp-root {
+  --vp-sub-idle: 24px;
+  --vp-sub-lifted: 78px;
 }
+.vp-root:fullscreen { --vp-sub-idle: 28px; --vp-sub-lifted: 84px; }
+.vp-root:-webkit-full-screen { --vp-sub-idle: 28px; --vp-sub-lifted: 84px; }
+.vp-root--fake-fs { --vp-sub-idle: 28px; --vp-sub-lifted: 84px; }
+.vp-subtitle-overlay { bottom: var(--vp-sub-idle); }
+.vp-subtitle-overlay--lifted { bottom: var(--vp-sub-lifted); }
 .vp-subtitle-line {
   display: block;
   width: 100%;
@@ -298,13 +303,17 @@
   bottom: calc(100% + 10px);
   right: 0;
   min-width: 150px;
-  overflow: hidden;
+  /* max-height được MenuDropdown đo theo khoảng trống trong player → menu dài thì cuộn */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: rgba(20, 20, 20, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
   z-index: 50;
 }
+.vp-menu__section + .vp-menu__section { border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .vp-menu__header { padding: 8px 12px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .vp-menu__title {
   margin: 0;
@@ -356,7 +365,13 @@
   .vp-progress-wrap { padding: 14px 0; margin: -14px 0 2px; }
   .vp-ctrl-btn { padding: 12px; margin: -12px; }
   .vp-controls__group, .vp-controls--mobile .vp-controls__group--left { gap: 16px; }
+  .vp-menu__item { padding: 12px 14px; font-size: 14px; } /* vùng chạm ≥ 44px */
   .vp-root--idle { cursor: auto; }
+}
+/* Điện thoại nhỏ (≤ 380px): thu gọn khoảng cách để hàng nút không tràn khỏi player */
+@media (max-width: 380px) {
+  .vp-controls--mobile { padding-left: 10px; padding-right: 10px; }
+  .vp-controls__group, .vp-controls--mobile .vp-controls__group--left { gap: 12px; }
 }
 @supports not (height: 100dvh) {
   .vp-root--fake-fs { height: 100vh; }

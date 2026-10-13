@@ -49,6 +49,22 @@ export default function PlayerControls({
     })),
   ];
 
+  const hasQuality = quality.levels.length > 1;
+  const qualitySection = {
+    title: "Chất lượng",
+    items: qualityItems,
+    activeId: quality.level,
+    onSelect: quality.onSelect,
+  };
+  const speedSection = {
+    title: "Tốc độ phát",
+    items: SPEED_ITEMS,
+    activeId: speed.rate,
+    onSelect: speed.onSelect,
+  };
+  const qualityHeight =
+    quality.level !== -1 ? quality.levels.find((l) => l.index === quality.level)?.height : null;
+
   return (
     <motion.div
       className={`vp-controls${isMobile ? " vp-controls--mobile" : ""}`}
@@ -137,47 +153,60 @@ export default function PlayerControls({
             />
           )}
 
-          <MenuDropdown
-            open={menu.open === "speed"}
-            onClose={menu.close}
-            title="Tốc độ phát"
-            minWidth={130}
-            items={SPEED_ITEMS}
-            activeId={speed.rate}
-            onSelect={speed.onSelect}
-            trigger={
-              <button
-                className={`vp-ctrl-btn vp-ctrl-btn--pill${speed.rate !== 1 ? " is-active" : ""}`}
-                title="Tốc độ phát"
-                onClick={() => menu.toggle("speed")}
-              >
-                <Gauge size={18} />
-                {speed.rate !== 1 && <span>{speed.rate}x</span>}
-              </button>
-            }
-          />
-
-          {quality.levels.length > 1 && (
+          {isMobile ? (
+            // Mobile: gộp Chất lượng + Tốc độ vào 1 nút → hàng điều khiển không bị tràn, nút luôn thấy được
             <MenuDropdown
-              open={menu.open === "quality"}
+              open={menu.open === "settings"}
               onClose={menu.close}
-              title="Chất lượng"
-              items={qualityItems}
-              activeId={quality.level}
-              onSelect={quality.onSelect}
+              minWidth={190}
+              sections={hasQuality ? [qualitySection, speedSection] : [speedSection]}
               trigger={
                 <button
-                  className={`vp-ctrl-btn vp-ctrl-btn--pill${quality.level !== -1 ? " is-active" : ""}`}
-                  title="Chất lượng"
-                  onClick={() => menu.toggle("quality")}
+                  className={`vp-ctrl-btn${speed.rate !== 1 || qualityHeight ? " is-active" : ""}`}
+                  title="Cài đặt"
+                  onClick={() => menu.toggle("settings")}
                 >
-                  <Settings size={18} />
-                  {quality.level !== -1 && (
-                    <span>{quality.levels.find((l) => l.index === quality.level)?.height}p</span>
-                  )}
+                  <Settings size={19} />
                 </button>
               }
             />
+          ) : (
+            <>
+              <MenuDropdown
+                open={menu.open === "speed"}
+                onClose={menu.close}
+                minWidth={130}
+                sections={[speedSection]}
+                trigger={
+                  <button
+                    className={`vp-ctrl-btn vp-ctrl-btn--pill${speed.rate !== 1 ? " is-active" : ""}`}
+                    title="Tốc độ phát"
+                    onClick={() => menu.toggle("speed")}
+                  >
+                    <Gauge size={18} />
+                    {speed.rate !== 1 && <span>{speed.rate}x</span>}
+                  </button>
+                }
+              />
+
+              {hasQuality && (
+                <MenuDropdown
+                  open={menu.open === "quality"}
+                  onClose={menu.close}
+                  sections={[qualitySection]}
+                  trigger={
+                    <button
+                      className={`vp-ctrl-btn vp-ctrl-btn--pill${quality.level !== -1 ? " is-active" : ""}`}
+                      title="Chất lượng"
+                      onClick={() => menu.toggle("quality")}
+                    >
+                      <Settings size={18} />
+                      {qualityHeight && <span>{qualityHeight}p</span>}
+                    </button>
+                  }
+                />
+              )}
+            </>
           )}
 
           <button

@@ -9,12 +9,12 @@ export default function SubtitleOverlay({ cue, visible, controlsShown, isFullscr
       {visible && cue && (
         <motion.div
           key={cue.start}
-          className="vp-subtitle-overlay"
+          // Vị trí dọc do CSS quyết định (kể cả fullscreen) → chỉ cần bật/tắt modifier
+          className={`vp-subtitle-overlay${controlsShown ? " vp-subtitle-overlay--lifted" : ""}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
-          style={{ bottom: controlsShown ? 78 : 24 }}
         >
           {cue.text.split("\n").map((line, i) => (
             <div key={i} className="vp-subtitle-line" style={{ fontSize }}>

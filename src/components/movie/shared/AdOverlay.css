@@ -1,0 +1,157 @@
+/* src/components/shared/AdOverlay.css
+   Style cho AdOverlay. Phẳng, đen/trắng/xám (xem ghi chú thiết kế trong AdOverlay.jsx).
+   Responsive qua modifier `--compact` (mobile/cảm ứng) và `--lifted` (thanh điều khiển đang hiện). */
+
+.ad-overlay {
+  --ad-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --ad-scrim: rgba(0, 0, 0, 0.75);
+  --ad-hairline: 1px solid rgba(255, 255, 255, 0.14);
+  --ad-text: #fff;
+  --ad-text-dim: rgba(255, 255, 255, 0.62);
+  --ad-text-faint: rgba(255, 255, 255, 0.42);
+
+  /* Khoảng cách tới mép player. "lifted" = chừa chỗ cho thanh điều khiển. */
+  --ad-edge: 24px;
+  --ad-top: 20px;
+  --ad-bottom: 24px;
+  --ad-bottom-lifted: 80px;
+
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  font-family: var(--ad-font);
+}
+
+.ad-overlay--compact {
+  --ad-edge: 12px;
+  --ad-top: 12px;
+  --ad-bottom: 12px;
+  --ad-bottom-lifted: 72px;
+}
+
+/* ── Hàng trên ── */
+.ad-overlay__label {
+  position: absolute;
+  top: var(--ad-top);
+  left: var(--ad-edge);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.ad-overlay__label-title { font-weight: 600; color: var(--ad-text); letter-spacing: 0.01em; }
+.ad-overlay__label-time { color: var(--ad-text-faint); font-variant-numeric: tabular-nums; }
+
+.ad-overlay__premium {
+  position: absolute;
+  top: calc(var(--ad-top) - 2px);
+  right: var(--ad-edge);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ad-text-dim);
+  text-decoration: none;
+  pointer-events: all;
+}
+
+/* ── Hàng dưới: thẻ thương hiệu (trái) + nút skip/đếm ngược (phải) ──
+   Dùng flex thay vì 2 khối absolute độc lập → không bao giờ chồng lên nhau,
+   thẻ thương hiệu tự co + cắt chữ (ellipsis) khi hết chỗ. */
+.ad-overlay__bottom {
+  position: absolute;
+  left: var(--ad-edge);
+  right: var(--ad-edge);
+  bottom: var(--ad-bottom);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  transition: bottom 0.25s ease;
+}
+.ad-overlay--lifted .ad-overlay__bottom { bottom: var(--ad-bottom-lifted); }
+
+.ad-overlay__action {
+  flex-shrink: 0;
+  margin-left: auto; /* vẫn nằm bên phải kể cả khi không có thẻ thương hiệu */
+  pointer-events: all;
+}
+
+/* ── Thẻ thương hiệu ── */
+.ad-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 340px;
+  padding: 8px 12px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  text-decoration: none;
+  pointer-events: all;
+}
+.ad-brand__logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  object-fit: cover;
+  background: #fff;
+}
+.ad-brand__logo--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: var(--ad-hairline);
+}
+.ad-brand__text { display: flex; flex-direction: column; min-width: 0; }
+.ad-brand__name,
+.ad-brand__domain,
+.ad-brand__cta { white-space: nowrap; }
+.ad-brand__name,
+.ad-brand__domain { overflow: hidden; text-overflow: ellipsis; }
+.ad-brand__name { font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ad-text); }
+.ad-brand__domain { font-size: 11.5px; line-height: 1.3; color: var(--ad-text-faint); }
+.ad-brand__cta { font-size: 11.5px; font-weight: 600; line-height: 1.5; color: var(--ad-text-dim); }
+
+/* ── Nút skip / chip đếm ngược ── */
+.ad-skip,
+.ad-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 2px;
+  white-space: nowrap;
+  font-family: var(--ad-font);
+}
+.ad-skip {
+  border: none;
+  background: #fff;
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ad-chip { background: var(--ad-scrim); border: var(--ad-hairline); }
+.ad-chip__text { font-size: 12.5px; color: var(--ad-text-dim); }
+.ad-chip__text--faint { color: var(--ad-text-faint); }
+
+/* ── Compact (mobile / cảm ứng) ── */
+.ad-overlay--compact .ad-overlay__label,
+.ad-overlay--compact .ad-overlay__premium { font-size: 12px; }
+
+.ad-overlay--compact .ad-overlay__bottom { gap: 8px; }
+.ad-overlay--compact .ad-brand { gap: 8px; padding: 6px 8px; }
+.ad-overlay--compact .ad-brand__logo { width: 24px; height: 24px; }
+.ad-overlay--compact .ad-brand__name { font-size: 12.5px; }
+.ad-overlay--compact .ad-brand__domain { display: none; } /* giữ thẻ gọn: tên + "Tìm hiểu thêm" */
+.ad-overlay--compact .ad-brand__cta { font-size: 11px; line-height: 1.4; }
+
+.ad-overlay--compact .ad-skip,
+.ad-overlay--compact .ad-chip { padding: 8px 12px; gap: 6px; }
+.ad-overlay--compact .ad-skip { font-size: 12px; }
+.ad-overlay--compact .ad-chip__text { font-size: 11.5px; }
