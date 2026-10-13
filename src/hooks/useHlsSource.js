@@ -1,13 +1,14 @@
 // src/hooks/useHlsSource.js
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { shouldUseMse } from "../utils/hls";
+import { shouldUseMse, isHlsUrl } from "../utils/hls";
 
 const MAX_NET_RETRY = 3;
 
 /**
- * Gắn hls.js vào <video> khi trình duyệt hỗ trợ MSE (ưu tiên hls.js) (Chrome/Firefox/Edge).
- * Safari/iOS phát native nên hook này không làm gì.
+ * Gắn hls.js vào <video> khi trình duyệt hỗ trợ MSE (ưu tiên hls.js) (Chrome/Firefox/Edge/Android).
+ * Safari/iOS phát native: hls.js không chạy, nhưng hook vẫn tự đọc master playlist để có
+ * danh sách chất lượng (xem effect 4) và đổi chất lượng bằng cách đổi v.src.
  *
  * Trả về { useMse }:
  *   - true  → KHÔNG đặt thuộc tính src trên <video> (hls.js tự gắn blob MediaSource)
@@ -31,6 +32,8 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef,
   isAdRef.current = isAd;
   const lastTimeRef = useRef(0);
   const wasAdRef = useRef(false);
+  // Native HLS (iOS): { master: url, uris: Map<levelIndex, playlistUrl> }
+  const nativeRef = useRef(null);
 
   // Chất lượng: levels = [{ index, height, bitrate }] giảm dần; level = -1 (Tự động) hoặc index
   const [levels, setLevels] = useState([]);
@@ -140,27 +143,98 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef,
     hls.startLoad(lastTimeRef.current);
   }, [isAd, useMse, videoRef]);
 
+  // 4) Native HLS (iOS/Safari): hls.js không chạy → tự đọc master playlist để có menu chất lượng.
+  //    Lỗi CORS/mạng/không phải master playlist → levels rỗng → menu chỉ còn "Tốc độ phát".
+  useEffect(() => {
+    nativeRef.current = null;
+    if (useMse || !url || !(isHls ?? isHlsUrl(url))) return;
+    let cancelled = false;
+    setLevels([]);
+    setLevelState(-1);
+    setAutoHeight(null);
+
+    fetch(url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((txt) => {
+        if (cancelled) return;
+        const lines = txt.split(/\r?\n/);
+        const found = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (!lines[i].startsWith("#EXT-X-STREAM-INF")) continue;
+          const bitrate = +(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] || 0);
+          const height = +(/RESOLUTION=\d+x(\d+)/.exec(lines[i])?.[1] || 0);
+          let j = i + 1;
+          while (j < lines.length && (!lines[j].trim() || lines[j].startsWith("#"))) j++;
+          if (lines[j]) {
+            found.push({ height, bitrate, uri: new URL(lines[j].trim(), url).href });
+          }
+        }
+        found.sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
+        const uris = new Map();
+        const list = found.map((f, index) => {
+          uris.set(index, f.uri);
+          return { index, height: f.height, bitrate: f.bitrate };
+        });
+        nativeRef.current = { master: url, uris };
+        setLevels(list);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      nativeRef.current = null;
+    };
+  }, [url, isHls, useMse]);
+
+  // Native: sau quảng cáo, resumeContent() đặt lại src = master → quay về "Tự động"
+  useEffect(() => {
+    if (!useMse && !isAd) setLevelState(-1);
+  }, [isAd, useMse]);
+
   // -1 = tự động (ABR); >=0 = khoá cố định 1 level
   //
-  // QUAN TRỌNG: dùng `nextLevel` thay vì `currentLevel` khi ép 1 level cụ thể.
+  // MSE: dùng `nextLevel` thay vì `currentLevel` khi ép 1 level cụ thể.
   // `currentLevel = idx` sẽ FLUSH buffer đang phát và load lại ngay tại vị trí
-  // hiện tại ở level mới → gây giật/đứng hình 1 nhịp (đây là nguyên nhân chính
-  // của hiện tượng lag khi đổi chất lượng).
-  // `nextLevel = idx` chỉ áp dụng level mới cho fragment load TIẾP THEO, buffer
-  // cũ vẫn phát tiếp bình thường → chuyển mượt, không giật hình.
-  // Khi về "Tự động" (idx === -1) thì set `currentLevel = -1` để hls.js lấy lại
-  // quyền ABR ngay (không có buffer "sai" để flush nên không gây giật).
-  const setLevel = useCallback((idx) => {
-    setLevelState(idx);
-    const hls = hlsRef.current;
-    if (!hls) return;
+  // hiện tại ở level mới → gây giật/đứng hình 1 nhịp.
+  // `nextLevel = idx` chỉ áp dụng level mới cho fragment load TIẾP THEO → chuyển mượt.
+  // Về "Tự động" (idx === -1) thì set `currentLevel = -1` để hls.js lấy lại quyền ABR.
+  //
+  // Native (iOS): Safari không cho JS chọn level → đổi v.src sang playlist của level đó,
+  // giữ lại vị trí và trạng thái phát.
+  const setLevel = useCallback(
+    (idx) => {
+      setLevelState(idx);
 
-    if (idx === -1) {
-      hls.currentLevel = -1; // trả về ABR tự động
-    } else {
-      hls.nextLevel = idx; // ép chất lượng, nhưng chuyển mượt không flush buffer
-    }
-  }, []);
+      const nat = nativeRef.current;
+      if (nat) {
+        const v = videoRef.current;
+        const target = idx === -1 ? nat.master : nat.uris.get(idx);
+        if (!v || !target || isAdRef.current) return;
+        const t = v.currentTime;
+        const wasPlaying = !v.paused;
+        v.addEventListener(
+          "loadedmetadata",
+          () => {
+            v.currentTime = t;
+            if (wasPlaying) v.play().catch(() => {});
+          },
+          { once: true },
+        );
+        v.src = target;
+        v.load();
+        return;
+      }
+
+      const hls = hlsRef.current;
+      if (!hls) return;
+      if (idx === -1) {
+        hls.currentLevel = -1; // trả về ABR tự động
+      } else {
+        hls.nextLevel = idx; // ép chất lượng, nhưng chuyển mượt không flush buffer
+      }
+    },
+    [videoRef],
+  );
 
   return { useMse, levels, level, setLevel, autoHeight };
 }
