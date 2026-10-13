@@ -1,9 +1,13 @@
 /* src/components/player/controls/menu.css
    Menu dropdown của player (Phụ đề / Cài đặt) — phong cách Netflix.
+   2 chế độ:
+     .vp-menu                → popover nổi trên nút (desktop)
+     .vp-menu.vp-menu--sheet → panel gắn góc phải trong player (điện thoại / player nhỏ)
    Prefix `.vp-root` để thắng các rule menu cũ trong player.css (có thể xoá block cũ đó). */
 
 .vp-root .vp-menu-anchor { position: relative; }
 
+/* ── Khung menu (popover) ── */
 .vp-root .vp-menu {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -15,7 +19,7 @@
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-  background: rgba(24, 24, 24, 0.96);
+  background: rgba(24, 24, 24, 0.97);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -27,10 +31,29 @@
 .vp-root .vp-menu::-webkit-scrollbar { width: 6px; }
 .vp-root .vp-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 3px; }
 
+/* ── Chế độ sheet: gắn góc phải dưới TRONG player, không phụ thuộc vị trí nút ── */
+.vp-root .vp-menu.vp-menu--sheet {
+  top: auto;
+  left: auto;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: 10px;
+  width: min(300px, calc(100% - 20px));
+  max-width: none;
+  max-height: calc(100% - 20px); /* luôn nằm gọn trong player; dài hơn thì cuộn bên trong */
+  transform-origin: bottom right;
+}
+/* Lớp mờ phía sau sheet: chạm ra ngoài để đóng */
+.vp-root .vp-menu-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 49;
+  background: rgba(0, 0, 0, 0.4);
+}
+
 /* Icon trong menu không bao giờ co / xuống dòng */
 .vp-root .vp-menu svg { display: block; flex-shrink: 0; }
 
-/* ── Dòng ở menu chính: "Tên ........ giá trị ›" ── */
+/* ── Dòng ở menu chính: "Tên ........ giá trị ›" và lựa chọn trong panel ── */
 .vp-root .vp-menu__row,
 .vp-root .vp-menu__option {
   display: flex;
@@ -62,22 +85,27 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  max-width: 60%;
   font-size: 13px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.5);
 }
+.vp-root .vp-menu__value-text { overflow: hidden; text-overflow: ellipsis; }
 .vp-root .vp-menu__row:hover .vp-menu__value { color: rgba(255, 255, 255, 0.8); }
 
-/* ── Tiêu đề / nút quay lại ── */
+/* ── Tiêu đề / nút quay lại (dính trên cùng khi danh sách cuộn) ── */
 .vp-root .vp-menu__head {
+  position: sticky;
+  top: -6px; /* bù padding trên của .vp-menu */
+  z-index: 1;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
   width: 100%;
   padding: 8px 14px 10px;
-  margin: 0 0 4px;
-  background: transparent;
+  margin: -6px 0 4px;
+  background: rgb(24, 24, 24);
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   font-family: var(--vp-font);
@@ -87,9 +115,9 @@
   text-align: left;
 }
 .vp-root .vp-menu__head--back { cursor: pointer; padding-left: 8px; transition: background 0.12s ease; }
-.vp-root .vp-menu__head--back:hover { background: rgba(255, 255, 255, 0.08); }
+.vp-root .vp-menu__head--back:hover { background: rgb(40, 40, 40); }
 
-/* ── Lựa chọn trong panel: dấu tick bên trái như Netflix ── */
+/* ── Dấu tick bên trái như Netflix ── */
 .vp-root .vp-menu__option { gap: 6px; }
 .vp-root .vp-menu__check {
   display: flex;
@@ -119,9 +147,9 @@
   .vp-root .vp-menu__option { min-height: 48px; font-size: 15px; }
   .vp-root .vp-menu__head { font-size: 16px; padding-top: 10px; padding-bottom: 12px; }
 }
-/* Màn hình thấp (điện thoại xoay ngang): gọn lại để khỏi phải cuộn nhiều */
-@media (max-height: 420px) {
-  .vp-root .vp-menu__row,
-  .vp-root .vp-menu__option { min-height: 38px; font-size: 13px; }
-  .vp-root .vp-menu__head { padding-top: 6px; padding-bottom: 8px; font-size: 14px; }
-}
+
+/* ── Player rất thấp (điện thoại cầm dọc / xoay ngang nhỏ): thu gọn để thấy nhiều dòng hơn ──
+   Đặt cuối + specificity cao hơn để thắng rule cảm ứng ở trên. */
+.vp-root .vp-menu.vp-menu--dense .vp-menu__row,
+.vp-root .vp-menu.vp-menu--dense .vp-menu__option { min-height: 40px; font-size: 14px; }
+.vp-root .vp-menu.vp-menu--dense .vp-menu__head { font-size: 14px; padding-top: 8px; padding-bottom: 8px; }

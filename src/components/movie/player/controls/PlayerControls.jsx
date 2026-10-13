@@ -158,6 +158,7 @@ export default function PlayerControls({
             <MenuDropdown
               open={menu.open === "sub"}
               onClose={menu.close}
+              onActivity={onActivity}
               title="Phụ đề"
               minWidth={175}
               items={subItems}
@@ -180,6 +181,7 @@ export default function PlayerControls({
           <MenuDropdown
             open={menu.open === "settings"}
             onClose={menu.close}
+            onActivity={onActivity}
             minWidth={isMobile ? 200 : 230}
             panels={settingsPanels}
             trigger={
