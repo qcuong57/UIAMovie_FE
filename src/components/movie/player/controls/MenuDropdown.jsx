@@ -1,26 +1,28 @@
 // src/components/player/controls/MenuDropdown.jsx
-// Dropdown dùng chung cho Phụ đề / Tốc độ / Chất lượng / Cài đặt. Tự đóng khi click ra ngoài.
-// Chiều cao tối đa được đo theo khoảng trống phía trên nút → menu dài vẫn cuộn được
-// thay vì bị player (overflow: hidden) cắt mất, nhất là khi xem dọc trên điện thoại.
-import React, { useLayoutEffect, useRef, useState } from "react";
+// Dropdown dùng chung (Phụ đề / Cài đặt). Tự đóng khi click ra ngoài.
+// 2 kiểu dùng:
+//  - items:  1 danh sách phẳng (vd. Phụ đề)
+//  - panels: kiểu Netflix/YouTube — menu chính liệt kê panel, bấm vào để mở panel con có nút quay lại
+// Chiều cao tối đa đo theo khoảng trống phía trên nút → menu dài vẫn cuộn được trong player.
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import useClickOutside from "../../../../hooks/useClickOutside";
+import "./menu.css";
 
-const MENU_OFFSET = 10; // khớp `bottom: calc(100% + 10px)` trong player.css
-const EDGE_GAP = 8; // chừa mép trên player
+const MENU_OFFSET = 10; // khớp `bottom: calc(100% + 10px)` trong menu.css
+const EDGE_GAP = 8;
 const MIN_MENU_HEIGHT = 96;
 
 /**
  * @typedef {{ id: any, label: string, badge?: string }} MenuItem
- * @typedef {{ title: string, items: MenuItem[], activeId: any, onSelect: (id: any) => void }} MenuSection
+ * @typedef {{ id: string, title: string, value?: string, items: MenuItem[], activeId: any, onSelect: (id:any)=>void }} MenuPanel
  *
  * @param {{
  *   open: boolean, onClose: () => void,
- *   trigger: React.ReactNode,                       // nút mở menu (cha tự xử lý onClick)
- *   sections?: MenuSection[],                       // nhiều nhóm trong 1 menu (vd. Chất lượng + Tốc độ)
- *   title?: string, items?: MenuItem[],             // rút gọn cho menu 1 nhóm
- *   activeId?: any, onSelect?: (id: any) => void,
+ *   trigger: React.ReactNode,
+ *   panels?: MenuPanel[],
+ *   title?: string, items?: MenuItem[], activeId?: any, onSelect?: (id:any)=>void,
  *   minWidth?: number,
  * }} p
  */
@@ -28,18 +30,22 @@ export default function MenuDropdown({
   open,
   onClose,
   trigger,
-  sections,
+  panels,
   title,
   items,
   activeId,
   onSelect,
-  minWidth,
+  minWidth = 220,
 }) {
   const ref = useRef(null);
   const [maxHeight, setMaxHeight] = useState(null);
+  const [view, setView] = useState(null); // null = menu chính; string = id panel đang mở
   useClickOutside(ref, onClose, open);
 
-  const groups = sections ?? [{ title, items: items ?? [], activeId, onSelect }];
+  // Đóng menu → lần mở sau quay về menu chính
+  useEffect(() => {
+    if (!open) setView(null);
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -52,9 +58,69 @@ export default function MenuDropdown({
       setMaxHeight(Math.max(room, MIN_MENU_HEIGHT));
     };
     measure();
-    window.addEventListener("resize", measure); // xoay màn hình / vào-ra fullscreen
+    window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [open]);
+
+  const activePanel = panels?.find((p) => p.id === view) ?? null;
+
+  const renderOptions = (list, selectedId, onPick) =>
+    list.map((it) => {
+      const active = it.id === selectedId;
+      return (
+        <button
+          key={String(it.id)}
+          type="button"
+          role="menuitemradio"
+          aria-checked={active}
+          className={`vp-menu__option${active ? " is-active" : ""}`}
+          onClick={() => {
+            onPick(it.id);
+            onClose();
+          }}
+        >
+          <span className="vp-menu__check">{active && <Check size={16} strokeWidth={3} />}</span>
+          <span className="vp-menu__text">{it.label}</span>
+          {it.badge && <span className="vp-menu__badge">{it.badge}</span>}
+        </button>
+      );
+    });
+
+  let body;
+  if (panels && activePanel) {
+    body = (
+      <>
+        <button type="button" className="vp-menu__head vp-menu__head--back" onClick={() => setView(null)}>
+          <ChevronLeft size={18} strokeWidth={2.5} />
+          <span>{activePanel.title}</span>
+        </button>
+        <div className="vp-menu__list">
+          {renderOptions(activePanel.items, activePanel.activeId, activePanel.onSelect)}
+        </div>
+      </>
+    );
+  } else if (panels) {
+    body = (
+      <div className="vp-menu__list">
+        {panels.map((p) => (
+          <button key={p.id} type="button" className="vp-menu__row" onClick={() => setView(p.id)}>
+            <span className="vp-menu__text">{p.title}</span>
+            <span className="vp-menu__value">
+              <span className="vp-menu__value-text">{p.value}</span>
+              <ChevronRight size={16} strokeWidth={2.5} />
+            </span>
+          </button>
+        ))}
+      </div>
+    );
+  } else {
+    body = (
+      <>
+        {title && <div className="vp-menu__head">{title}</div>}
+        <div className="vp-menu__list">{renderOptions(items ?? [], activeId, onSelect)}</div>
+      </>
+    );
+  }
 
   return (
     <div ref={ref} className="vp-menu-anchor">
@@ -63,40 +129,24 @@ export default function MenuDropdown({
         {open && (
           <motion.div
             className="vp-menu"
-            style={{ minWidth, maxHeight: maxHeight ?? undefined }}
-            initial={{ opacity: 0, y: 6, scale: 0.97 }}
+            role="menu"
+            style={{ width: minWidth, maxHeight: maxHeight ?? undefined }}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.97 }}
-            transition={{ duration: 0.14 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
           >
-            {groups.map((group, gi) => (
-              <div key={group.title ?? gi} className="vp-menu__section">
-                <div className="vp-menu__header">
-                  <p className="vp-menu__title">{group.title}</p>
-                </div>
-                {group.items.map((it) => {
-                  const active = it.id === group.activeId;
-                  return (
-                    <button
-                      key={`${gi}-${String(it.id)}`}
-                      className={`vp-menu__item${active ? " is-active" : ""}`}
-                      onClick={() => {
-                        group.onSelect(it.id);
-                        onClose();
-                      }}
-                    >
-                      <span className="vp-menu__label">
-                        {it.badge && <span className="vp-menu__badge">{it.badge}</span>}
-                        {it.label}
-                      </span>
-                      {active && (
-                        <Check size={14} strokeWidth={2.75} style={{ color: "var(--vp-accent)" }} />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={view ?? "root"}
+                initial={{ opacity: 0, x: view ? 18 : -18 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+              >
+                {body}
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

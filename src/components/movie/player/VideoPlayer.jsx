@@ -78,6 +78,8 @@ export default function VideoPlayer({
   const videoRef = useRef(null);
   const wrapRef = useRef(null);
   const saveRef = useRef(null);
+  const tapRef = useRef({ t: 0, side: null, timer: null }); // double tap trái/phải = tua 10s
+  useEffect(() => () => clearTimeout(tapRef.current.timer), []);
 
   // Menu đang mở: "sub" | "speed" | "quality" | "settings" (mobile) | null — mở cái này tự đóng cái kia
   const [openMenu, setOpenMenu] = useState(null);
@@ -181,12 +183,34 @@ export default function VideoPlayer({
   });
 
   // Mobile: chạm video chỉ hiện/ẩn controls (tránh pause nhầm); desktop: toggle play
-  const handleVideoTap = () => {
+  const handleVideoTap = (e) => {
     if (isAd) return;
     // Desktop, hoặc lần chạm đầu khi chưa phát (phải play() ngay trong user gesture của iOS)
     if (!isMobile || (!core.hasStarted && videoRef.current?.paused)) return core.togglePlay();
-    if (!show) resetTimer();
-    else hideNow();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // 40% trái = lùi, 40% phải = tiến, 20% giữa = không tua
+    const side = x < rect.width * 0.4 ? "back" : x > rect.width * 0.6 ? "fwd" : "mid";
+    const now = Date.now();
+    const tap = tapRef.current;
+
+    // Chạm lần 2 (3, 4… để tua liên tục) trong 300ms, cùng một bên → tua 10s
+    if (side !== "mid" && tap.side === side && now - tap.t < 300) {
+      clearTimeout(tap.timer);
+      tap.t = now;
+      core.skipBy(side === "back" ? -10 : 10);
+      return;
+    }
+
+    // Chạm đơn: chờ 260ms xem có phải double tap không rồi mới hiện/ẩn controls
+    tap.t = now;
+    tap.side = side;
+    clearTimeout(tap.timer);
+    tap.timer = setTimeout(() => {
+      if (!show) resetTimer();
+      else hideNow();
+    }, 260);
   };
 
   // Bấm nút trong popup = user gesture → play() ngay (iOS bắt buộc)

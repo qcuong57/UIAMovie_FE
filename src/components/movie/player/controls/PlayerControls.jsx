@@ -3,7 +3,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
   Play, Pause, Volume1, Volume2, VolumeX, Maximize,
-  SkipBack, SkipForward, Subtitles, Gauge, Settings,
+  SkipBack, SkipForward, Subtitles, Settings,
 } from "lucide-react";
 import ProgressBar from "./ProgressBar";
 import MenuDropdown from "./MenuDropdown";
@@ -50,20 +50,43 @@ export default function PlayerControls({
   ];
 
   const hasQuality = quality.levels.length > 1;
-  const qualitySection = {
-    title: "Chất lượng",
-    items: qualityItems,
-    activeId: quality.level,
-    onSelect: quality.onSelect,
-  };
-  const speedSection = {
-    title: "Tốc độ phát",
-    items: SPEED_ITEMS,
-    activeId: speed.rate,
-    onSelect: speed.onSelect,
-  };
   const qualityHeight =
     quality.level !== -1 ? quality.levels.find((l) => l.index === quality.level)?.height : null;
+
+  // Giá trị hiện tại hiện bên phải mỗi dòng ở menu chính (giống YouTube)
+  const speedLabel = speed.rate === 1 ? "Bình thường" : `${speed.rate}x`;
+  const qualityLabel =
+    quality.level === -1
+      ? quality.autoHeight
+        ? `Tự động (${quality.autoHeight}p)`
+        : "Tự động"
+      : qualityHeight
+        ? `${qualityHeight}p`
+        : qualityItems.find((i) => i.id === quality.level)?.label ?? "Tự động";
+
+  // Menu cài đặt kiểu YouTube: Chất lượng + Tốc độ phát → bấm vào mở panel con
+  const settingsPanels = [
+    ...(hasQuality
+      ? [
+          {
+            id: "quality",
+            title: "Chất lượng",
+            value: qualityLabel,
+            items: qualityItems,
+            activeId: quality.level,
+            onSelect: quality.onSelect,
+          },
+        ]
+      : []),
+    {
+      id: "speed",
+      title: "Tốc độ phát",
+      value: speedLabel,
+      items: SPEED_ITEMS,
+      activeId: speed.rate,
+      onSelect: speed.onSelect,
+    },
+  ];
 
   return (
     <motion.div
@@ -153,61 +176,22 @@ export default function PlayerControls({
             />
           )}
 
-          {isMobile ? (
-            // Mobile: gộp Chất lượng + Tốc độ vào 1 nút → hàng điều khiển không bị tràn, nút luôn thấy được
-            <MenuDropdown
-              open={menu.open === "settings"}
-              onClose={menu.close}
-              minWidth={190}
-              sections={hasQuality ? [qualitySection, speedSection] : [speedSection]}
-              trigger={
-                <button
-                  className={`vp-ctrl-btn${speed.rate !== 1 || qualityHeight ? " is-active" : ""}`}
-                  title="Cài đặt"
-                  onClick={() => menu.toggle("settings")}
-                >
-                  <Settings size={19} />
-                </button>
-              }
-            />
-          ) : (
-            <>
-              <MenuDropdown
-                open={menu.open === "speed"}
-                onClose={menu.close}
-                minWidth={130}
-                sections={[speedSection]}
-                trigger={
-                  <button
-                    className={`vp-ctrl-btn vp-ctrl-btn--pill${speed.rate !== 1 ? " is-active" : ""}`}
-                    title="Tốc độ phát"
-                    onClick={() => menu.toggle("speed")}
-                  >
-                    <Gauge size={18} />
-                    {speed.rate !== 1 && <span>{speed.rate}x</span>}
-                  </button>
-                }
-              />
-
-              {hasQuality && (
-                <MenuDropdown
-                  open={menu.open === "quality"}
-                  onClose={menu.close}
-                  sections={[qualitySection]}
-                  trigger={
-                    <button
-                      className={`vp-ctrl-btn vp-ctrl-btn--pill${quality.level !== -1 ? " is-active" : ""}`}
-                      title="Chất lượng"
-                      onClick={() => menu.toggle("quality")}
-                    >
-                      <Settings size={18} />
-                      {qualityHeight && <span>{qualityHeight}p</span>}
-                    </button>
-                  }
-                />
-              )}
-            </>
-          )}
+          {/* Cài đặt kiểu YouTube (desktop + mobile): Chất lượng / Tốc độ phát */}
+          <MenuDropdown
+            open={menu.open === "settings"}
+            onClose={menu.close}
+            minWidth={isMobile ? 200 : 230}
+            panels={settingsPanels}
+            trigger={
+              <button
+                className={`vp-ctrl-btn${speed.rate !== 1 || qualityHeight ? " is-active" : ""}`}
+                title="Cài đặt"
+                onClick={() => menu.toggle("settings")}
+              >
+                <Settings size={19} />
+              </button>
+            }
+          />
 
           <button
             className="vp-ctrl-btn"

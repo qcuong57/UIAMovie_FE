@@ -45,6 +45,9 @@ export default function useVideoPlayerCore({
   const [muted, setMuted] = useState(false);
   const [vol, setVol] = useState(80);
   const [playbackRate, setPlaybackRate] = useState(1);
+  // Giữ tốc độ mới nhất trong ref để listener áp lại mà không phải gắn lại effect
+  const rateRef = useRef(1);
+  rateRef.current = playbackRate;
   const [progress, setProgress] = useState(0); // %
   const [buffered, setBuffered] = useState(0); // %
   const [duration, setDuration] = useState(0);
@@ -169,7 +172,18 @@ export default function useVideoPlayerCore({
       setVideoError(info);
     };
 
+    // Đổi nguồn (load(), swap ad → phim, hls.js attach) làm trình duyệt reset playbackRate về
+    // defaultPlaybackRate → áp lại tốc độ người dùng đã chọn cho nội dung chính.
+    const reapplyRate = () => {
+      if (adNow()) return;
+      v.defaultPlaybackRate = rateRef.current;
+      if (v.playbackRate !== rateRef.current) v.playbackRate = rateRef.current;
+    };
+
     const events = {
+      loadstart: reapplyRate,
+      loadeddata: reapplyRate,
+      playing: reapplyRate,
       timeupdate: onTimeUpdate,
       durationchange: onDurationChange,
       progress: onBufferProgress,
@@ -196,8 +210,11 @@ export default function useVideoPlayerCore({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.playbackRate = isAd ? 1 : playbackRate;
-  }, [videoRef, playbackRate, isAd, hasVideo]);
+    const rate = isAd ? 1 : playbackRate;
+    // defaultPlaybackRate: load()/đổi src sẽ reset playbackRate về giá trị này, nên đặt cả hai
+    v.defaultPlaybackRate = rate;
+    v.playbackRate = rate;
+  }, [videoRef, playbackRate, isAd, hasVideo, videoUrl, useMse]);
 
   useEffect(
     () => () => {
