@@ -7,7 +7,8 @@ import NextEpisodeCountdown from "./NextEpisodeCountdown";
 import playbackService from "../../../services/playbackService";
 import tvShowService from "../../../services/tvShowService";
 import episodeSubtitleService from "../../../services/episodeSubtitleService";
-import useResumeOffer, { toResumeSeconds, resumeLog } from "../../../hooks/useResumeOffer";
+import useResumeOffer, { toResumeSeconds, toStartAt, resumeLog } from "../../../hooks/useResumeOffer";
+import { flushEpisodeProgress } from "../../../services/watchProgressFlush";
 import { C } from "../ui/movieConstants";
 
 // Normalize bất kỳ TMDB size nào → w1280
@@ -28,8 +29,8 @@ export default function EpisodeVideoPlayer({
     completed: location.state?.isCompleted,
   });
 
-  // Không có resume từ Lịch sử xem (hoặc sai tập) → hỏi server, hiện popup "xem tiếp"
-  const resumeOffer = useResumeOffer({
+  // Không có resume từ Lịch sử xem (hoặc sai tập) → hỏi server; player chỉ load sau khi có câu trả lời
+  const { seconds: offer, loaded } = useResumeOffer({
     enabled: isLoggedIn && resumeSeconds === 0 && !!tvShow?.id && !!episode?.id,
     id: episode?.id,
     load: async () => {
@@ -44,16 +45,19 @@ export default function EpisodeVideoPlayer({
       resumeLog("bản ghi tìm thấy", h);
       return toResumeSeconds({
         seconds: h.progressSeconds,
-        totalSec: (h.episodeRuntime ?? episode.runtime ?? 0) * 60,
+        totalSec: h.durationSeconds > 0 ? h.durationSeconds : (h.episodeRuntime ?? episode.runtime ?? 0) * 60,
         completed: h.isCompleted,
       }, "tập");
     },
   });
 
+  // Tự phát tiếp (không popup), lùi vài giây cho người xem nhớ ngữ cảnh
+  const startAt = toStartAt(resumeSeconds > 0 ? resumeSeconds : offer);
+
   return (
     <VideoPlayer
       key={episode?.id} // đổi tập → remount → lưu tiến độ tập cũ đúng
-      playbackKey={tvShow?.id && episode?.id ? `${tvShow.id}:${episode.id}` : null}
+      playbackKey={loaded && tvShow?.id && episode?.id ? `${tvShow.id}:${episode.id}` : null} // chờ lịch sử xong mới load
       playbackLoader={() => playbackService.getEpisodePlayback(tvShow.id, episode.id)}
       adContent={{ type: "Episode", id: episode?.id, parentId: tvShow?.id }}
       isFreeUser={isFreeUser}
@@ -62,8 +66,7 @@ export default function EpisodeVideoPlayer({
       backdropUrl={tmdbImg(episode?.stillUrl ?? tvShow?.backdropUrl ?? null)}
       accent={C.accent}
       fallbackDurationSec={episode?.runtime ? episode.runtime * 60 : 0}
-      resumeSeconds={0} // luôn để popup hỏi; vị trí do popup quyết định
-      resumeOffer={resumeSeconds > 0 ? resumeSeconds : resumeOffer}
+      resumeSeconds={startAt}
       skipMarkers={episode}
       onHeartbeat={(secs) =>
         playbackService.sendEpisodeHeartbeat(tvShow.id, episode.id, secs)
@@ -71,11 +74,22 @@ export default function EpisodeVideoPlayer({
       onHeartbeatFlush={(secs) =>
         playbackService.flushEpisodeHeartbeat(tvShow.id, episode.id, secs)
       }
-      onSaveProgress={({ seconds, completed }) =>
+      onFlushProgress={({ seconds, completed, durationSeconds }) => {
+        if (!isLoggedIn) return;
+        flushEpisodeProgress({
+          tvShowId: tvShow.id,
+          episodeId: episode.id,
+          seconds,
+          durationSeconds,
+          completed,
+        });
+      }}
+      onSaveProgress={({ seconds, completed, durationSeconds }) =>
         tvShowService.updateWatchProgress({
           tvShowId: tvShow.id,
           episodeId: episode.id,
           progressSeconds: seconds,
+          durationSeconds, // duration thật từ player (không dùng runtime TMDB)
           isCompleted: completed,
         })
       }

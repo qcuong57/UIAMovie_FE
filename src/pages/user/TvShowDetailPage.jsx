@@ -341,6 +341,7 @@ export default function TvShowDetailPage() {
 
       {/* Nav */}
       <div
+        data-site-nav
         style={{
           position: "sticky",
           top: 0,

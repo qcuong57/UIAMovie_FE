@@ -471,20 +471,38 @@ const tvShowService = {
   },
 
   /**
+   * GET /api/tvshows/continue-watching — mỗi show 1 thẻ (bản ghi mới nhất).
+   * Show đã xem xong tập mới nhất → trả tập kế tiếp (progress 0); hết series → không có.
+   * @returns {TvShowWatchHistoryDTO[]}
+   */
+  getContinueWatching: async () => {
+    try {
+      const response = await axiosInstance.get('/tvshows/continue-watching');
+      const envelope = response.data ?? response;
+      return envelope?.data ?? envelope;
+    } catch (error) {
+      console.error('[tvShowService] Error fetching continue watching:', error);
+      throw error;
+    }
+  },
+
+  /**
    * POST /api/tvshows/history — cập nhật tiến trình xem.
    * Body: UpdateTvShowWatchProgressDTO { tvShowId, episodeId?, progressSeconds, isCompleted }
    * @param {Object}      dto
    * @param {string}      dto.tvShowId        - GUID
    * @param {string|null} dto.episodeId       - GUID hoặc null nếu track ở level show
    * @param {number}      dto.progressSeconds - số giây đã xem
+   * @param {number}     [dto.durationSeconds] - tổng thời lượng thật từ player
    * @param {boolean}     dto.isCompleted
    */
-  updateWatchProgress: async ({ tvShowId, episodeId, progressSeconds, isCompleted }) => {
+  updateWatchProgress: async ({ tvShowId, episodeId, progressSeconds, durationSeconds, isCompleted }) => {
     try {
       const response = await axiosInstance.post('/tvshows/history', {
         tvShowId,
         episodeId: episodeId ?? null,
         progressSeconds,
+        durationSeconds: durationSeconds > 0 ? durationSeconds : null,
         isCompleted,
       });
       return response.data ?? response;

@@ -42,7 +42,8 @@ import ResumePrompt from "./controls/ResumePrompt";
  *   accent?: string,                          // màu nhấn → CSS variable --vp-accent
  *   fallbackDurationSec?: number,
  *   resumeSeconds?: number,
- *   onSaveProgress?: (p: { seconds: number, completed: boolean }) => Promise<any> | void,
+ *   onSaveProgress?: (p: { seconds: number, completed: boolean, durationSeconds: number }) => Promise<any> | void,
+ *   onFlushProgress?: (p: { seconds: number, completed: boolean, durationSeconds: number }) => void, // đóng tab / pagehide
  *   skipMarkers?: { introStart, introEnd, recapStart, recapEnd },
  *   onHeartbeat?: (secondsSinceLastBeat: number) => Promise<{ isCountedAsView: boolean }>, // đếm view (BE)
  *   onHeartbeatFlush?: (secondsSinceLastBeat: number) => void, // gửi nốt giây dư khi đóng tab/đổi trang
@@ -65,6 +66,7 @@ export default function VideoPlayer({
   resumeSeconds = 0,
   resumeOffer = 0, // giây đã xem lấy từ server → hiện popup hỏi (chỉ khi resumeSeconds = 0)
   onSaveProgress,
+  onFlushProgress,
   skipMarkers,
   onHeartbeat,
   onHeartbeatFlush,
@@ -142,8 +144,11 @@ export default function VideoPlayer({
     videoRef,
     progressRef: core.progressRef,
     playing,
+    videoReady: hasVideo,
+    isAdPlayingRef: adManager.isAdPlayingRef,
     fallbackDurationSec: playback?.durationSeconds || fallbackDurationSec,
     onSave: onSaveProgress,
+    onFlush: onFlushProgress,
   });
   saveRef.current = save;
 

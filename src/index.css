@@ -38,3 +38,10 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* Fullscreen giả (iPhone): ẩn mọi navbar của site */
+html.vp-fs nav,
+html.vp-fs header,
+html.vp-fs [data-site-nav] {
+  display: none !important;
+}

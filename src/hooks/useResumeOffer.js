@@ -21,31 +21,45 @@ export function toResumeSeconds({ seconds, totalSec, completed }, tag = "") {
   return out;
 }
 
+export const REWIND_SEC = 5; // Netflix lùi vài giây khi resume để người xem nhớ lại ngữ cảnh
+
+/** Vị trí bắt đầu phát thật: lùi REWIND_SEC, không âm. */
+export const toStartAt = (sec) => (sec > REWIND_SEC ? sec - REWIND_SEC : 0);
+
 /**
  * @param {{ enabled: boolean, id: any, load: () => Promise<number> }} p
  *   id đổi → hỏi lại; load trả về số giây (đã qua toResumeSeconds)
+ * @returns {{ seconds: number, loaded: boolean }}
+ *   loaded = true khi đã có câu trả lời (hoặc không cần hỏi) → mới nên cho player load,
+ *   nếu không player chạy từ 0 rồi 15s sau ghi đè tiến độ cũ.
  */
 export default function useResumeOffer({ enabled, id, load }) {
-  const [seconds, setSeconds] = useState(0);
+  // Gắn kết quả với id đã hỏi → đổi id thì không dùng nhầm kết quả của nội dung cũ
+  const [state, setState] = useState({ id: null, seconds: 0 });
   const loadRef = useRef(load);
   loadRef.current = load;
 
   useEffect(() => {
-    setSeconds(0);
     resumeLog("bắt đầu hỏi lịch sử", { enabled, id });
-    if (!enabled || !id) return;
+    if (!enabled || !id) return undefined;
     let cancelled = false;
     Promise.resolve()
       .then(() => loadRef.current())
       .then((s) => {
-        resumeLog("kết quả (giây, 0 = không hỏi):", s);
-        if (!cancelled) setSeconds(Number(s) > 0 ? Number(s) : 0);
+        resumeLog("kết quả (giây, 0 = phát từ đầu):", s);
+        if (!cancelled) setState({ id, seconds: Number(s) > 0 ? Number(s) : 0 });
       })
-      .catch((e) => resumeLog("LỖI lấy lịch sử:", e?.response?.status, e?.message)); // chưa đăng nhập / lỗi mạng → phát từ đầu
+      .catch((e) => {
+        // chưa đăng nhập / lỗi mạng → phát từ đầu, nhưng vẫn phải mở khoá player
+        resumeLog("LỖI lấy lịch sử:", e?.response?.status, e?.message);
+        if (!cancelled) setState({ id, seconds: 0 });
+      });
     return () => {
       cancelled = true;
     };
   }, [enabled, id]);
 
-  return seconds;
+  if (!enabled || !id) return { seconds: 0, loaded: true };
+  const ready = state.id === id;
+  return { seconds: ready ? state.seconds : 0, loaded: ready };
 }

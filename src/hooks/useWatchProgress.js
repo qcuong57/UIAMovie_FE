@@ -18,6 +18,8 @@ const COMPLETE_RATIO = 0.95;
  *   isAdPlayingRef?: React.MutableRefObject<boolean>,
  *   fallbackDurationSec?: number,
  *   onSave?: (p: { seconds: number, completed: boolean, durationSeconds: number }) => Promise<any> | void,
+ *   onFlush?: (p: { seconds: number, completed: boolean, durationSeconds: number }) => void,
+ *     // gọi khi tab ẩn / pagehide (đóng tab, F5, kill app) — nên gửi bằng fetch keepalive
  * }} p
  * @returns {{ save: (pct: number, forceComplete?: boolean) => void }}
  */
@@ -29,9 +31,13 @@ export default function useWatchProgress({
   isAdPlayingRef,
   fallbackDurationSec = 0,
   onSave,
+  onFlush,
 }) {
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const onFlushRef = useRef(onFlush);
+  onFlushRef.current = onFlush;
+  const lastFlushedRef = useRef(-1);
   const fallbackRef = useRef(fallbackDurationSec);
   fallbackRef.current = fallbackDurationSec;
 
@@ -100,6 +106,33 @@ export default function useWatchProgress({
     }, SAVE_EVERY_MS);
     return () => clearInterval(id);
   }, [playing, save, progressRef, isAdPlayingRef]);
+
+  // Đóng tab / F5 / kill app mobile không chạy unmount → lưu khi tab ẩn hoặc pagehide.
+  // (iOS Safari không bắn beforeunload nên dùng pagehide.)
+  useEffect(() => {
+    const flush = () => {
+      if (!onFlushRef.current || isAdPlayingRef?.current) return;
+      const v = videoRef.current;
+      const cur = v && Number.isFinite(v.currentTime) && v.currentTime > 0 ? v.currentTime : lastTimeRef.current;
+      if (cur < 1) return;
+      const dur = lastDurRef.current || fallbackRef.current || 0;
+      const seconds = Math.floor(dur > 0 ? Math.min(cur, dur) : cur);
+      if (seconds === lastFlushedRef.current) return; // visibilitychange + pagehide cùng bắn → gửi 1 lần
+      lastFlushedRef.current = seconds;
+      onFlushRef.current({
+        seconds,
+        durationSeconds: Math.floor(dur),
+        completed: dur > 0 && seconds / dur >= COMPLETE_RATIO,
+      });
+    };
+    const onVis = () => document.visibilityState === "hidden" && flush();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [videoRef, isAdPlayingRef]);
 
   // Lưu khi unmount (đổi phim/tập, rời trang)
   useEffect(

@@ -57,7 +57,7 @@ export default function PlayerControls({
       exit={{ opacity: 0 }}
       onPointerDown={onActivity} // chạm vào controls → gia hạn thời gian tự ẩn
     >
-      <ProgressBar {...seekbar} isAd={isAd} locked={isAd} />
+      <ProgressBar {...seekbar} totalSec={time.totalSec} isAd={isAd} locked={isAd} onActivity={onActivity} />
 
       <div className="vp-controls__row">
         <div className="vp-controls__group vp-controls__group--left">

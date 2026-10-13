@@ -171,6 +171,7 @@ export default function MovieDetailPage() {
 
       {/* ── Nav bar ── */}
       <div
+        data-site-nav
         style={{
           position: "sticky",
           top: 0,

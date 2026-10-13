@@ -4,8 +4,7 @@
 // từ backend thành 1 shape thống nhất cho <ContinueWatchingSection />.
 //
 // LÝ DO CẦN FILE NÀY:
-// - WatchHistoryDTO lưu ProgressMinutes (phút), KHÔNG có tổng Duration của phim
-//   → không tự tính được % tiến trình hay "còn lại bao nhiêu phút" nếu thiếu duration.
+// - WatchHistoryDTO có ProgressSeconds (giây) + Duration (giây); ProgressMinutes chỉ còn để tương thích.
 // - TvShowWatchHistoryDTO lưu ProgressSeconds (giây) + có thể có EpisodeRuntime (phút).
 // - EpisodeId có thể null nếu user chưa từng xem tập cụ thể (track ở cấp show).
 //
@@ -14,17 +13,24 @@
 
 /**
  * @param {import('../services/movieService').WatchHistoryDTO} dto
- * @param {Map<string, number>} [movieDurationMap] - movieId -> duration (phút), nếu có
+ * @param {Map<string, number>} [movieDurationMap] - movieId -> duration (phút), chỉ dùng khi BE chưa có duration
  */
 export function mapMovieHistoryToItem(dto, movieDurationMap) {
-  const durationMinutes = movieDurationMap?.get(dto.movieId);
-  const progressMinutes = dto.progressMinutes ?? 0;
+  // BE trả ProgressSeconds (giây thật) + Duration (giây). Chỉ bản ghi rất cũ mới thiếu → rơi về phút.
+  const progressSeconds =
+    Number(dto.progressSeconds) > 0 ? Number(dto.progressSeconds) : (dto.progressMinutes ?? 0) * 60;
+
+  const mapMinutes = movieDurationMap?.get(dto.movieId);
+  const durationSeconds =
+    Number(dto.duration) > 0 ? Number(dto.duration) : mapMinutes > 0 ? mapMinutes * 60 : undefined;
 
   let progress; // %
   let remainingMinutes;
-  if (durationMinutes && durationMinutes > 0) {
-    progress = Math.min(100, Math.max(0, Math.round((progressMinutes / durationMinutes) * 100)));
-    remainingMinutes = Math.max(0, durationMinutes - progressMinutes);
+  if (durationSeconds) {
+    progress = Math.min(100, Math.max(0, Math.round((progressSeconds / durationSeconds) * 100)));
+    remainingMinutes = Math.max(0, Math.round((durationSeconds - progressSeconds) / 60));
+  } else if (Number(dto.progressPercentage) > 0) {
+    progress = Math.min(100, Math.round(Number(dto.progressPercentage)));
   }
 
   return {
@@ -38,11 +44,11 @@ export function mapMovieHistoryToItem(dto, movieDurationMap) {
     isCompleted: dto.isCompleted,
     watchedAt: dto.watchedAt,
 
-    // dữ liệu phục vụ progress bar + resume khi bấm Play
+    // dữ liệu phục vụ progress bar + resume khi bấm Play (đơn vị: giây)
     progress,
-    progressMinutes,
-    currentTime: progressMinutes * 60, // giây, để đồng nhất đơn vị với TV show khi cần
-    duration: durationMinutes ? durationMinutes * 60 : undefined,
+    progressMinutes: Math.floor(progressSeconds / 60),
+    currentTime: progressSeconds,
+    duration: durationSeconds,
     remainingMinutes,
   };
 }
@@ -53,13 +59,19 @@ export function mapMovieHistoryToItem(dto, movieDurationMap) {
 export function mapTvShowHistoryToItem(dto) {
   const progressSeconds = dto.progressSeconds ?? 0;
   const runtimeMinutes = dto.episodeRuntime; // phút, có thể null
+  // Ưu tiên duration thật từ player (BE đã fallback runtime * 60), thiếu mới dùng runtime TMDB
+  const durationSeconds =
+    Number(dto.durationSeconds) > 0
+      ? Number(dto.durationSeconds)
+      : runtimeMinutes > 0
+        ? runtimeMinutes * 60
+        : undefined;
 
   let progress;
   let remainingMinutes;
-  if (runtimeMinutes && runtimeMinutes > 0) {
-    const runtimeSeconds = runtimeMinutes * 60;
-    progress = Math.min(100, Math.max(0, Math.round((progressSeconds / runtimeSeconds) * 100)));
-    remainingMinutes = Math.max(0, Math.round((runtimeSeconds - progressSeconds) / 60));
+  if (durationSeconds) {
+    progress = Math.min(100, Math.max(0, Math.round((progressSeconds / durationSeconds) * 100)));
+    remainingMinutes = Math.max(0, Math.round((durationSeconds - progressSeconds) / 60));
   }
 
   return {
@@ -80,7 +92,7 @@ export function mapTvShowHistoryToItem(dto) {
 
     progress,
     currentTime: progressSeconds,
-    duration: runtimeMinutes ? runtimeMinutes * 60 : undefined,
+    duration: durationSeconds,
     remainingMinutes,
   };
 }
@@ -95,7 +107,16 @@ export function mapTvShowHistoryToItem(dto) {
  */
 export function buildContinueWatchingList(movieHistories = [], tvHistories = [], movieDurationMap) {
   const movieItems = movieHistories.map((h) => mapMovieHistoryToItem(h, movieDurationMap));
-  const tvItems = tvHistories.map(mapTvShowHistoryToItem);
+  // Mỗi show chỉ 1 thẻ: lấy bản ghi mới nhất rồi mới lọc completed
+  // (nếu dùng GET /tvshows/continue-watching thì BE đã làm sẵn, bước này vô hại)
+  const latestTv = Object.values(
+    tvHistories.reduce((acc, h) => {
+      const cur = acc[h.tvShowId];
+      if (!cur || new Date(h.watchedAt) > new Date(cur.watchedAt)) acc[h.tvShowId] = h;
+      return acc;
+    }, {}),
+  );
+  const tvItems = latestTv.map(mapTvShowHistoryToItem);
 
   return [...movieItems, ...tvItems]
     .filter((item) => !item.isCompleted)

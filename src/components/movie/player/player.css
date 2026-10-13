@@ -411,3 +411,43 @@
   .vp-resume__desc { margin-bottom: 2px; }
   .vp-resume__btn { padding: 8px 14px; }
 }
+
+/* Kéo thanh tiến trình */
+.vp-progress-wrap--dragging .vp-progress-track { height: 5px; }
+.vp-progress-wrap--dragging .vp-progress-thumb {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+/* Fullscreen chuẩn: phủ kín màn hình (đè lên position/aspect-ratio của .vp-root) */
+.vp-root:fullscreen,
+.vp-root:-webkit-full-screen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+/* Nhãn thời gian nổi trên thanh tiến trình (khi rê chuột / kéo) */
+.vp-progress-tip {
+  position: absolute;
+  bottom: calc(100% - 2px);
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+@media (pointer: coarse) {
+  /* ngón tay che mất nhãn → đẩy cao hơn */
+  .vp-progress-tip { bottom: calc(100% + 14px); font-size: 14px; padding: 4px 10px; }
+}
