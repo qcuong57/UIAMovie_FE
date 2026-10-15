@@ -92,7 +92,8 @@ export default function VideoPlayer({
     resumeSeconds > 0 ? resumeSeconds : resumeChoice === "resume" ? resumeOffer : 0;
 
   // ── Dữ liệu: playback → ads → core ──
-  const { status, playback, error, reload } = usePlayback(playbackLoader, playbackKey);
+  // refresh: lấy link ký mới ngầm khi CDN từ chối link (đổi public_id, mất quyền Premium...)
+  const { status, playback, error, reload, refresh } = usePlayback(playbackLoader, playbackKey);
   const videoUrl = status === "ready" ? (playback?.playbackUrl ?? null) : null;
 
   const adManager = useAdManager({
@@ -115,6 +116,7 @@ export default function VideoPlayer({
     adManager,
     resumeSeconds: effectiveResume,
     fallbackDurationSec,
+    onRefreshSource: refresh,
     onPause: (pct) => saveRef.current?.(pct),
     onEnded: () => {
       setShow(true);

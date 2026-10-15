@@ -97,15 +97,17 @@ const paymentService = {
   // ── Cancel Subscription ───────────────────────────────────────────────────────
 
   /**
-   * Hủy gói Premium của chính mình.
-   * Tái sử dụng endpoint admin revoke: DELETE /api/payments/admin/subscription/{userId}
+   * User tự hủy gói Premium của chính mình.
+   * DELETE /api/payments/subscription/me
+   * (BE lấy userId từ token, FE không cần truyền.)
    *
-   * @param {string} userId - ID của user đang đăng nhập (lấy từ authService.getCurrentUser())
+   * axios interceptor đã unwrap response.data → kết quả là { message }.
+   *
    * @returns {Promise<{ message: string }>}
    */
-  cancelSubscription: async (userId) => {
+  cancelMySubscription: async () => {
     try {
-      return await axiosInstance.delete(`/payments/admin/subscription/${userId}`);
+      return await axiosInstance.delete('/payments/subscription/me');
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -115,11 +117,6 @@ const paymentService = {
       throw new Error(message);
     }
   },
-
-  cancelMySubscription: async () => {
-  const res = await axiosInstance.delete('/payments/subscription/me');
-  return res.data?.data ?? res.data;
-},
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 

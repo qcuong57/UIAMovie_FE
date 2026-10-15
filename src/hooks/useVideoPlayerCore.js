@@ -4,6 +4,9 @@ import useHlsSource from "./useHlsSource";
 import { supportsMse } from "../utils/hls";
 import { vDur, MEDIA_ERROR_LABELS } from "../utils/playerUtils";
 
+// Số lần liên tiếp được xin link mới khi CDN từ chối (reset khi phát lại được)
+const MAX_SOURCE_RECOVERY = 2;
+
 /**
  * Lõi của player: state phát, listener của <video>, resume, âm lượng, tốc độ, HLS và các
  * hành động (play/pause, tua, seek). Không biết phim hay tập.
@@ -18,6 +21,7 @@ import { vDur, MEDIA_ERROR_LABELS } from "../utils/playerUtils";
  *   adManager: object,                   // kết quả useAdManager
  *   resumeSeconds?: number,              // vị trí bắt đầu (giây); 0 = từ đầu
  *   fallbackDurationSec?: number,        // dùng khi <video> chưa báo duration
+ *   onRefreshSource?: () => Promise<unknown>, // lấy link mới khi CDN từ chối (vd: usePlayback.refresh)
  *   onPause?: (pct: number) => void,     // pause (không phải ad) → vd lưu tiến độ
  *   onEnded?: () => void,                // hết nội dung chính và không còn post-roll
  * }} p
@@ -29,12 +33,14 @@ export default function useVideoPlayerCore({
   adManager,
   resumeSeconds = 0,
   fallbackDurationSec = 0,
+  onRefreshSource,
   onPause,
   onEnded,
 }) {
   const hasVideo = !!videoUrl;
   const isAd = !!adManager.currentAd;
-  const { triggerPostRoll, tryStartPreRoll, adsReady, isAdPlayingRef } = adManager;
+  const { triggerPostRoll, tryStartPreRoll, adsReady, isAdPlayingRef } =
+    adManager;
 
   // ── State ─────────────────────────────────────────────────────
   const [playing, setPlaying] = useState(false);
@@ -65,6 +71,42 @@ export default function useVideoPlayerCore({
   const cbRef = useRef({});
   cbRef.current = { onPause, onEnded };
 
+  // ── Khôi phục khi link bị CDN từ chối (401/403/404) ───────────
+  // Xin link ký mới NGẦM → khởi tạo lại nguồn → phát tiếp đúng giây và đúng trạng thái play/pause.
+  const [sourceNonce, setSourceNonce] = useState(0);
+  const recoveryCountRef = useRef(0);
+  const recoveringRef = useRef(false);
+  const resumeOverrideRef = useRef(null); // vị trí cần phát tiếp sau khi có link mới
+  const wasPlayingRef = useRef(false);
+  const refreshRef = useRef(onRefreshSource);
+  refreshRef.current = onRefreshSource;
+
+  // Trả true nếu đã nhận xử lý (đang xin link mới); false → caller hiện lỗi như thường.
+  const recoverSource = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !refreshRef.current || isAdPlayingRef.current) return false;
+    if (recoveringRef.current) return true;
+    if (recoveryCountRef.current >= MAX_SOURCE_RECOVERY) {
+      console.log("[recover] HET LUOT -> hien loi");
+      return false;
+    }
+    console.log("[recover]", recoveryCountRef.current, v.currentTime);
+    recoveryCountRef.current += 1;
+    recoveringRef.current = true;
+    resumeOverrideRef.current = v.currentTime || 0;
+    wasPlayingRef.current = !v.paused;
+    hasResumedRef.current = false;
+
+    Promise.resolve(refreshRef.current())
+      .catch(() => null)
+      .then(() => setSourceNonce((n) => n + 1)) // khởi tạo lại nguồn kể cả khi URL không đổi
+      .finally(() => {
+        recoveringRef.current = false;
+      });
+
+    return true;
+  }, [videoRef, isAdPlayingRef]);
+
   // ── HLS: Safari phát native, Chrome/Firefox dùng hls.js (MSE) ──
   const hls = useHlsSource({
     videoRef,
@@ -73,6 +115,8 @@ export default function useVideoPlayerCore({
     isAd,
     adPlayingRef: isAdPlayingRef,
     onFatalError: setVideoError,
+    onLinkRejected: recoverSource,
+    nonce: sourceNonce,
   });
   const { useMse } = hls;
 
@@ -89,14 +133,23 @@ export default function useVideoPlayerCore({
     if (!v) return;
     v.pause();
     setPlaying(false);
-    setProgress(0);
     setSecondsLeft(Infinity);
     hasResumedRef.current = false;
-    setHasStarted(false);
+    // Đang khôi phục link: giữ tiến độ và không quay lại màn backdrop
+    if (!recoveringRef.current && resumeOverrideRef.current == null) {
+      setProgress(0);
+      setHasStarted(false);
+    }
     // hls.js (MSE) tự quản lý nguồn — v.load() ở đây sẽ phá MediaSource vừa gắn
     if (!useMse) v.load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoUrl]);
+
+  // Native HLS (Safari/iOS): link mới trùng URL cũ thì effect trên không chạy → nạp lại thủ công
+  useEffect(() => {
+    if (!sourceNonce || useMse) return;
+    videoRef.current?.load();
+  }, [sourceNonce, useMse, videoRef]);
 
   // ── Listener của <video> ──────────────────────────────────────
   useEffect(() => {
@@ -108,7 +161,11 @@ export default function useVideoPlayerCore({
     const onTimeUpdate = () => {
       if (adNow()) return; // currentTime/duration lúc này là của ad
       // Có vị trí resume mà chưa seek xong → bỏ qua tick, tránh nháy "00:00"
-      if (resumeSeconds > 0 && !hasResumedRef.current) return;
+      if (
+        !hasResumedRef.current &&
+        (resumeSeconds > 0 || resumeOverrideRef.current != null)
+      )
+        return;
       const dur = vDur(v, totalSecRef.current);
       if (!dur) return;
       const pct = Math.min(100, (v.currentTime / dur) * 100);
@@ -123,7 +180,9 @@ export default function useVideoPlayerCore({
       if (adNow()) return;
       const dur = vDur(v, totalSecRef.current);
       if (!dur || !v.buffered.length) return;
-      setBuffered(Math.round((v.buffered.end(v.buffered.length - 1) / dur) * 1000) / 10);
+      setBuffered(
+        Math.round((v.buffered.end(v.buffered.length - 1) / dur) * 1000) / 10,
+      );
     };
     const onEndedEvt = () => {
       if (adNow()) return; // đang trong ad break → useAdManager tự xử lý
@@ -145,8 +204,16 @@ export default function useVideoPlayerCore({
     // canplay là phương án dự phòng nếu loadedmetadata không fire (hls.js, vài edge-case).
     const applyResume = () => {
       if (hasResumedRef.current) return;
-      if (resumeSeconds > 0) v.currentTime = resumeSeconds;
+      const target = resumeOverrideRef.current ?? resumeSeconds;
+      if (target > 0) v.currentTime = target;
       hasResumedRef.current = true;
+
+      // Vừa khôi phục link: phát tiếp nếu trước đó đang phát
+      if (resumeOverrideRef.current != null) {
+        resumeOverrideRef.current = null;
+        if (wasPlayingRef.current) v.play().catch(() => {});
+        wasPlayingRef.current = false;
+      }
     };
     const onLoadedMetadata = () => {
       if (adNow()) return;
@@ -156,16 +223,25 @@ export default function useVideoPlayerCore({
       // Không áp resume cho canplay của ad, nếu không ad bị seek tới giây resume → kết thúc ngay
       if (adNow()) return;
       setVideoError(null); // load được thì xoá lỗi cũ
+      recoveryCountRef.current = 0; // nguồn phát được → cho phép khôi phục lần sau
       applyResume();
     };
     const onError = () => {
       const err = v.error;
       // Chrome/Firefox không phát m3u8 native: lỗi này chỉ là khoảnh khắc useAdManager đặt
       // src=m3u8 sau ad, hls.js sẽ gắn lại ngay → không hiện overlay lỗi.
-      if (err?.code === 4 && /\.m3u8/i.test(v.currentSrc || "") && supportsMse()) return;
+      if (
+        err?.code === 4 &&
+        /\.m3u8/i.test(v.currentSrc || "") &&
+        supportsMse()
+      )
+        return;
+      // Safari native không lộ HTTP status → coi lỗi nguồn HLS là link có thể đã bị từ chối
+      if (!supportsMse() && playback?.isHls && recoverSource()) return;
       const info = {
         code: err?.code ?? null,
-        message: MEDIA_ERROR_LABELS[err?.code] ?? err?.message ?? "Lỗi không xác định",
+        message:
+          MEDIA_ERROR_LABELS[err?.code] ?? err?.message ?? "Lỗi không xác định",
         src: v.currentSrc || videoUrl,
       };
       console.error("[VideoPlayer] <video> error:", info, err);
@@ -195,8 +271,17 @@ export default function useVideoPlayerCore({
       error: onError,
     };
     Object.entries(events).forEach(([n, h]) => v.addEventListener(n, h));
-    return () => Object.entries(events).forEach(([n, h]) => v.removeEventListener(n, h));
-  }, [videoRef, videoUrl, resumeSeconds, triggerPostRoll, isAdPlayingRef]);
+    return () =>
+      Object.entries(events).forEach(([n, h]) => v.removeEventListener(n, h));
+  }, [
+    videoRef,
+    videoUrl,
+    resumeSeconds,
+    triggerPostRoll,
+    isAdPlayingRef,
+    recoverSource,
+    playback?.isHls,
+  ]);
 
   // Âm lượng
   useEffect(() => {
@@ -279,7 +364,10 @@ export default function useVideoPlayerCore({
       if (isAd) return;
       const v = videoRef.current;
       if (!v) return;
-      v.currentTime = Math.max(0, Math.min(vDur(v, Infinity), v.currentTime + sec));
+      v.currentTime = Math.max(
+        0,
+        Math.min(vDur(v, Infinity), v.currentTime + sec),
+      );
       triggerSkipFlash(sec < 0 ? "back" : "forward");
     },
     [isAd, videoRef, triggerSkipFlash],
@@ -291,7 +379,8 @@ export default function useVideoPlayerCore({
       if (isAd) return;
       const v = videoRef.current;
       if (!v) return;
-      v.currentTime = Math.min(1, Math.max(0, ratio)) * vDur(v, totalSecRef.current);
+      v.currentTime =
+        Math.min(1, Math.max(0, ratio)) * vDur(v, totalSecRef.current);
     },
     [isAd, videoRef],
   );

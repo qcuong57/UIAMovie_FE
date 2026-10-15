@@ -4,6 +4,8 @@ import Hls from "hls.js";
 import { shouldUseMse, isHlsUrl } from "../utils/hls";
 
 const MAX_NET_RETRY = 3;
+// CDN từ chối link (đổi public_id, mất quyền...) → retry vô ích, cần xin link mới
+const REJECTED_STATUS = new Set([401, 403, 404]);
 
 /**
  * Gắn hls.js vào <video> khi trình duyệt hỗ trợ MSE (ưu tiên hls.js) (Chrome/Firefox/Edge/Android).
@@ -15,6 +17,9 @@ const MAX_NET_RETRY = 3;
  *             và KHÔNG gọi v.load() khi đổi nguồn (sẽ phá MediaSource)
  *   - false → src={url} như bình thường
  *
+ * Link bị CDN từ chối (401/403/404): gọi onLinkRejected(). Nếu callback trả true (đang xin
+ * link mới) thì hls dừng tải; khi `nonce` đổi, hls.js được khởi tạo lại.
+ *
  * Phối hợp với useAdManager (single-video):
  *   - Ad bắt đầu: hook ad đổi v.src sang ad  → ở đây dừng tải + tháo hls khỏi <video>.
  *   - Ad kết thúc: hook ad đặt v.src = m3u8 + load() (Chrome không phát được) → ở đây
@@ -22,12 +27,23 @@ const MAX_NET_RETRY = 3;
  *     mainResumeTime + play() vẫn do resumeContent() của useAdManager làm (listener
  *     loadedmetadata), nên hook này không tự seek/play.
  */
-export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef, onFatalError }) {
+export default function useHlsSource({
+  videoRef,
+  url,
+  isHls,
+  isAd,
+  adPlayingRef,
+  onFatalError,
+  onLinkRejected, // () => boolean — true nếu đã nhận xử lý (đang xin link mới)
+  nonce = 0, // đổi giá trị → khởi tạo lại hls.js dù url không đổi
+}) {
   const useMse = shouldUseMse(url, isHls);
 
   const hlsRef = useRef(null);
   const errRef = useRef(onFatalError);
   errRef.current = onFatalError;
+  const rejectedRef = useRef(onLinkRejected);
+  rejectedRef.current = onLinkRejected;
   const isAdRef = useRef(false);
   isAdRef.current = isAd;
   const lastTimeRef = useRef(0);
@@ -75,7 +91,16 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef,
       // Đang ad: <video> đang phát file của ad, đừng để hls "cứu" và giành lại element.
       // adPlayingRef đổi đồng bộ (không chờ render) → không bị race lúc vừa swap sang ad
       if (isAdRef.current || adPlayingRef?.current) return;
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && netRetry < MAX_NET_RETRY) {
+
+      const isNetworkError = data.type === Hls.ErrorTypes.NETWORK_ERROR;
+
+      // Link bị từ chối → ngừng tải, chờ link mới (hls được khởi tạo lại khi nonce/url đổi)
+      if (isNetworkError && REJECTED_STATUS.has(data.response?.code) && rejectedRef.current?.()) {
+        hls.stopLoad();
+        return;
+      }
+
+      if (isNetworkError && netRetry < MAX_NET_RETRY) {
         netRetry += 1;
         hls.startLoad();
       } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -108,7 +133,9 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef,
       hlsRef.current = null;
       hls.destroy();
     };
-  }, [url, useMse, videoRef]);
+    // adPlayingRef là ref ổn định, không cần đưa vào deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, useMse, videoRef, nonce]);
 
   // 2) Nhớ vị trí nội dung (không ghi khi đang ad)
   useEffect(() => {
@@ -184,7 +211,7 @@ export default function useHlsSource({ videoRef, url, isHls, isAd, adPlayingRef,
       cancelled = true;
       nativeRef.current = null;
     };
-  }, [url, isHls, useMse]);
+  }, [url, isHls, useMse, nonce]);
 
   // Native: sau quảng cáo, resumeContent() đặt lại src = master → quay về "Tự động"
   useEffect(() => {
