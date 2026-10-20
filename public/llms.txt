@@ -15,7 +15,7 @@ Ngôn ngữ: Tiếng Việt (vi-VN)
 
 ## Trang quan trọng
 - [Trang chủ](https://uiamovie.vercel.app/): phim nổi bật, top xếp hạng, phim theo thể loại và quốc gia, trailer mới.
-- [Về chúng tôi](https://uiamovie.vercel.app/intro): câu chuyện, triết lý và công nghệ của UIAMovie.
+- [Về chúng tôi](https://uiamovie.vercel.app/about-us): câu chuyện, triết lý và công nghệ của UIAMovie.
 - [Gói Premium](https://uiamovie.vercel.app/premium): quyền lợi và giá gói thành viên.
 - Trang chi tiết phim: https://uiamovie.vercel.app/movie/{id}
 - Trang chi tiết phim bộ: https://uiamovie.vercel.app/tvshow/{id}

@@ -32,8 +32,8 @@ const ABOUT_SCHEMA = {
   "@graph": [
     {
       "@type": "AboutPage",
-      "@id": `${SITE_URL}/intro#webpage`,
-      url: `${SITE_URL}/intro`,
+      "@id": `${SITE_URL}/about-us#webpage`,
+      url: `${SITE_URL}/about-us`,
       name: "Về chúng tôi — UIAMovie",
       inLanguage: "vi-VN",
       isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -44,7 +44,7 @@ const ABOUT_SCHEMA = {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Trang chủ", item: SITE_URL },
-        { "@type": "ListItem", position: 2, name: "Về chúng tôi", item: `${SITE_URL}/intro` },
+        { "@type": "ListItem", position: 2, name: "Về chúng tôi", item: `${SITE_URL}/about-us` },
       ],
     },
   ],
@@ -1066,7 +1066,7 @@ function Footer() {
 export default function IntroPage() {
   const navigate = useNavigate();
   // Chỉ hiện LoadingScreen ở lần đầu vào trang trong phiên (session),
-  // tránh cảm giác "reload cả trang" mỗi khi quay lại /intro.
+  // tránh cảm giác "reload cả trang" mỗi khi quay lại /about-us.
   const [loaded, setLoaded] = useState(
     () => sessionStorage.getItem("uia_intro_seen") === "1"
   );
@@ -1106,7 +1106,7 @@ export default function IntroPage() {
         title="Về chúng tôi — UIAMovie | Nền tảng xem phim trực tuyến"
         description="Khám phá câu chuyện của UIAMovie — nơi điện ảnh được tôn trọng, công nghệ phục vụ nghệ thuật, và trợ lý AI giúp mỗi người tìm đúng bộ phim cho tâm trạng của mình."
         image={ASSETS.hero}
-        url="/intro"
+        url="/about-us"
         schemaData={ABOUT_SCHEMA}
       />
       <style>{GOOGLE_FONTS}</style>

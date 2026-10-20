@@ -2,9 +2,12 @@
 User-agent: *
 Allow: /
 Disallow: /admin
-Disallow: /login
-Disallow: /register
 Disallow: /profile
+Disallow: /settings/
+Disallow: /payment/
+Disallow: /favorites
+Disallow: /watch-history
+Disallow: /search
 Disallow: /api/
 
 # Cho phép các trình thu thập của AI đọc nội dung công khai

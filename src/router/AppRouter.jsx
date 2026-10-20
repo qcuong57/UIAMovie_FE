@@ -29,6 +29,7 @@ import TvShowDetailPage from "../pages/user/TvShowDetailPage";
 import PremiumPage from "../pages/PremiumPage";
 import PaymentResultPage from "../pages/PaymentResultPage";
 import AnnouncementsPage from "../pages/user/AnnouncementsPage";
+import SeoMeta from "../components/common/SeoMeta";
 import { useToast } from "../components/common/Toast";
 import { useIsLoggedIn, useStoredUser } from "../hooks/useStoredUser";
 
@@ -44,6 +45,8 @@ const ScrollToTop = () => {
 /** Layout có Navbar — chỉ dùng cho các trang phim chính */
 const WithNavbar = () => (
   <>
+    {/* SEO mặc định + canonical theo đường dẫn; trang con có SeoMeta riêng sẽ ghi đè */}
+    <SeoMeta />
     <Navbar />
     <Outlet />
   </>
@@ -89,6 +92,7 @@ const FallbackRedirect = () => (
 
 const protectedPage = (Page) => (
   <ProtectedRoute>
+    <SeoMeta noindex />
     <Page />
   </ProtectedRoute>
 );

@@ -542,11 +542,6 @@ export default function HomePage() {
           inLanguage: "vi-VN",
           publisher: { "@id": `${SITE_URL}/#organization` },
           description: SITE_DESCRIPTION,
-          potentialAction: {
-            "@type": "SearchAction",
-            target: `${SITE_URL}/movies?search={search_term_string}`,
-            "query-input": "required name=search_term_string",
-          },
         },
         {
           "@type": "ItemList",
