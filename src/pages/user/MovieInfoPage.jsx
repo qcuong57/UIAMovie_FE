@@ -2,7 +2,7 @@
 // Trang thông tin chi tiết phim — hiển thị trước khi vào xem phim
 // Route: /movie/:id/info → /movie/:id (player)
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -29,19 +29,11 @@ import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { useToast } from "../../components/common/Toast";
+import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
-
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem("currentUser");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 
 function userHasPremium(user) {
   if (!user) return false;
@@ -85,7 +77,7 @@ export default function MovieInfoPage() {
   // ── Premium gate state ──
   const [showPremiumGate, setShowPremiumGate] = useState(false);
 
-  const [currentUser] = useState(() => getCurrentUser());
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });

@@ -47,11 +47,17 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 ## ✨ Features
 
 ### 🔐 Authentication
-- Email/password login & registration with form validation
+- Email/password login & registration (email OTP confirmation) with live form validation
 - **Two-Factor Authentication (2FA)** via OTP email
 - Forgot password → OTP reset flow
-- JWT access token + refresh token with **auto-silent refresh** via Axios interceptors
+- JWT access token held **in memory only**; refresh token lives in an **HttpOnly cookie** and is renewed silently (single-flight refresh, see [Token Strategy](#token-strategy))
 - Protected routes with role-based access (`User` / `Admin`)
+- **Banned accounts** see the ban banner (with reason) on the login form; editing the email or password clears it so the user can try another account right away
+- Shared validation rules (mirrored by the backend):
+  - Email: valid format, max **254** characters
+  - Password: 8+ characters with upper, lower, digit and special (`!@#$%^&*`), max **72 bytes** (BCrypt limit)
+  - Username: 3–50 characters, letters / digits / `_` only (`src/utils/validators.js`, also used on the Profile page)
+- Changing the password signs the user out of every device and sends them back to `/welcome`
 
 ### 🏠 Home & Discovery
 - **Auto-playing HeroBanner** slideshow (5 slides, 6s interval) with cinematic transitions
@@ -75,8 +81,21 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - Related cast cards that link to individual person profile pages
 - TMDB-sourced cast, director bio, known-for filmography
 
+### 💎 Premium & Payments
+- **Premium page** (`/premium`) with Free / Monthly (69,000 ₫) / Yearly (599,000 ₫, ~27.7% cheaper) plans, benefits and FAQ. Feature lists match the backend: Full HD / 4K, no ads, offline download, priority support (yearly)
+- **Two gateways**: the user picks **VNPay** (redirect) or **SePay** (hidden `form_post` built from the `formFields` the backend returns, in the original order). `paymentService.redirectToPayment(order)` handles both
+- **Confirm-before-order checkout**: clicking a plan only opens a confirmation dialog (plan, price, gateway). The order (`POST /payments/create-order`) is created **only when the user presses "Thanh toán"**, so an accidental click and "Quay lại" never leaves a `pending` order behind (and if the user does create several orders, the backend keeps only the newest one open). The dialog is closable with Esc / backdrop click until the request is sent, locks body scroll, and keeps the button locked after a successful order so a double-click cannot create two orders
+- **Back-from-gateway recovery**: when the browser restores the page from the back/forward cache, a `pageshow` handler clears the stuck spinner, closes the dialog, shows a "payment not completed" hint and silently refreshes the subscription status
+- **No "reload flash"** when coming back to `/premium`: the subscription status is cached at module level (stale-while-revalidate), the plan cards' entrance animation plays only once per session, and the Google-Fonts `<style>` tag is injected once and kept
+- **Renewal is allowed while Premium is active** — the backend adds the new period on top of the current expiry date. Paid cards show "Gia hạn" instead of "Bắt đầu ngay"
+- **Payment result page** (`/payment/result`) does **not** trust the `status` query parameter; it looks the order up by `orderCode` in the payment history to confirm the real result
+- **Cancel Premium** from the Profile page: access ends immediately and the remaining time is **not refunded** (the confirmation modal and FAQ say so)
+- Subscription info on Profile is read from `GET /payments/subscription-status`, not from `User.SubscriptionType`, so it always matches what the paywall enforces
+- There is no money-back guarantee and no free trial; the UI no longer advertises either
+
 ### 👤 User Profile & Account
-- Editable display name and avatar URL
+- Editable display name (same rules as registration)
+- Avatar: **preview only** for now. Local `blob:` URLs are neither sent to the API nor written to `localStorage`; real avatar upload needs a backend endpoint (see [Future Improvements](#-future-improvements))
 - **Favorites** list — add/remove from any card or detail page
 - **Watch History** — time-stamped, clearable individually or in bulk
 - **Security settings** — change password, enable/disable 2FA
@@ -88,7 +107,12 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **Video upload panel** — drag-and-drop upload to Cloudinary with real-time progress, cancel support, and quality/type selection
 - **Genre CRUD** — create, edit, delete genres with color-coded cards
 - **Review moderation** — browse and delete reviews per film
-- **User management** — view details, edit username/avatar/subscription, change role, delete
+- **User management** — view details, edit username/avatar, change role, ban / unban with reason, delete. Premium is granted or revoked through the payment endpoints (`adminGrantSubscription` / `adminRevokeSubscription`), not by editing `subscriptionType`
+- **Revenue dashboard** (`AdminRevenue`) backed by `AdminRevenueController`:
+  - KPI cards: total revenue (with average order value), **today**, this month (with month-over-month growth, hidden when last month is 0), active Premium users (and how many expire within 7 days), pending orders, and success rate (with failed vs expired counts)
+  - Revenue chart by month or by day, revenue by plan, and a filterable order table (status, plan, gateway, e-mail / order-code search, **created-date range**) paged with the shared `AdminPagination`
+  - **Export Excel** (`GET /payments/admin/revenue/export`) uses the current status / plan / gateway / date filters (the search box is not applied). With no status selected only successful orders are exported; successful orders are filtered by **paid date**, all others by **created date**; the backend caps the file at 50,000 rows and returns a readable message when it is exceeded
+  - **Time zone**: every date and month is Vietnam time (GMT+7). The UI sends plain `yyyy-MM-dd` dates (inclusive of the last day), computes the default year/month in GMT+7 instead of the browser zone, and renders the UTC timestamps the API returns as Vietnam time
 - Collapsible sidebar navigation
 
 ### 📱 Responsive Design
@@ -108,7 +132,9 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 | **Routing** | React Router DOM v7 |
 | **Animations** | Framer Motion 12 |
 | **Styling** | Tailwind CSS 3 + Inline design tokens |
-| **HTTP Client** | Axios 1.x with request/response interceptors |
+| **HTTP Client** | Axios 1.x with request/response interceptors, `withCredentials` for the refresh cookie |
+| **Session state** | `useSyncExternalStore` over `sessionStore` (profile) + `tokenStore` (access token) |
+| **Payments** | VNPay + SePay (via backend) |
 | **Icons** | Lucide React |
 | **Deployment** | Vercel (SPA rewrite configured) |
 | **External Data** | TMDB API (via backend proxy) |
@@ -150,11 +176,18 @@ Base URL: http://localhost:5000/api/
 ```
 
 ### Token Strategy
-- `accessToken` and `refreshToken` stored in `localStorage`
-- Every request automatically attaches `Authorization: Bearer <token>` via a **request interceptor**
-- On **401 responses**, a **response interceptor** silently calls `/auth/refresh-token`
-- Concurrent requests during refresh are **queued** and replayed after the new token is received
-- On refresh failure → session cleared → redirect to `/welcome`
+- The **access token lives only in memory** (`config/tokenStore.js`); it is never written to `localStorage`. An old `accessToken` key left by earlier versions is removed on load
+- The **refresh token is an HttpOnly cookie** set by the backend (`withCredentials: true`); JavaScript can never read it
+- `config/sessionStore.js` is the only place that reads/writes the display profile (`currentUser`) in `localStorage`. It also marks "has ever signed in" and syncs across tabs through the `storage` event
+- **Bootstrap:** on app start the UI renders immediately from the stored profile while a background refresh fetches an access token. Requests that need a token wait for it; guests make no network call
+- **Single-flight refresh:** concurrent callers share one promise; across tabs a **Web Lock** (`uiamovie-refresh-token`) prevents two tabs from rotating the same cookie
+- **Transient failures** (network, timeout, 429, 5xx) trigger a 5 s cooldown and keep the session; only a real `401` (or a missing token in the response) clears it. A `403` (origin not whitelisted) never logs the user out
+- Public auth endpoints (`login`, `register`, `otp`, `forgot-password`, `reset-password`, `refresh-token`) skip the bootstrap wait and the 401-refresh logic
+- On a `401` the interceptor refreshes once and replays the request; if refresh fails with an auth error the session is cleared and the user is sent to `/welcome`
+- Cross-tab sync: signing out in one tab drops the token in the others; signing in elsewhere lets this tab pick up a token on its next request
+- `getFreshAccessToken()` serves non-Axios clients (SignalR, `fetch`) and refreshes when the token expires within 30 s
+- The interceptor returns the response **body** (`{ data, message }`). Services therefore return `res.data` for data endpoints and `res` for message-only endpoints (update, role, ban, delete, change-password)
+- Errors are read with `getApiErrorMessage` (`utils/apiError.js`), which understands both `{ message }` and ProblemDetails responses
 
 ### Service Modules
 
@@ -165,6 +198,8 @@ Base URL: http://localhost:5000/api/
 | `genreService.js` | Genre CRUD |
 | `personService.js` | Cast, person detail & images via TMDB proxy |
 | `reviewService.js` | Movie reviews — create, edit, delete, stats, check-if-reviewed |
+| `userService.js` | Own profile, change password, and admin user CRUD / role / ban / unban |
+| `paymentService.js` | Plans, create order, `redirectToPayment` (VNPay redirect / SePay form post), subscription status, history, order lookup by code, cancel own Premium, admin grant / revoke, revenue summary / chart / by-plan, orders, and `adminExportRevenue` (Blob download) |
 
 ---
 
@@ -176,7 +211,7 @@ src/
 │   ├── admin/          # Admin-only panels, modals, tables
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
 │   │   └── user/       # UserDetailPanel, UserEditModal
-│   ├── common/         # BackButton, Pagination, SeeAllButton
+│   ├── common/         # BackButton, Pagination, AdminPagination, SeeAllButton
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
 │   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
 │   ├── layout/         # Navbar, Footer
@@ -186,13 +221,17 @@ src/
 │   └── ui/             # Button, Input, Modal, Badge, Spinner, RatingStars
 │
 ├── config/
-│   └── axios.js        # Axios instance + interceptors
+│   ├── axios.js        # Axios instance, single-flight refresh, bootstrap
+│   ├── tokenStore.js   # In-memory access token
+│   └── sessionStore.js # Stored profile (localStorage) + cross-tab sync
 │
 ├── context/
-│   └── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
+│   ├── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
+│   └── adminTokens.js  # Admin design tokens (used by AdminPagination, AdminRevenue)
 │
 ├── hooks/
 │   ├── useIsMobile.js  # Responsive breakpoint hook
+│   ├── useStoredUser.js# Subscribes to sessionStore
 │   └── usePagination.js# Client & server-side pagination hook
 │
 ├── motion-configs/
@@ -202,17 +241,23 @@ src/
 ├── pages/
 │   ├── admin/          # AdminPage, AdminDashboard, AdminMovies,
 │   │   │               # AdminGenres, AdminReviews, AdminUsers,
-│   │   │               # AdminPersons, AdminTmdbSearch
+│   │   │               # AdminPersons, AdminTmdbSearch, AdminRevenue
 │   └── user/           # HomePage, MovieDetailPage, MovieInfoPage,
 │                       # SearchPage, BrowsePage, ProfilePage,
 │                       # SecurityPage, FavoritesPage, WatchHistoryPage,
-│                       # PersonPage, LandingPage
+│                       # PersonPage, LandingPage,
+│                       # PremiumPage, PaymentResultPage
 │
 ├── router/
 │   └── AppRouter.jsx   # BrowserRouter + protected/guest routes
 │
+├── utils/
+│   ├── apiError.js     # getApiErrorMessage
+│   └── validators.js   # validateUsername (shared by register + profile)
+│
 └── services/           # authService, movieService, genreService,
-                        # personService, reviewService
+                        # personService, reviewService,
+                        # userService, paymentService
 ```
 
 ---
@@ -260,8 +305,9 @@ Create a `.env` file at the project root:
 VITE_API_URL=http://localhost:5000/api
 ```
 
-> The Axios instance reads from `VITE_API_URL` at build time.
-> For Vercel deployments, add this variable in the Vercel project settings.
+> The Axios instance reads from `VITE_API_URL` at build time (a trailing `/` is normalised).
+> For Vercel deployments, add this variable in the Vercel project settings and add the Vercel domain to the backend's `Cors:AllowedOrigins`; otherwise `/auth/refresh-token` answers `403`.
+> The refresh cookie is scoped to `/api/auth`, so any reverse proxy must forward `/api/*` unchanged.
 
 ---
 
@@ -274,6 +320,8 @@ VITE_API_URL=http://localhost:5000/api
 4. Use the **Search** page to find movies or actors with advanced filters
 5. Manage your **Favorites** and review your **Watch History** from the navbar
 6. Update your profile or toggle 2FA under **Profile** / **Security Settings**
+7. Open **/premium**, pick a plan, confirm it in the dialog and pay through VNPay or SePay (nothing is created until you press "Thanh toán"); you return to `/payment/result`, where the order is verified against your payment history
+8. Manage the subscription under **Profile → Gói đăng ký** (renew from `/premium`, or cancel — access ends immediately, no refund)
 
 ### As an Admin
 1. Log in with an Admin-role account — you will see an **Admin** link in the navbar
@@ -281,6 +329,7 @@ VITE_API_URL=http://localhost:5000/api
 3. Go to **Movies → TMDB Search** to search and import new films
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
+6. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
 
 ---
 
@@ -300,6 +349,12 @@ VITE_API_URL=http://localhost:5000/api
 
 ## 🔮 Future Improvements
 
+- [ ] **Avatar upload** — needs a backend upload endpoint; today the avatar is preview-only
+- [ ] **Show the current plan** — the backend does not yet store `planId` on a subscription, so no plan card can be marked "GÓI CỦA BẠN" (the hero badge still shows Premium status)
+- [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
+- [ ] **Move the subscription-status cache into `paymentService`** and invalidate it on cancel / create-order, so `/premium` never shows a stale state for the first few hundred milliseconds
+- [ ] **Remove the hidden SePay form** from the DOM after submitting it
+- [ ] **Align Free-plan copy** (720p, 1 device) with what the backend actually enforces
 - [ ] **Video Player** — integrate a full-featured HLS player with quality switching
 - [ ] **Watchlist / Continue Watching** — resume from last position with progress bar
 - [ ] **Notifications** — real-time alerts for new releases or admin actions

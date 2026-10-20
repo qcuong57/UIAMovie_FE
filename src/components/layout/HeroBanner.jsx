@@ -1,7 +1,7 @@
 // src/components/HeroBanner.jsx
 // Hỗ trợ cả Movie lẫn TV Show — cùng pattern với CountryMovieRows
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
@@ -20,16 +20,9 @@ import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import { createPortal } from "react-dom";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
+import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 // ── Premium helpers ────────────────────────────────────────────────
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem("currentUser");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 function userHasPremium(user) {
   if (!user) return false;
   return (
@@ -225,6 +218,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
   };
 
   const activeItem = slides[current];
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
 
   const slideVariants = {
     enter: (dir) => ({ opacity: 0, x: dir > 0 ? 80 : -80 }),
@@ -242,7 +236,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
     : `/movie/${activeItem.id}/info`;
 
   const isPremiumLocked =
-    activeItem.isPremium && !userHasPremium(getCurrentUser());
+    activeItem.isPremium && !userHasPremium(currentUser);
 
   const handlePlay = () => {
     if (isPremiumLocked) {

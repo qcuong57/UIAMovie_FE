@@ -21,9 +21,13 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import authService from "../../services/authService";
 import axiosInstance from "../../config/axios";
+import { getApiErrorMessage } from "../../utils/apiError";
+import { validateUsername } from "../../utils/validators";
+import { getStoredUser, setStoredUser } from "../../config/sessionStore";
+import { useStoredUser } from "../../hooks/useStoredUser";
 import paymentService from "../../services/paymentService";
+import authService from "../../services/authService";
 
 // ── Design tokens (khớp với dự án) ──────────────────────────────────────────
 const C = {
@@ -1161,7 +1165,7 @@ export default function ProfilePage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const canGoBack = window.history.length > 1;
-  const currentUser = authService.getCurrentUser();
+  const currentUser = useStoredUser();
 
   // Profile state
   const [username, setUsername] = useState(currentUser?.name ?? "");
@@ -1189,38 +1193,53 @@ export default function ProfilePage() {
   const [userDetail, setUserDetail] = useState(currentUser ?? {});
 
   useEffect(() => {
-    axiosInstance
-      .get("/user/me")
-      .then((res) => {
-        // axiosInstance interceptor unwrap response.data → res có thể là { success, data, message }
-        // hoặc trực tiếp là object user tuỳ interceptor
-        const d = res?.data ?? res;
+    let cancelled = false;
+    Promise.allSettled([
+      axiosInstance.get("/user/me"),
+      paymentService.getSubscriptionStatus(),
+    ]).then(([meRes, subRes]) => {
+      if (cancelled) return;
+      if (meRes.status === "fulfilled") {
+        // Interceptor trả body { data, message } → user nằm ở .data
+        const d = meRes.value?.data ?? meRes.value;
         setUsername(d.username ?? d.name ?? "");
         setEmail(d.email ?? "");
         setUserDetail((prev) => ({ ...prev, ...d }));
-      })
-      .catch(() => {});
+      }
+      // Gói đăng ký lấy từ subscription-status (nguồn đúng, tính cả hạn dùng).
+      // User.SubscriptionType có thể lệch với UserSubscription nên ghi đè sau cùng.
+      if (subRes.status === "fulfilled" && subRes.value) {
+        const s = subRes.value;
+        setUserDetail((prev) => ({
+          ...prev,
+          subscriptionType: s.subscriptionType,
+          subscriptionExpiredAt: s.expiredAt,
+          isPremium: !!s.isPremium,
+        }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Save profile ──────────────────────────────────────────────────────────
   const handleSaveProfile = async () => {
-    if (!username.trim()) {
-      showToast("Tên không được để trống", "error");
+    const nameError = validateUsername(username);
+    if (nameError) {
+      showToast(nameError, "error");
       return;
     }
     setSaving(true);
     try {
       await axiosInstance.put("/user/me", { username: username.trim() });
-      // Cập nhật localStorage
-      const stored = authService.getCurrentUser();
-      if (stored) {
-        stored.name = username.trim();
-        localStorage.setItem("currentUser", JSON.stringify(stored));
-      }
+      // Cập nhật hồ sơ đã lưu (Navbar, router tự đồng bộ)
+      const stored = getStoredUser();
+      if (stored) setStoredUser({ ...stored, name: username.trim() });
       window.dispatchEvent(new Event("userUpdated"));
       showToast("Cập nhật hồ sơ thành công");
     } catch (e) {
-      showToast(e.message ?? "Có lỗi xảy ra", "error");
+      showToast(getApiErrorMessage(e, "Có lỗi xảy ra"), "error");
     } finally {
       setSaving(false);
     }
@@ -1228,33 +1247,19 @@ export default function ProfilePage() {
 
   // ── Avatar upload ────────────────────────────────────────────────────────
   const handleAvatarChange = async (file) => {
-    // Preview ngay lập tức — không cần đợi API
-    const localUrl = URL.createObjectURL(file);
-    setAvatarPreview(localUrl);
-
-    try {
-      // TODO: thay bằng upload lên server thực tế để lấy URL cố định
-      // const formData = new FormData();
-      // formData.append('avatar', file);
-      // const { avatarUrl } = await axiosInstance.post('/user/me/avatar', formData);
-      // setAvatarPreview(avatarUrl);
-
-      await axiosInstance.put("/user/me", { avatarUrl: localUrl });
-
-      // Cập nhật localStorage để Navbar cũng dùng ảnh mới
-      const stored = authService.getCurrentUser();
-      if (stored) {
-        stored.avatar = localUrl;
-        localStorage.setItem("currentUser", JSON.stringify(stored));
-      }
-
-      window.dispatchEvent(new Event("userUpdated"));
-      showToast("Đã cập nhật ảnh đại diện");
-    } catch {
-      // Nếu API lỗi, rollback preview về ảnh cũ
-      setAvatarPreview(currentUser?.avatar ?? null);
-      showToast("Không thể cập nhật ảnh", "error");
+    // Chưa có API upload: blob: URL chỉ sống trong tab này, nên KHÔNG gửi lên BE
+    // và KHÔNG ghi vào localStorage (Navbar sẽ hỏng ảnh sau khi tải lại).
+    // Chỉ xem trước tại chỗ. Khi có endpoint upload, thay bằng:
+    //   const formData = new FormData(); formData.append("avatar", file);
+    //   const { avatarUrl } = await axiosInstance.post("/user/me/avatar", formData);
+    //   setStoredUser({ ...getStoredUser(), avatar: avatarUrl });
+    if (!file.type?.startsWith("image/")) {
+      showToast("Vui lòng chọn file ảnh", "error");
+      return;
     }
+    if (avatarPreview?.startsWith("blob:")) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview(URL.createObjectURL(file));
+    showToast("Ảnh chỉ xem trước, chưa được lưu (chưa hỗ trợ tải ảnh lên)", "error");
   };
 
   // ── Change password ───────────────────────────────────────────────────────
@@ -1263,8 +1268,8 @@ export default function ProfilePage() {
       showToast("Vui lòng điền đầy đủ", "error");
       return;
     }
-    if (newPass.length < 6) {
-      showToast("Mật khẩu mới ít nhất 6 ký tự", "error");
+    if (newPass.length < 8) {
+      showToast("Mật khẩu mới ít nhất 8 ký tự", "error");
       return;
     }
     if (newPass !== confirmP) {
@@ -1281,9 +1286,13 @@ export default function ProfilePage() {
       setOldPass("");
       setNewPass("");
       setConfirmP("");
-      showToast("Đổi mật khẩu thành công");
+      showToast("Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+      // BE thu hồi mọi phiên (kể cả thiết bị này) sau khi đổi mật khẩu:
+      // đăng xuất rõ ràng thay vì để request kế tiếp dính 401.
+      await authService.logout().catch(() => {});
+      navigate("/welcome");
     } catch (e) {
-      showToast(e.message ?? "Mật khẩu cũ không đúng", "error");
+      showToast(getApiErrorMessage(e, "Không thể đổi mật khẩu"), "error");
     } finally {
       setSavingPw(false);
     }
@@ -1466,7 +1475,7 @@ export default function ProfilePage() {
         {/* ── Đổi mật khẩu ── */}
         <SectionCard
           title="Đổi mật khẩu"
-          subtitle="Sử dụng mật khẩu mạnh, ít nhất 6 ký tự"
+          subtitle="Sử dụng mật khẩu mạnh, ít nhất 8 ký tự"
         >
           <InputField
             label="Mật khẩu hiện tại"
@@ -1481,7 +1490,7 @@ export default function ProfilePage() {
             type="password"
             value={newPass}
             onChange={setNewPass}
-            placeholder="Ít nhất 6 ký tự"
+            placeholder="Ít nhất 8 ký tự"
             icon={Lock}
           />
           <InputField

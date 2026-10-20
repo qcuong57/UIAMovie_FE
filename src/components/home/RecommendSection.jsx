@@ -1,5 +1,5 @@
 // src/components/home/RecommendSection.jsx
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -24,17 +24,9 @@ import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import recommendationService from "../../services/recommendationService";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
+import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 // ── Auth & Premium Helpers ─────────────────────────────────────────
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem("currentUser");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function userHasPremium(user) {
   if (!user) return false;
   return (
@@ -146,7 +138,7 @@ export default function RecommendSection({
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const toast = useToast();
-  const user = useMemo(() => getCurrentUser(), []);
+  const user = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
 
   const [aiItems, setAiItems] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);

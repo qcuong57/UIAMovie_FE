@@ -3,6 +3,7 @@
 // axiosInstance đã có baseURL = ".../api" nên chỉ cần "/playback/...".
 
 import axiosInstance from "../config/axios";
+import { getAccessToken } from "../config/tokenStore";
 import { guestHeaders } from "../utils/guestId";
 
 // axiosInstance có response interceptor trả thẳng response.data → body đã được bóc sẵn.
@@ -14,7 +15,7 @@ const bodyOf = (res) => res?.data ?? res;
 function flushBeat(path, body) {
   try {
     const headers = { "Content-Type": "application/json", ...guestHeaders() };
-    const token = localStorage.getItem("accessToken");
+    const token = getAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     fetch(`${axiosInstance.defaults.baseURL}${path}`, {
       method: "POST",

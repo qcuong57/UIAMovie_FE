@@ -6,6 +6,8 @@ import { ArrowLeft, Shield, ShieldCheck, ShieldOff, Check, AlertTriangle, Smartp
 import { useNavigate } from 'react-router-dom';
 import authService from '../../services/authService';
 import axiosInstance from '../../config/axios';
+import { getStoredUser, setStoredUser } from '../../config/sessionStore';
+import { useStoredUser } from '../../hooks/useStoredUser';
 import { C as HT, FONT_TITLE, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useToast } from '../../components/common/Toast';
 
@@ -228,15 +230,13 @@ function EnableFlow({ user, onSuccess, onCancel }) {
     if (otp.length < 6) { toast.warning('Vui lòng nhập đủ 6 chữ số'); return; }
     setLoading(true);
     try {
-      // POST /auth/otp/verify — backend tự set Is2FaEnabled = true trong VerifyOtpAsync
-      await authService.verifyOtp({ userId: user?.id, code: otp });
+      // POST /auth/2fa/confirm — xác thực OTP và bật Is2FaEnabled trong DB.
+      // (KHÔNG dùng /auth/otp/verify: đó là bước đăng nhập, không bật 2FA mà còn tạo thêm phiên mới.)
+      await authService.confirmEnable2FA(otp);
 
-      // Cập nhật localStorage để UI sync ngay
-      const stored = authService.getCurrentUser();
-      if (stored) {
-        stored.is2FaEnabled = true;
-        localStorage.setItem('currentUser', JSON.stringify(stored));
-      }
+      // Cập nhật hồ sơ đã lưu để UI sync ngay
+      const stored = getStoredUser();
+      if (stored) setStoredUser({ ...stored, is2FaEnabled: true });
 
       toast.success('Đã bật xác thực 2 lớp thành công!');
       onSuccess();
@@ -358,14 +358,11 @@ function DisableFlow({ user, onSuccess, onCancel }) {
     setLoading(true);
     try {
       // Gọi endpoint tắt 2FA — xác thực OTP và set Is2FaEnabled = false trong DB
-      await axiosInstance.post('/auth/2fa/disable', { userId: user?.id, code: otp });
+      await authService.disable2FA(otp);
 
-      // Cập nhật localStorage để UI sync ngay không cần reload
-      const stored = authService.getCurrentUser();
-      if (stored) {
-        stored.is2FaEnabled = false;
-        localStorage.setItem('currentUser', JSON.stringify(stored));
-      }
+      // Cập nhật hồ sơ đã lưu để UI sync ngay không cần reload
+      const stored = getStoredUser();
+      if (stored) setStoredUser({ ...stored, is2FaEnabled: false });
 
       toast.success('Đã tắt xác thực 2 lớp');
       onSuccess();
@@ -460,11 +457,11 @@ export default function SecurityPage() {
   const isMobile = useIsMobile();
   const navigate     = useNavigate();
   const canGoBack    = window.history.length > 1;
-  const currentUser  = authService.getCurrentUser();
+  const currentUser  = useStoredUser();
 
   // Đọc localStorage ngay — không bị false khi reload
   const [twoFAEnabled, setTwoFAEnabled] = useState(
-    () => authService.getCurrentUser()?.is2FaEnabled ?? false
+    () => getStoredUser()?.is2FaEnabled ?? false
   );
   const [flow, setFlow] = useState(null); // null | 'enable' | 'disable'
 
@@ -480,10 +477,9 @@ export default function SecurityPage() {
         const enabled = user?.is2FaEnabled ?? false;
         setTwoFAEnabled(enabled);
         // Lưu lại localStorage để lần sau load ngay
-        const stored = authService.getCurrentUser();
-        if (stored) {
-          stored.is2FaEnabled = enabled;
-          localStorage.setItem('currentUser', JSON.stringify(stored));
+        const stored = getStoredUser();
+        if (stored && stored.is2FaEnabled !== enabled) {
+          setStoredUser({ ...stored, is2FaEnabled: enabled });
         }
       })
       .catch(() => {});

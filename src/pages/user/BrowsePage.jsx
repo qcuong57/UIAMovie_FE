@@ -15,17 +15,9 @@ import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useToast } from '../../components/common/Toast';
+import { getStoredUser as getCurrentUser } from '../../config/sessionStore';
 
 const ACCENT = '#e5181e';
-
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem('currentUser');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 
 const parseItemsResponse = (res) => {
   if (!res) return { items: [], total: 0 };

@@ -606,11 +606,15 @@ const PLAN_OPTS = [
   { value: 'yearly_premium',  label: 'Premium · Năm  (1 năm)'   },
 ];
 
+// YYYY-MM-DD theo giờ MÁY (toISOString sẽ lệch ngày vì dùng UTC).
+const toLocalDateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 const defaultExpiry = (planId) => {
   const d = new Date();
   if (planId === 'yearly_premium') d.setFullYear(d.getFullYear() + 1);
   else d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateStr(d);
 };
 
 const PremiumModal = ({ user, onClose, onConfirm, loading }) => {
@@ -627,7 +631,7 @@ const PremiumModal = ({ user, onClose, onConfirm, loading }) => {
       setHasSub(active);
       setPlanId(plan);
       setExpiredAt(user.subscriptionExpiredAt
-        ? new Date(user.subscriptionExpiredAt).toISOString().slice(0, 10)
+        ? toLocalDateStr(new Date(user.subscriptionExpiredAt))
         : defaultExpiry(plan));
       setTab(active ? 'revoke' : 'grant');
     }
@@ -721,14 +725,14 @@ const PremiumModal = ({ user, onClose, onConfirm, loading }) => {
                       <CalendarClock size={12} /> Ngày hết hạn
                     </label>
                     <input type="date" value={expiredAt} onChange={e => setExpiredAt(e.target.value)}
-                      min={new Date().toISOString().slice(0, 10)}
+                      min={toLocalDateStr(new Date())}
                       style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${T.border}`, background: T.surface, fontFamily: FONT, fontSize: 13.5, color: T.text, outline: 'none', width: '100%', boxSizing: 'border-box' }}
                     />
                   </div>
                   <div style={{ padding: '11px 14px', borderRadius: 10, background: T.accentLight, border: `1px solid ${T.accent}25`, display: 'flex', gap: 9, alignItems: 'flex-start' }}>
                     <Crown size={13} color={T.accent} style={{ flexShrink: 0, marginTop: 1 }} />
                     <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.accentText, lineHeight: 1.6, margin: 0 }}>
-                      {hasSub ? 'Gia hạn sẽ ghi đè gói hiện tại và cập nhật ngày hết hạn.' : 'User sẽ được kích hoạt Premium ngay lập tức.'}
+                      {hasSub ? 'Ngày hết hạn sẽ được đặt đúng bằng ngày bạn chọn (hết ngày đó), không cộng dồn vào thời gian còn lại.' : 'User sẽ được kích hoạt Premium ngay lập tức.'}
                     </p>
                   </div>
                 </div>
@@ -748,7 +752,7 @@ const PremiumModal = ({ user, onClose, onConfirm, loading }) => {
             <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <CancelBtn onClick={onClose} />
               {tab === 'grant' && (
-                <ConfirmBtn onClick={() => onConfirm({ planId, expiredAt: new Date(expiredAt).toISOString(), revoke: false })}
+                <ConfirmBtn onClick={() => onConfirm({ planId, expiredAt: new Date(`${expiredAt}T23:59:59`).toISOString(), revoke: false })}
                   loading={loading} bg={T.accent} color="white" icon={Crown}
                   label={hasSub ? 'Gia hạn' : 'Cấp Premium'}
                 />
@@ -944,7 +948,7 @@ export default function AdminUsers() {
           expiredAt, // ISO string, BE gọi .ToUniversalTime()
         });
         setUsers(prev => prev.map(u => u.id === premiumTarget.id
-          ? { ...u, subscriptionType: planId, subscriptionExpiredAt: expiredAt } : u));
+          ? { ...u, subscriptionType: 'Premium', subscriptionExpiredAt: expiredAt } : u));
       }
       setPremiumTarget(null);
       toast.success(revoke ? 'Đã thu hồi Premium' : 'Đã cập nhật Premium');
@@ -1057,8 +1061,7 @@ export default function AdminUsers() {
             onBlur={e  => e.target.style.borderColor = T.border}
           >
             <option value="">Tất cả subscription</option>
-            <option value="monthly_premium">Premium Tháng</option>
-            <option value="yearly_premium">Premium Năm</option>
+            <option value="premium">Premium</option>
             <option value="none">Không có gói</option>
           </select>
           <ChevronSVG />

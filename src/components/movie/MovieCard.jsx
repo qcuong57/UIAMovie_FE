@@ -1,5 +1,5 @@
 // src/components/movie/MovieCard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,21 +9,13 @@ import movieService  from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
 import PremiumGateModal from './ui/PremiumGateModal';
 import { useToast } from '../common/Toast';
+import { getStoredUser as getCurrentUser, subscribeStoredUser } from '../../config/sessionStore';
 
 // ── Route helpers ────────────────────────────────────────────────
 const infoPath   = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
 const playerPath = (item) => item.isTvShow ? `/tvshow/${item.id}`      : `/movie/${item.id}`;
 
 // ── Premium helpers ──────────────────────────────────────────────
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem('currentUser');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function userHasPremium(user) {
   if (!user) return false;
   return (
@@ -221,7 +213,8 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
   }, [isFavorited]);
 
   // ── Premium guard ────────────────────────────────────────────────
-  const isPremiumLocked = movie?.isPremium && !userHasPremium(getCurrentUser());
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
+  const isPremiumLocked = movie?.isPremium && !userHasPremium(currentUser);
 
   const handleNavigateInfo = () => {
     navigate(infoPath(movie));

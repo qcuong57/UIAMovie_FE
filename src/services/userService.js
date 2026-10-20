@@ -3,6 +3,11 @@
 //
 // Tất cả endpoint đều yêu cầu đăng nhập ([Authorize]).
 // Access token được axiosInstance tự đính kèm qua interceptor request.
+//
+// Interceptor response của axiosInstance trả về body JSON { data, message }, nên:
+//   - Endpoint có dữ liệu (getUsers, getUserById, getMe): trả res.data.
+//   - Endpoint chỉ trả { message } (update, role, delete, ban, unban, change-password): trả res
+//     để caller đọc được res.message.
 
 import axiosInstance from '../config/axios';
 
@@ -22,13 +27,13 @@ const userService = {
    */
   getUsers: async (query = {}) => {
     const res = await axiosInstance.get('/user', { params: query });
-    return res.data?.data ?? res.data;
+    return res.data;
   },
 
   /** @alias getUsers — giữ tương thích ngược với AdminDashboard và các component cũ */
   getAllUsers: async (query = {}) => {
     const res = await axiosInstance.get('/user', { params: query });
-    return res.data?.data ?? res.data;
+    return res.data;
   },
 
   /**
@@ -37,7 +42,7 @@ const userService = {
    */
   getUserById: async (id) => {
     const res = await axiosInstance.get(`/user/${id}`);
-    return res.data?.data ?? res.data;
+    return res.data;
   },
 
   /**
@@ -47,7 +52,7 @@ const userService = {
    */
   updateUser: async (id, dto) => {
     const res = await axiosInstance.put(`/user/${id}`, dto);
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   /**
@@ -57,7 +62,7 @@ const userService = {
    */
   updateRole: async (id, role) => {
     const res = await axiosInstance.patch(`/user/${id}/role`, { role });
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   /**
@@ -67,18 +72,18 @@ const userService = {
    */
   deleteUser: async (id) => {
     const res = await axiosInstance.delete(`/user/${id}`);
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   /**
    * [Admin] Khóa tài khoản user
    * POST /api/user/:id/ban
-   * Body: BanUserDTO { reason, banUntil? }
+   * Body: BanUserDTO { reason? }
    * Lưu ý: BE chặn admin tự khóa chính mình (400)
    */
   banUser: async (id, dto) => {
     const res = await axiosInstance.post(`/user/${id}/ban`, dto);
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   /**
@@ -87,7 +92,7 @@ const userService = {
    */
   unbanUser: async (id) => {
     const res = await axiosInstance.post(`/user/${id}/unban`);
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -100,7 +105,7 @@ const userService = {
    */
   getMe: async () => {
     const res = await axiosInstance.get('/user/me');
-    return res.data?.data ?? res.data;
+    return res.data;
   },
 
   /**
@@ -110,17 +115,19 @@ const userService = {
    */
   updateMe: async (dto) => {
     const res = await axiosInstance.put('/user/me', dto);
-    return res.data?.data ?? res.data;
+    return res;
   },
 
   /**
    * Đổi mật khẩu
    * POST /api/user/me/change-password
-   * Body: ChangePasswordDTO { currentPassword, newPassword, confirmPassword }
+   * Body: ChangePasswordDTO { oldPassword, newPassword, confirmPassword }
+   * Lưu ý: thành công thì BE thu hồi MỌI phiên (kể cả thiết bị này) → caller phải
+   * gọi authService.logout() rồi chuyển về trang đăng nhập.
    */
   changePassword: async (dto) => {
     const res = await axiosInstance.post('/user/me/change-password', dto);
-    return res.data?.data ?? res.data;
+    return res;
   },
 };
 

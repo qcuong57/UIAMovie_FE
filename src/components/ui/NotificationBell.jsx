@@ -5,6 +5,8 @@ import { Bell } from "lucide-react";
 import * as signalR from "@microsoft/signalr";
 import { useNavigate } from "react-router-dom";
 import authService from "../../services/authService";
+import { getFreshAccessToken } from "../../config/axios";
+import { useIsLoggedIn } from "../../hooks/useStoredUser";
 import notificationService from "../../services/notificationService";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import { fmtDateTime } from "../../helper/format";
@@ -36,6 +38,7 @@ export default function NotificationBell({ scrolled }) {
   const hubRef = useRef(null);
   const isMountedRef = useRef(true);
   const navigate = useNavigate();
+  const loggedIn = useIsLoggedIn();
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -60,12 +63,13 @@ export default function NotificationBell({ scrolled }) {
   }, []);
 
   useEffect(() => {
-    if (!authService.isLoggedIn()) return;
+    if (!loggedIn) return;
     loadData();
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        accessTokenFactory: () => localStorage.getItem("accessToken") || "",
+        // Token nằm trong bộ nhớ: chờ khởi động xong và tự làm mới nếu sắp hết hạn (gọi lại mỗi lần reconnect)
+        accessTokenFactory: getFreshAccessToken,
       })
       .withAutomaticReconnect([0, 2000, 5000, 15000])
       .configureLogging(signalR.LogLevel.None)
@@ -96,7 +100,7 @@ export default function NotificationBell({ scrolled }) {
     return () => {
       connection.stop();
     };
-  }, [loadData]);
+  }, [loggedIn, loadData]);
 
   useEffect(() => {
     const handleOutside = (e) => {

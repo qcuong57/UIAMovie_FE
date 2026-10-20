@@ -2,14 +2,12 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/common/Toast";
+import { hasStoredUser } from "../config/sessionStore";
 
-export const isLoggedIn = () => {
-  try {
-    return !!localStorage.getItem("accessToken");
-  } catch {
-    return false;
-  }
-};
+// Dựa trên hồ sơ đã lưu (cùng nguồn với router/Navbar), không dựa vào accessToken
+// vì token chỉ nằm trong bộ nhớ và có thể đang được refresh nền sau khi reload.
+// Giữ export tên cũ để các nơi đang import { isLoggedIn } không bị gãy.
+export const isLoggedIn = hasStoredUser;
 
 /**
  * Trả về hàm goTo(path): nếu đã đăng nhập -> navigate bình thường,

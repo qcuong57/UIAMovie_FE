@@ -8,11 +8,15 @@
 // dạng gradient tan dần thay vì hairline cứng. Benefits vẫn giữ bố cục
 // dạng danh sách nhưng mỗi icon nằm trong một vòng tròn nền dịu mắt.
 //
-// Logic nghiệp vụ (gọi API, mapping trạng thái, xử lý thanh toán, toast,
-// FAQ accordion) giữ nguyên 100% so với bản trước — chỉ phần trình bày
-// được viết lại.
+// Luồng thanh toán (chuẩn production):
+//   - Bấm thẻ gói chỉ MỞ hộp thoại xác nhận. Đơn (create-order) chỉ được tạo khi
+//     người dùng bấm "Thanh toán" → bấm nhầm rồi đóng thì KHÔNG sinh đơn Pending.
+//   - Quay lại từ cổng thanh toán (Back / bfcache): reset trạng thái đang chuyển hướng
+//     bằng sự kiện `pageshow`, không để spinner treo hay nút bị khóa.
+//   - Trạng thái gói được cache (stale-while-revalidate) và animation vào trang chỉ chạy
+//     một lần, nên quay lại trang không bị "load lại" từ đầu.
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Crown,
@@ -40,6 +44,12 @@ import { useToast } from "../components/common/Toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Cổng thanh toán user có thể chọn (giá trị `id` gửi lên BE làm paymentProvider).
+const PAYMENT_PROVIDERS = [
+  { id: "vnpay", label: "VNPay" },
+  { id: "sepay", label: "SePay" },
+];
+
 const PLANS = [
   {
     id: null,
@@ -49,10 +59,10 @@ const PLANS = [
     period: null,
     badge: null,
     featured: false,
-    cta: "Gói hiện tại",
+    cta: "Gói mặc định",
     icon: Play,
     features: ["HD 720p", "1 thiết bị", "Kho phim cơ bản"],
-    missing: ["Full HD 1080p", "Không quảng cáo", "Tải về ngoại tuyến"],
+    missing: ["Full HD / 4K", "Không quảng cáo", "Tải về xem offline"],
   },
   {
     id: "monthly_premium",
@@ -65,11 +75,9 @@ const PLANS = [
     cta: "Bắt đầu ngay",
     icon: Crown,
     features: [
-      "Full HD 1080p",
+      "Full HD / 4K",
       "Không quảng cáo",
-      "3 thiết bị đồng thời",
-      "Toàn bộ kho phim",
-      "Tải về ngoại tuyến",
+      "Tải về xem offline",
     ],
   },
   {
@@ -78,18 +86,15 @@ const PLANS = [
     name: "Premium · Năm",
     price: 599000,
     period: "/năm",
-    badge: "Tiết kiệm 28%",
+    badge: "Tiết kiệm 27,7%",
     featured: false,
     cta: "Tiết kiệm hơn",
     icon: Gift,
     features: [
-      "Full HD 1080p",
+      "Full HD / 4K",
       "Không quảng cáo",
-      "5 thiết bị đồng thời",
-      "Toàn bộ kho phim",
-      "Tải về ngoại tuyến",
-      "Nội dung độc quyền",
-      "Hỗ trợ ưu tiên 24/7",
+      "Tải về xem offline",
+      "Ưu tiên hỗ trợ",
     ],
   },
 ];
@@ -104,7 +109,7 @@ const BENEFITS = [
   },
   {
     icon: Star,
-    title: "Full HD 1080p",
+    title: "Full HD / 4K",
     desc: "Trải nghiệm hình ảnh sắc nét chuẩn rạp ngay tại nhà",
   },
   {
@@ -134,19 +139,19 @@ const SPRING_SOFT = { type: "spring", stiffness: 180, damping: 22 };
 const FAQS = [
   {
     q: "Tôi có thể hủy bất cứ lúc nào không?",
-    a: "Hoàn toàn có thể. Bạn hủy gói Premium bất kỳ lúc nào từ trang cài đặt tài khoản. Không có phí phạt hay ràng buộc nào.",
+    a: "Bạn có thể hủy gói Premium bất kỳ lúc nào ở trang Hồ sơ. Lưu ý: khi hủy, quyền Premium mất ngay lập tức và phần thời gian còn lại không được hoàn tiền.",
   },
   {
     q: "Thanh toán bằng phương thức nào?",
-    a: "Chúng tôi xử lý thanh toán qua cổng VNPay — hỗ trợ thẻ ATM nội địa, Visa, Mastercard và JCB.",
+    a: "Bạn có thể chọn một trong hai cổng ngay trên trang này: VNPay (thẻ ATM nội địa, Visa, Mastercard, JCB) hoặc SePay (chuyển khoản qua mã QR ngân hàng và các phương thức khác tùy cổng hỗ trợ).",
   },
   {
     q: "Gói Năm có ưu điểm gì hơn Gói Tháng?",
-    a: "Gói Năm tiết kiệm 28% so với trả theo tháng, thêm 2 slot thiết bị (5 thay vì 3), hỗ trợ ưu tiên 24/7 và quyền truy cập nội dung độc quyền.",
+    a: "Gói Năm tiết kiệm 27,7% so với trả theo tháng và có thêm quyền ưu tiên hỗ trợ.",
   },
   {
     q: "Tiền có được hoàn lại nếu không hài lòng?",
-    a: "Trong 7 ngày đầu tiên kể từ khi đăng ký, chúng tôi hoàn tiền 100% nếu bạn không hài lòng với dịch vụ.",
+    a: "Hiện chưa có chính sách hoàn tiền tự động: đơn thanh toán thành công sẽ không được hoàn lại. Nếu giao dịch gặp sự cố, vui lòng liên hệ hỗ trợ.",
   },
 ];
 
@@ -154,15 +159,21 @@ const FAQS = [
 
 const fmt = (n) => new Intl.NumberFormat("vi-VN").format(n) + "đ";
 
+// Cache cấp module: sống qua các lần mount lại của trang (điều hướng Back/Forward trong SPA).
+let subStatusCache = null; // kết quả getSubscriptionStatus gần nhất
+let subStatusFetched = false; // đã từng gọi xong ít nhất một lần (kể cả lỗi / chưa đăng nhập)
+let introPlayed = false; // animation xuất hiện của thẻ gói chỉ chạy một lần
+const STYLE_ID = "premium-page-style";
+
 /** Map subscriptionType từ API → plan.key
  *  BE trả { isPremium, subscriptionType, expiredAt, daysRemaining, isExpiringSoon }
  */
 const mapSubTypeToKey = (subStatus) => {
   if (!subStatus?.isPremium) return "free";
-  const t = (subStatus.subscriptionType || "").toLowerCase();
-  if (t.includes("year")) return "yearly";
-  if (t.includes("month") || t === "premium") return "monthly";
-  return "monthly";
+  // BE chưa trả planId: không đoán gói tháng/năm, tránh đánh dấu sai thẻ.
+  if (subStatus.planId === "yearly_premium") return "yearly";
+  if (subStatus.planId === "monthly_premium") return "monthly";
+  return "premium"; // không khớp thẻ nào
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -242,15 +253,16 @@ const PlanCard = ({
   isCurrent,
   subLoading,
   subStatus,
+  skipIntro,
 }) => {
   const PlanIcon = plan.icon;
   const isLoading = plan.id !== null && loading === plan.id;
   const isFree = plan.key === "free";
   const isYearly = plan.key === "yearly";
 
-  const isBlockedByActiveSub =
-    !isCurrent && !isFree && subStatus?.isPremium === true;
-  const isDisabled = isCurrent || isFree || subLoading || isBlockedByActiveSub;
+  // BE cộng dồn ngày từ ngày hết hạn → cho phép gia hạn khi còn Premium.
+  const isRenewal = !isFree && subStatus?.isPremium === true;
+  const isDisabled = isCurrent || isFree || subLoading;
 
   const borderColor = isCurrent
     ? "rgba(70,211,105,0.5)"
@@ -262,7 +274,7 @@ const PlanCard = ({
 
   const ctaBg = isCurrent
     ? "transparent"
-    : isFree || isBlockedByActiveSub
+    : isFree
       ? "transparent"
       : plan.featured
         ? C.accent
@@ -270,7 +282,7 @@ const PlanCard = ({
 
   const ctaColor = isCurrent
     ? C.green
-    : isFree || isBlockedByActiveSub
+    : isFree
       ? C.textDim
       : plan.featured
         ? "#fff"
@@ -278,7 +290,7 @@ const PlanCard = ({
 
   const ctaBorder = isCurrent
     ? "1px solid rgba(70,211,105,0.4)"
-    : isFree || isBlockedByActiveSub
+    : isFree
       ? `1px solid ${C.border}`
       : plan.featured
         ? "none"
@@ -286,7 +298,7 @@ const PlanCard = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      initial={skipIntro ? false : { opacity: 0, y: 14, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       whileHover={!isDisabled ? { y: -6, scale: 1.012 } : {}}
       transition={SPRING}
@@ -528,7 +540,7 @@ const PlanCard = ({
         ))}
       </ul>
 
-      {isBlockedByActiveSub && (
+      {isRenewal && (
         <div
           style={{
             marginTop: 16,
@@ -550,7 +562,7 @@ const PlanCard = ({
             {subStatus?.expiredAt
               ? new Date(subStatus.expiredAt).toLocaleDateString("vi-VN")
               : "—"}
-            . Vui lòng chờ hết hạn hoặc liên hệ hỗ trợ để nâng cấp sớm.
+            . Mua thêm sẽ được cộng dồn từ ngày hết hạn hiện tại.
           </p>
         </div>
       )}
@@ -597,12 +609,12 @@ const PlanCard = ({
             {isCurrent ? (
               <Check size={14} />
             ) : (
-              !isFree && !isBlockedByActiveSub && <PlanIcon size={14} />
+              !isFree && <PlanIcon size={14} />
             )}
             {isCurrent
               ? "Gói hiện tại của bạn"
-              : isBlockedByActiveSub
-                ? "Không khả dụng"
+              : isRenewal
+                ? "Gia hạn"
                 : plan.cta}
           </>
         )}
@@ -611,72 +623,397 @@ const PlanCard = ({
   );
 };
 
+// ─── Checkout confirm modal ───────────────────────────────────────────────────
+// Đơn hàng CHỈ được tạo khi bấm "Thanh toán" ở đây.
+
+const CheckoutModal = ({
+  plan,
+  provider,
+  onProviderChange,
+  onConfirm,
+  onClose,
+  submitting,
+  subStatus,
+}) => {
+  const confirmRef = useRef(null);
+  const PlanIcon = plan.icon;
+  const isRenewal = subStatus?.isPremium === true;
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    confirmRef.current?.focus();
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && !submitting) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [submitting, onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.66)",
+        backdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkout-title"
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={SPRING}
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          background: C.surfaceHigh,
+          border: `1px solid ${C.borderMid}`,
+          borderRadius: RADIUS.panel,
+          padding: "28px 28px 24px",
+          boxShadow: SHADOW.cardLift,
+        }}
+      >
+        <h2
+          id="checkout-title"
+          style={{
+            fontFamily: FONT_DISPLAY,
+            fontSize: 20,
+            fontWeight: 800,
+            color: "#fff",
+            margin: "0 0 18px",
+          }}
+        >
+          Xác nhận đăng ký
+        </h2>
+
+        {/* Tóm tắt gói */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "16px 18px",
+            borderRadius: RADIUS.icon,
+            background: C.surfaceCard,
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 9,
+              fontFamily: FONT_DISPLAY,
+              fontSize: 14,
+              fontWeight: 700,
+              color: C.text,
+            }}
+          >
+            <PlanIcon size={15} color={C.accent} />
+            {plan.name}
+          </span>
+          <span
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 18,
+              fontWeight: 800,
+              color: "#fff",
+            }}
+          >
+            {fmt(plan.price)}
+            <span
+              style={{
+                fontFamily: FONT_BODY,
+                fontSize: 12,
+                fontWeight: 500,
+                color: C.textSub,
+              }}
+            >
+              {plan.period}
+            </span>
+          </span>
+        </div>
+
+        {isRenewal && (
+          <p
+            style={{
+              margin: "12px 2px 0",
+              fontSize: 12,
+              lineHeight: 1.6,
+              color: C.textSub,
+              fontFamily: FONT_BODY,
+            }}
+          >
+            Gói Premium hiện tại còn hạn đến{" "}
+            {subStatus?.expiredAt
+              ? new Date(subStatus.expiredAt).toLocaleDateString("vi-VN")
+              : "—"}
+            . Thời gian mua thêm sẽ được cộng dồn từ ngày hết hạn đó.
+          </p>
+        )}
+
+        {/* Cổng thanh toán */}
+        <p
+          style={{
+            margin: "20px 0 8px",
+            fontFamily: FONT_BODY,
+            fontSize: 12,
+            fontWeight: 600,
+            color: C.textSub,
+          }}
+        >
+          Thanh toán qua
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Chọn cổng thanh toán"
+          style={{ display: "flex", gap: 8 }}
+        >
+          {PAYMENT_PROVIDERS.map((p) => {
+            const active = provider === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={submitting}
+                onClick={() => onProviderChange(p.id)}
+                style={{
+                  flex: 1,
+                  padding: "11px 0",
+                  borderRadius: RADIUS.btn,
+                  border: `1px solid ${active ? C.accent : C.borderMid}`,
+                  background: active ? "rgba(229,9,20,0.12)" : "transparent",
+                  color: active ? "#fff" : C.textSub,
+                  fontFamily: FONT_BODY,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  transition: "all 0.18s ease",
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <p
+          style={{
+            margin: "16px 2px 0",
+            fontSize: 11.5,
+            lineHeight: 1.6,
+            color: C.textDim,
+            fontFamily: FONT_BODY,
+          }}
+        >
+          Bạn sẽ được chuyển tới cổng thanh toán. Đơn chỉ được tạo khi bạn bấm
+          “Thanh toán” và có hiệu lực trong 15 phút.
+        </p>
+
+        {/* Hành động */}
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              flex: 1,
+              padding: "14px 0",
+              borderRadius: RADIUS.btn,
+              border: `1px solid ${C.borderBright}`,
+              background: "transparent",
+              color: C.text,
+              fontFamily: FONT_BODY,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.5 : 1,
+            }}
+          >
+            Quay lại
+          </button>
+          <button
+            ref={confirmRef}
+            type="button"
+            onClick={onConfirm}
+            disabled={submitting}
+            style={{
+              flex: 1.4,
+              padding: "14px 0",
+              borderRadius: RADIUS.btn,
+              border: "none",
+              background: C.accent,
+              color: "#fff",
+              fontFamily: FONT_BODY,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: submitting ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {submitting ? (
+              <>
+                <span
+                  style={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: "50%",
+                    border: "2px solid rgba(255,255,255,0.35)",
+                    borderTopColor: "#fff",
+                    animation: "spin 0.7s linear infinite",
+                    display: "inline-block",
+                  }}
+                />
+                Đang chuyển hướng…
+              </>
+            ) : (
+              `Thanh toán ${fmt(plan.price)}`
+            )}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const PremiumPage = () => {
-  const [loading, setLoading] = useState(null);
+  const [loading, setLoading] = useState(null); // planId đang tạo đơn / chuyển hướng
+  const [provider, setProvider] = useState(PAYMENT_PROVIDERS[0].id);
+  const [selectedPlan, setSelectedPlan] = useState(null); // gói đang mở hộp thoại xác nhận
   const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [openFaq, setOpenFaq] = useState(null);
-  const [subStatus, setSubStatus] = useState(null);
-  const [subLoading, setSubLoading] = useState(true);
+  const [subStatus, setSubStatus] = useState(subStatusCache);
+  // Chỉ hiện trạng thái "đang tải" ở lần đầu; các lần quay lại dùng cache và cập nhật ngầm.
+  const [subLoading, setSubLoading] = useState(!subStatusFetched);
+  const redirectingRef = useRef(false); // đã đẩy người dùng sang cổng thanh toán
+  const aliveRef = useRef(true);
+  const skipIntro = useRef(introPlayed).current;
 
   useEffect(() => {
+    aliveRef.current = true;
+    introPlayed = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  // Inject font/keyframes MỘT lần và giữ lại: gỡ rồi chèn lại mỗi lần mount làm font nháy.
+  useEffect(() => {
+    if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement("style");
+    style.id = STYLE_ID;
     style.textContent = `
       ${GOOGLE_FONTS}
       @keyframes spin { to { transform: rotate(360deg); } }
     `;
     document.head.appendChild(style);
-    return () => document.head.removeChild(style);
+  }, []);
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const res = await paymentService.getSubscriptionStatus();
+      subStatusCache = res;
+      if (aliveRef.current) setSubStatus(res);
+    } catch {
+      // Lỗi mạng thoáng qua: giữ dữ liệu cũ nếu có, không làm trang nhảy về "Free".
+      if (aliveRef.current && !subStatusCache) setSubStatus(null);
+    } finally {
+      subStatusFetched = true;
+      if (aliveRef.current) setSubLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    setSubLoading(true);
-    paymentService
-      .getSubscriptionStatus()
-      .then((res) => {
-        setSubStatus(res);
-        setSubLoading(false);
-      })
-      .catch(() => {
-        setSubStatus(null);
-        setSubLoading(false);
-      });
-  }, []);
+    refreshStatus();
+  }, [refreshStatus]);
+
+  // Quay lại bằng nút Back từ cổng thanh toán: trình duyệt có thể khôi phục trang từ bfcache
+  // với state cũ (spinner đang quay, nút bị khóa). Reset lại và làm mới trạng thái gói.
+  useEffect(() => {
+    const onPageShow = (e) => {
+      if (!e.persisted) return;
+      if (redirectingRef.current) {
+        redirectingRef.current = false;
+        setLoading(null);
+        setSelectedPlan(null);
+        toastRef.current?.info?.(
+          "Bạn chưa hoàn tất thanh toán. Có thể chọn lại gói bất cứ lúc nào."
+        );
+      }
+      refreshStatus();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [refreshStatus]);
 
   const currentPlanKey = subLoading ? null : mapSubTypeToKey(subStatus);
 
-  const handleSubscribe = async (plan) => {
-    if (loading) return;
+  // Bước 1: chỉ MỞ hộp thoại xác nhận — chưa tạo đơn.
+  const openCheckout = useCallback(
+    (plan) => {
+      if (loading || plan.id === null) return;
+      setSelectedPlan(plan);
+    },
+    [loading]
+  );
 
-    if (subStatus?.isPremium && plan.id !== null) {
-      const expiry = subStatus.expiredAt
-        ? new Date(subStatus.expiredAt).toLocaleDateString("vi-VN")
-        : "";
-      toast.warning(
-        `Gói Premium của bạn vẫn còn hạn đến ${expiry}. Vui lòng liên hệ hỗ trợ để nâng cấp sớm.`
-      );
-      return;
-    }
+  const closeCheckout = useCallback(() => {
+    if (loading) return; // đang tạo đơn / chuyển hướng thì không cho đóng
+    setSelectedPlan(null);
+  }, [loading]);
 
-    setLoading(plan.id);
+  // Bước 2: người dùng bấm "Thanh toán" → mới tạo đơn và chuyển sang cổng.
+  const confirmPayment = async () => {
+    if (loading || !selectedPlan?.id) return;
+
+    setLoading(selectedPlan.id);
     try {
       const result = await paymentService.createOrder({
-        planId: plan.id,
-        paymentProvider: "vnpay",
+        planId: selectedPlan.id,
+        paymentProvider: provider,
       });
-      const paymentUrl = result?.paymentUrl;
-      if (!paymentUrl) throw new Error("Không nhận được URL thanh toán.");
-      toast.info("Đang chuyển hướng tới cổng thanh toán...");
-      setTimeout(() => {
-        window.location.href = paymentUrl;
-      }, 1200);
+      if (!result?.paymentUrl) throw new Error("Không nhận được URL thanh toán.");
+      redirectingRef.current = true;
+      // VNPay: chuyển trang; SePay: POST form có chữ ký. Giữ `loading` để chặn bấm đúp
+      // cho tới khi trình duyệt rời trang (hoặc được reset ở `pageshow` khi quay lại).
+      paymentService.redirectToPayment(result);
     } catch (err) {
       toast.error(
         err.message || "Không thể tạo đơn thanh toán. Vui lòng thử lại."
       );
-    } finally {
-      setLoading(null);
+      setLoading(null); // giữ hộp thoại mở để người dùng thử lại
     }
   };
 
@@ -853,7 +1190,7 @@ const PremiumPage = () => {
             {[
               { icon: Zap, text: "Kích hoạt ngay" },
               { icon: Shield, text: "Hủy bất cứ lúc" },
-              { icon: Star, text: "7 ngày hoàn tiền" },
+              { icon: Star, text: "Thanh toán qua VNPay / SePay" },
             ].map(({ icon: Icon, text }, i) => (
               <span
                 key={i}
@@ -885,24 +1222,65 @@ const PremiumPage = () => {
             marginBottom: 44,
           }}
         >
-          <span
+          <div
+            role="radiogroup"
+            aria-label="Chọn cổng thanh toán"
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 7,
-              padding: "8px 18px",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: 6,
+              padding: 5,
               borderRadius: RADIUS.chip,
               background: C.surfaceCard,
               border: `1px solid ${C.border}`,
-              color: C.textSub,
-              fontFamily: FONT_BODY,
-              fontSize: 12,
-              fontWeight: 600,
             }}
           >
-            <Lock size={11} color={C.textDim} />
-            Thanh toán bảo mật qua VNPay
-          </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                padding: "0 8px 0 14px",
+                color: C.textSub,
+                fontFamily: FONT_BODY,
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              <Lock size={11} color={C.textDim} />
+              Thanh toán bảo mật qua
+            </span>
+            {PAYMENT_PROVIDERS.map((p) => {
+              const active = provider === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={!!loading}
+                  onClick={() => setProvider(p.id)}
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: RADIUS.chip,
+                    border: "none",
+                    background: active ? C.accent : "transparent",
+                    color: active ? "#fff" : C.textSub,
+                    fontFamily: FONT_BODY,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    opacity: loading && !active ? 0.5 : 1,
+                    transition: "background 0.2s ease, color 0.2s ease",
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div
@@ -918,7 +1296,8 @@ const PremiumPage = () => {
               key={plan.key}
               plan={plan}
               loading={loading}
-              onSubscribe={handleSubscribe}
+              onSubscribe={openCheckout}
+              skipIntro={skipIntro}
               isCurrent={currentPlanKey === plan.key}
               subLoading={subLoading}
               subStatus={subStatus}
@@ -1119,9 +1498,9 @@ const PremiumPage = () => {
               lineHeight: 1.7,
             }}
           >
-            Tham gia hàng triệu người dùng đang thưởng thức kho phim không giới
+            Tham gia cộng đồng người dùng đang thưởng thức kho phim không giới
             hạn.
-            <br />7 ngày đầu miễn phí — hủy bất cứ lúc nào.
+            <br />Kích hoạt ngay sau khi thanh toán thành công.
           </p>
 
           <div
@@ -1133,7 +1512,7 @@ const PremiumPage = () => {
             }}
           >
             <motion.button
-              onClick={() => handleSubscribe(PLANS[1])}
+              onClick={() => openCheckout(PLANS[1])}
               disabled={!!loading}
               whileHover={{ scale: 1.03, y: -1 }}
               whileTap={{ scale: 0.98 }}
@@ -1158,7 +1537,7 @@ const PremiumPage = () => {
             </motion.button>
 
             <motion.button
-              onClick={() => handleSubscribe(PLANS[2])}
+              onClick={() => openCheckout(PLANS[2])}
               disabled={!!loading}
               whileHover={{ scale: 1.03, y: -1 }}
               whileTap={{ scale: 0.98 }}
@@ -1179,11 +1558,27 @@ const PremiumPage = () => {
               }}
             >
               <Gift size={15} />
-              Tiết kiệm 28% — Gói Năm
+              Tiết kiệm 27,7% — Gói Năm
             </motion.button>
           </div>
         </div>
       </section>
+
+      {/* ══ XÁC NHẬN THANH TOÁN ═══════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {selectedPlan && (
+          <CheckoutModal
+            key="checkout"
+            plan={selectedPlan}
+            provider={provider}
+            onProviderChange={setProvider}
+            onConfirm={confirmPayment}
+            onClose={closeCheckout}
+            submitting={!!loading}
+            subStatus={subStatus}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as signalR from '@microsoft/signalr';
 import notificationService from '../services/notificationService';
 import authService from '../services/authService';
+import { getFreshAccessToken } from '../config/axios';
 
 const HUB_URL = 'http://localhost:5000/hubs/notifications'; // Hoặc biến môi trường VITE_HUB_URL
 
@@ -36,7 +37,9 @@ export const useNotifications = () => {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        accessTokenFactory: () => localStorage.getItem('accessToken'),
+        // Lấy token mới (tự refresh nếu hết hạn) mỗi lần negotiate / reconnect,
+        // không đọc trực tiếp từ localStorage nữa.
+        accessTokenFactory: () => getFreshAccessToken(),
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000]) // Tự thử kết nối lại
       .configureLogging(signalR.LogLevel.None)

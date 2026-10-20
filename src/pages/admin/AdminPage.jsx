@@ -1,7 +1,7 @@
 // src/pages/admin/AdminPage.jsx
 import React, { useState } from "react";
 import { Navigate } from "react-router-dom";
-import authService from "../../services/authService";
+import { useStoredUser } from "../../hooks/useStoredUser";
 
 import AdminLayout from "../../components/admin/AdminLayout";
 import AdminDashboard from "../../components/admin/AdminDashboard";
@@ -17,7 +17,9 @@ import AdminAds from "../../components/admin/AdminAds";
 
 export default function AdminPage() {
   const [tab, setTab] = useState("dashboard");
-  const user = authService.getCurrentUser();
+  // Reactive: tự render lại khi đăng xuất / đổi tài khoản (kể cả từ tab khác).
+  // Lưu ý: đây chỉ là chặn giao diện, quyền thật sự vẫn do backend kiểm tra theo token.
+  const user = useStoredUser();
 
   if (!user || user.role?.toLowerCase() !== "admin") {
     return <Navigate to="/" replace />;

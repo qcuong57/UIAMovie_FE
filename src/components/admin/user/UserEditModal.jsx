@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, User, Link } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 import { useToast } from '../common/Toast';
+import { validateUsername } from '../../../utils/validators';
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {
@@ -76,7 +77,10 @@ export default function UserEditModal({ user, onClose, onSaved }) {
   }, [user]);
 
   const handleSave = async () => {
-    if (!form.username.trim()) { setError('Tên đăng nhập không được để trống'); return; }
+    const nameError = validateUsername(form.username);
+    if (nameError) { setError(`Tên đăng nhập: ${nameError.replace(/^Username\s*/i, '')}`); return; }
+    const avatar = form.avatarUrl.trim();
+    if (avatar && !/^https?:\/\//i.test(avatar)) { setError('Avatar URL phải bắt đầu bằng http:// hoặc https://'); return; }
     setSaving(true); setError('');
     try {
       await axiosInstance.put(`/user/${user.id}`, {

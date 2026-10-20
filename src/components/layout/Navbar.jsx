@@ -1,6 +1,6 @@
 // src/components/layout/Navbar.jsx
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useReducer } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -25,6 +25,7 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import * as variants from "../../motion-configs/variants";
 import * as transitions from "../../motion-configs/transitions";
 import authService from "../../services/authService";
+import { useStoredUser } from "../../hooks/useStoredUser";
 import axiosInstance from "../../config/axios";
 import NavbarFilterModal from "../ui/NavbarFilterModal";
 import NotificationBell from "../ui/NotificationBell";
@@ -148,9 +149,9 @@ const Navbar = () => {
 
   const debouncedQuery = useDebounce(searchQuery, 350);
 
-  const [currentUser, setCurrentUser] = useState(() =>
-    authService.getCurrentUser(),
-  );
+  // Hồ sơ đăng nhập: tự cập nhật khi đăng nhập/đăng xuất/hết phiên (cả từ tab khác).
+  const currentUser = useStoredUser();
+  const [, forceRender] = useReducer((n) => n + 1, 0);
 
   const goHome = () => {
     navigate("/");
@@ -158,13 +159,9 @@ const Navbar = () => {
   };
 
   useEffect(() => {
-    const sync = () => setCurrentUser(authService.getCurrentUser());
-    window.addEventListener("storage", sync);
-    window.addEventListener("userUpdated", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("userUpdated", sync);
-    };
+    // Tương thích nơi khác ghi thẳng localStorage rồi bắn "userUpdated".
+    window.addEventListener("userUpdated", forceRender);
+    return () => window.removeEventListener("userUpdated", forceRender);
   }, []);
 
   useEffect(() => {
@@ -269,11 +266,10 @@ const Navbar = () => {
 
   const handleLogout = async () => {
     try {
-      await authService.logout();
+      await authService.logout(); // luôn clearSession() trong finally
     } catch {
       /* noop */
     } finally {
-      authService.clearSession();
       window.location.href = "/welcome";
     }
   };

@@ -7,8 +7,9 @@
 //   MovieTitleBlock   – tiêu đề, meta pills, mô tả, nút "Thông tin"
 //   MovieTabsPanel    – tabs: Diễn viên | Đánh giá | Thêm thông tin
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import movieService from "../../services/movieService";
@@ -53,14 +54,8 @@ export default function MovieDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab,     setTab]     = useState("cast");
 
-  const [currentUser] = useState(() => {
-    try {
-      const r = localStorage.getItem("currentUser");
-      return r ? JSON.parse(r) : null;
-    } catch {
-      return null;
-    }
-  });
+  // Đọc hồ sơ từ sessionStore: tự cập nhật khi refreshPremiumStatus(), đăng xuất/đăng nhập ở tab khác.
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getStoredUser, () => null);
 
   const isFreeUser = currentUser ? !currentUser.isPremium : true;
 
@@ -108,7 +103,7 @@ export default function MovieDetailPage() {
         // Diễn viên
         if (Array.isArray(movieData?.cast) && movieData.cast.length > 0) {
           setActors(
-            movieData.cast
+            [...movieData.cast]
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
               .map((c) => ({
                 id:           c.id ?? c.personId ?? c.tmdbPersonId ?? null,
@@ -290,7 +285,7 @@ export default function MovieDetailPage() {
                   </div>
                 </div>
               ) : (
-                <MovieVideoPlayer movie={movie} isFreeUser={isFreeUser} />
+                <MovieVideoPlayer movie={movie} isFreeUser={isFreeUser} isLoggedIn={!!currentUser} />
               )}
             </motion.div>
 

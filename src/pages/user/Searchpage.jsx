@@ -14,17 +14,9 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import MovieCard from "../../components/movie/MovieCard";
 import { SkeletonCard, NoResults, GRID_STYLE } from "../../components/search/SearchUI";
 import { useToast } from "../../components/common/Toast";
+import { getStoredUser as getCurrentUser } from "../../config/sessionStore";
 
 const ACCENT = '#e5181e';
-
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem('currentUser');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 
 const movieGrid = (isMobile) =>
   isMobile ? { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 } : GRID_STYLE;

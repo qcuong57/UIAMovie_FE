@@ -1,97 +1,167 @@
 // src/pages/admin/AdminRevenue.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Trang quản lý doanh thu — kết nối với PaymentController.cs admin endpoints:
-//   GET /api/payments/admin/revenue/summary
-//   GET /api/payments/admin/revenue/chart
-//   GET /api/payments/admin/revenue/by-plan
-//   GET /api/payments/admin/orders
+// Dashboard doanh thu & thanh toán (một trang, không tab).
+// Khớp AdminRevenueController (api/payments/admin/...):
+//   GET revenue/summary · revenue/chart · revenue/by-plan · orders · revenue/export (.xlsx)
+//
+// Quy ước của BE:
+//   - Ngày/tháng trong thống kê và bộ lọc tính theo GIỜ VN (GMT+7). FE chỉ gửi NGÀY dạng "yyyy-MM-dd"
+//     (gồm cả ngày cuối), BE tự đổi mốc sang UTC. Thời gian BE trả về là UTC → hiển thị theo múi giờ VN.
+//   - status: pending (còn hạn) | expired (pending quá hạn) | failed | success.
+//   - summary.failedOrders CHỈ gồm failed; expiredOrders tách riêng; pendingOrders chỉ gồm pending còn hạn.
+//     successRate = success / (success + failed + expired).
+//   - Export: không chọn trạng thái thì chỉ xuất đơn success. Đơn success lọc theo ngày THANH TOÁN,
+//     các trạng thái khác lọc theo ngày TẠO. Tối đa 50.000 dòng.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import paymentService from '../../services/paymentService';
-import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
-import { fmtVnd, fmtDate, fmtDateTime, STATUS_META, MONTHS_VI, PLAN_COLORS } from '../../helper/format';
+import { getApiErrorMessage } from '../../utils/apiError';
+import { useToast } from './common/Toast';
+import {
+  T, FONT_BODY as FONT, FONT_TITLE, ACCENT, ACCENT2, ACCENT3, ACCENT4,
+} from '../../context/adminTokens';
+import { fmtVnd, MONTHS_VI } from '../../helper/format';
+import AdminPagination from '../../components/common/AdminPagination';
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Design tokens (local overrides on top of adminTokens)
-// ══════════════════════════════════════════════════════════════════════════════
-const ACCENT   = '#1C5F3A';
-const ACCENT2  = '#7C3AED';
-const ACCENT3  = '#0891B2';
-const CHART_COLORS = [ACCENT, ACCENT2, ACCENT3, '#D97706'];
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap');
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 10px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  button, input, select, textarea { font-family: 'Nunito', sans-serif; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes shimmer {
-    0% { background-position: -400px 0; }
-    100% { background-position: 400px 0; }
-  }
+const PAGE_SIZE = 15;
+const POLL_MS = 20_000; // tự làm mới khi còn đơn pending
+const PLAN_COLORS = [ACCENT, ACCENT2, ACCENT3, ACCENT4];
+
+const STATUS = {
+  success: { label: 'Thành công',     color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
+  pending: { label: 'Chờ thanh toán', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+  expired: { label: 'Hết hạn',        color: T.textSub, bg: T.bg,      border: T.border },
+  failed:  { label: 'Thất bại',       color: T.red,     bg: '#FEF2F2', border: '#FECACA' },
+};
+
+const STATUS_FILTERS = [
+  { value: '',        label: 'Tất cả' },
+  { value: 'success', label: STATUS.success.label },
+  { value: 'pending', label: STATUS.pending.label },
+  { value: 'expired', label: STATUS.expired.label },
+  { value: 'failed',  label: STATUS.failed.label },
+];
+
+const PROVIDERS = [
+  { value: 'vnpay', label: 'VNPay' },
+  { value: 'sepay', label: 'SePay' },
+];
+const PROVIDER_LABEL = { vnpay: 'VNPay', sepay: 'SePay' };
+
+const PLANS = [
+  { value: 'monthly_premium', label: 'Premium Tháng' },
+  { value: 'yearly_premium',  label: 'Premium Năm' },
+];
+
+const CSS = `
+  @keyframes rv-spin { to { transform: rotate(360deg); } }
+  @keyframes rv-shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .rv-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+  .rv-kpis  { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  @media (max-width: 960px) { .rv-split { grid-template-columns: minmax(0, 1fr); } }
+  .rv-row:hover td { background: ${T.surfaceHov}; }
 `;
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Micro Components
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const Spin = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 }}>
+const yFmt = (v) =>
+  v >= 1_000_000 ? `${+(v / 1_000_000).toFixed(1)}tr` : v >= 1_000 ? `${Math.round(v / 1_000)}k` : v;
+
+const pad = (n) => String(n).padStart(2, '0');
+
+/** Ngày giờ hiện tại theo VN (GMT+7). Đọc bằng getUTC*() để không phụ thuộc múi giờ trình duyệt. */
+const vnNow = () => new Date(Date.now() + 7 * 3600 * 1000);
+
+/** BE trả UTC (có thể thiếu hậu tố Z) → ép hiểu là UTC rồi hiển thị theo giờ VN. */
+const HAS_TZ = /(Z|[+-]\d{2}:?\d{2})$/i;
+const VN_FMT = new Intl.DateTimeFormat('vi-VN', {
+  timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const fmtVnDateTime = (v) => {
+  if (!v) return '—';
+  const d = new Date(typeof v === 'string' && !HAS_TZ.test(v) ? `${v}Z` : v);
+  return Number.isNaN(d.getTime()) ? '—' : VN_FMT.format(d);
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+/** Khoảng ngày (VN) gửi cho by-plan, trùng với kỳ của biểu đồ. Chỉ gửi ngày, gồm cả ngày cuối. */
+const buildRange = (groupBy, year, month) =>
+  groupBy === 'day'
+    ? {
+        from: `${year}-${pad(month)}-01`,
+        to: `${year}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`,
+      }
+    : { from: `${year}-01-01`, to: `${year}-12-31` };
+
+// ── Small components ──────────────────────────────────────────────────────────
+
+const Spinner = ({ size = 22 }) => (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
     <div style={{
-      width: 24, height: 24, borderRadius: '50%',
+      width: size, height: size, borderRadius: '50%',
       border: `2.5px solid ${T.accentLight}`, borderTopColor: ACCENT,
-      animation: 'spin 0.7s linear infinite',
+      animation: 'rv-spin 0.7s linear infinite',
     }} />
   </div>
 );
 
-const Empty = ({ text = 'Chưa có dữ liệu', icon = '📊' }) => (
-  <div style={{ padding: '48px 0', textAlign: 'center' }}>
-    <div style={{ fontSize: 32, marginBottom: 10 }}>{icon}</div>
-    <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>{text}</p>
+const Empty = ({ text = 'Chưa có dữ liệu' }) => (
+  <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted, textAlign: 'center', padding: '40px 0', margin: 0 }}>
+    {text}
+  </p>
+);
+
+const ErrorBox = ({ text, onRetry }) => (
+  <div style={{ textAlign: 'center', padding: '36px 0' }}>
+    <p style={{ fontFamily: FONT, fontSize: 13, color: T.red, margin: '0 0 12px' }}>{text}</p>
+    <Btn onClick={onRetry}>Thử lại</Btn>
   </div>
 );
 
-const Divider = ({ style }) => (
-  <div style={{ height: 1, background: T.border, ...style }} />
-);
-
-// ── Skeleton loader ────────────────────────────────────────────────────────────
-const Skeleton = ({ h = 18, w = '100%', r = 8, style }) => (
+const Skeleton = ({ h = 24, w = '60%' }) => (
   <div style={{
-    height: h, width: w, borderRadius: r,
+    height: h, width: w, borderRadius: 6,
     background: 'linear-gradient(90deg, #f0f0ed 25%, #e8e8e3 50%, #f0f0ed 75%)',
-    backgroundSize: '400px 100%',
-    animation: 'shimmer 1.4s ease-in-out infinite',
-    ...style,
+    backgroundSize: '400px 100%', animation: 'rv-shimmer 1.4s ease-in-out infinite',
   }} />
 );
 
-// ── Ghost Button ───────────────────────────────────────────────────────────────
-const GhostBtn = ({ onClick, children, active }) => {
+const Btn = ({ onClick, children, active, disabled, primary }) => {
   const [hov, setHov] = useState(false);
+  const on = active || primary;
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        fontFamily: FONT, fontSize: 12.5, fontWeight: active ? 600 : 500,
-        color: active ? '#fff' : hov ? T.text : T.textSub,
-        background: active ? ACCENT : hov ? T.surfaceHov : T.surface,
-        border: `1px solid ${active ? ACCENT : hov ? T.borderMed : T.border}`,
-        borderRadius: 8, padding: '6px 14px',
-        cursor: 'pointer', outline: 'none',
-        transition: 'all 0.13s',
-        whiteSpace: 'nowrap',
+        fontFamily: FONT, fontSize: 12.5, fontWeight: on ? 700 : 500,
+        color: on ? '#fff' : hov ? T.text : T.textSub,
+        background: on ? ACCENT : hov ? T.surfaceHov : T.surface,
+        border: `1px solid ${on ? ACCENT : hov ? T.borderMed : T.border}`,
+        borderRadius: 8, padding: '6px 14px', whiteSpace: 'nowrap',
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1,
+        outline: 'none', transition: 'all 0.13s',
       }}
     >
       {children}
@@ -99,179 +169,126 @@ const GhostBtn = ({ onClick, children, active }) => {
   );
 };
 
-// ── Select ─────────────────────────────────────────────────────────────────────
 const Select = ({ value, onChange, options, placeholder }) => (
   <select
     value={value}
-    onChange={e => onChange(e.target.value)}
+    onChange={(e) => onChange(e.target.value)}
     style={{
-      fontFamily: FONT, fontSize: 12.5, color: T.text,
-      background: T.surface, border: `1px solid ${T.border}`,
-      borderRadius: 8, padding: '6px 10px',
+      fontFamily: FONT, fontSize: 12.5, color: T.text, background: T.surface,
+      border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px',
       cursor: 'pointer', outline: 'none',
-      transition: 'border-color 0.13s',
     }}
   >
     {placeholder && <option value="">{placeholder}</option>}
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
   </select>
 );
 
-// ── Tab ────────────────────────────────────────────────────────────────────────
-const Tab = ({ active, onClick, children, count }) => (
-  <button
-    onClick={onClick}
-    style={{
-      fontFamily: FONT, fontSize: 13, fontWeight: active ? 700 : 400,
-      color: active ? ACCENT : T.textMuted,
-      background: 'none', border: 'none', cursor: 'pointer',
-      padding: '11px 18px',
-      borderBottom: `2.5px solid ${active ? ACCENT : 'transparent'}`,
-      marginBottom: -1, transition: 'all 0.14s',
-      display: 'flex', alignItems: 'center', gap: 6,
-    }}
-  >
-    {children}
-    {count != null && (
-      <span style={{
-        fontSize: 10, fontWeight: 700, fontFamily: FONT,
-        background: active ? T.accentLight : T.bg,
-        color: active ? ACCENT : T.textMuted,
-        padding: '1px 6px', borderRadius: 99,
-      }}>
-        {count}
-      </span>
-    )}
-  </button>
+const DateInput = ({ value, onChange, label, min, max }) => (
+  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 12, color: T.textMuted }}>
+    {label}
+    <input
+      type="date"
+      value={value}
+      min={min || undefined}
+      max={max || undefined}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        fontFamily: FONT, fontSize: 12.5, color: T.text, background: T.surface,
+        border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 10px', outline: 'none',
+      }}
+    />
+  </label>
 );
 
-// ── Section Card ───────────────────────────────────────────────────────────────
-const Card = ({ title, subtitle, action, children, style, noPad }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 8 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: 0.1, duration: 0.25 }}
-    style={{
-      background: T.surface, borderRadius: 16,
-      border: `1px solid ${T.border}`,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      overflow: 'hidden', ...style,
-    }}
-  >
+const Segmented = ({ value, onChange, options }) => (
+  <div style={{
+    display: 'inline-flex', borderRadius: 8, overflow: 'hidden',
+    border: `1px solid ${T.border}`, background: T.surface,
+  }}>
+    {options.map((o) => (
+      <button
+        key={o.value}
+        type="button"
+        onClick={() => onChange(o.value)}
+        style={{
+          fontFamily: FONT, fontSize: 12.5, fontWeight: value === o.value ? 700 : 500,
+          color: value === o.value ? '#fff' : T.textSub,
+          background: value === o.value ? ACCENT : 'transparent',
+          border: 'none', padding: '7px 14px', cursor: 'pointer', transition: 'all 0.13s',
+        }}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+const Card = ({ title, subtitle, action, children, noPad, style }) => (
+  <section style={{
+    background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`,
+    boxShadow: T.shadow, overflow: 'hidden', minWidth: 0, ...style,
+  }}>
     {(title || action) && (
-      <div style={{
+      <header style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 20px', borderBottom: `1px solid ${T.border}`,
-        gap: 10,
+        gap: 12, flexWrap: 'wrap', padding: '14px 20px', borderBottom: `1px solid ${T.border}`,
       }}>
         <div>
-          <span style={{
-            fontFamily: FONT_TITLE, fontSize: 13.5, fontWeight: 700,
-            color: T.text, letterSpacing: '-0.01em', display: 'block',
-          }}>
+          <h3 style={{ fontFamily: FONT_TITLE, fontSize: 13.5, fontWeight: 700, color: T.text, margin: 0, letterSpacing: '-0.01em' }}>
             {title}
-          </span>
+          </h3>
           {subtitle && (
-            <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
-              {subtitle}
-            </span>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, margin: '2px 0 0' }}>{subtitle}</p>
           )}
         </div>
-        {action && <div style={{ flexShrink: 0 }}>{action}</div>}
-      </div>
+        {action}
+      </header>
     )}
-    <div style={noPad ? {} : { padding: '18px 20px' }}>{children}</div>
-  </motion.div>
+    <div style={noPad ? undefined : { padding: '18px 20px' }}>{children}</div>
+  </section>
 );
 
-// ── KPI Stat Card ──────────────────────────────────────────────────────────────
-const StatCard = ({ label, value, sub, subColor, featured, delta, index, icon, note, loading }) => (
+const StatCard = ({ label, value, sub, subColor, delta, featured, loading, index }) => (
   <motion.div
-    initial={{ opacity: 0, y: 14 }}
+    initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: index * 0.055, duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
+    transition={{ delay: index * 0.04, duration: 0.22 }}
     style={{
-      background: featured
-        ? `linear-gradient(135deg, ${ACCENT} 0%, #145232 100%)`
-        : T.surface,
-      borderRadius: 16,
-      padding: '20px 22px',
+      background: featured ? `linear-gradient(135deg, ${ACCENT} 0%, #145232 100%)` : T.surface,
       border: `1px solid ${featured ? 'transparent' : T.border}`,
-      boxShadow: featured
-        ? `0 8px 32px rgba(28,95,58,0.22), 0 1px 0 rgba(255,255,255,0.08) inset`
-        : '0 1px 4px rgba(0,0,0,0.06)',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'space-between',
-      gap: 14,
-      minHeight: 118,
-      position: 'relative',
-      overflow: 'hidden',
+      borderRadius: 16, padding: '18px 20px', boxShadow: featured ? '0 8px 28px rgba(28,95,58,0.22)' : T.shadow,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14, minHeight: 112,
     }}
   >
-    {/* BG decoration for featured */}
-    {featured && (
-      <div style={{
-        position: 'absolute', right: -20, top: -20,
-        width: 100, height: 100, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.05)',
-        pointerEvents: 'none',
-      }} />
-    )}
-
-    {/* Label + delta */}
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        {icon && (
-          <span style={{ fontSize: 15, lineHeight: 1 }}>{icon}</span>
-        )}
-        <p style={{
-          fontFamily: FONT, fontSize: 11, fontWeight: 700,
-          color: featured ? 'rgba(255,255,255,0.6)' : T.textMuted,
-          letterSpacing: '0.07em', textTransform: 'uppercase', margin: 0,
-        }}>
-          {label}
-        </p>
-      </div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+      <span style={{
+        fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+        color: featured ? 'rgba(255,255,255,0.65)' : T.textMuted,
+      }}>
+        {label}
+      </span>
       {delta != null && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 3,
-          padding: '2px 7px', borderRadius: 99, flexShrink: 0,
-          background: delta >= 0
-            ? featured ? 'rgba(255,255,255,0.15)' : '#F0FDF4'
-            : featured ? 'rgba(239,68,68,0.2)' : '#FEF2F2',
+        <span style={{
+          fontFamily: FONT, fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, flexShrink: 0,
+          color: delta >= 0 ? (featured ? '#fff' : '#15803D') : (featured ? '#FCA5A5' : T.red),
+          background: delta >= 0 ? (featured ? 'rgba(255,255,255,0.15)' : '#F0FDF4') : (featured ? 'rgba(239,68,68,0.2)' : '#FEF2F2'),
         }}>
-          <span style={{
-            fontSize: 10.5, fontWeight: 700, fontFamily: FONT,
-            color: delta >= 0
-              ? featured ? 'rgba(255,255,255,0.9)' : '#16A34A'
-              : featured ? '#FCA5A5' : '#DC2626',
-          }}>
-            {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}%
-          </span>
-        </div>
+          {delta >= 0 ? '+' : '-'}{Math.abs(delta)}%
+        </span>
       )}
     </div>
-
-    {/* Value + sub */}
     <div>
-      {loading ? (
-        <Skeleton h={28} w="70%" r={6} style={{ marginBottom: 6 }} />
-      ) : (
+      {loading ? <Skeleton h={26} w="65%" /> : (
         <p style={{
-          fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800,
-          color: featured ? '#fff' : T.text,
-          lineHeight: 1, letterSpacing: '-0.03em', margin: '0 0 5px 0',
+          fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em',
+          lineHeight: 1.1, margin: '0 0 4px', color: featured ? '#fff' : T.text,
         }}>
           {value ?? '—'}
         </p>
       )}
-      {sub && !loading && (
-        <p style={{
-          fontFamily: FONT, fontSize: 11,
-          color: subColor ?? (featured ? 'rgba(255,255,255,0.5)' : T.textMuted),
-          margin: 0,
-        }}>
+      {!loading && sub && (
+        <p style={{ fontFamily: FONT, fontSize: 11.5, margin: 0, color: subColor ?? (featured ? 'rgba(255,255,255,0.6)' : T.textMuted) }}>
           {sub}
         </p>
       )}
@@ -279,921 +296,508 @@ const StatCard = ({ label, value, sub, subColor, featured, delta, index, icon, n
   </motion.div>
 );
 
-// ── Status Badge ───────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
-  const m = STATUS_META[status?.toLowerCase()] ?? {
-    label: status, color: T.textSub, bg: T.bg, border: T.border,
-  };
+  const m = STATUS[status] ?? { label: status || '—', color: T.textSub, bg: T.bg, border: T.border };
   return (
     <span style={{
-      fontFamily: FONT, fontSize: 10.5, fontWeight: 700,
-      color: m.color, background: m.bg, border: `1px solid ${m.border}`,
-      padding: '2px 9px', borderRadius: 99, whiteSpace: 'nowrap',
-      letterSpacing: '0.02em',
+      fontFamily: FONT, fontSize: 10.5, fontWeight: 700, color: m.color, background: m.bg,
+      border: `1px solid ${m.border}`, padding: '2px 9px', borderRadius: 99, whiteSpace: 'nowrap',
     }}>
       {m.label}
     </span>
   );
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PAGINATION — Light Theme (standalone, no dark override hack)
-// ══════════════════════════════════════════════════════════════════════════════
-function AdminPagination({ page, totalPages, total, pageSize, onPageChange, itemLabel = 'đơn hàng' }) {
-  const [jumpVal, setJumpVal] = useState('');
-  const [jumpOpen, setJumpOpen] = useState(false);
-  const jumpRef = useRef(null);
-
-  if (!totalPages || totalPages <= 1) return null;
-
-  const from = total ? Math.min((page - 1) * pageSize + 1, total) : null;
-  const to   = total ? Math.min(page * pageSize, total) : null;
-
-  // Build page number list
-  const pageNums = (() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const left  = Math.max(2, page - 1);
-    const right = Math.min(totalPages - 1, page + 1);
-    const arr = [1];
-    if (left > 2) arr.push('…L');
-    for (let i = left; i <= right; i++) arr.push(i);
-    if (right < totalPages - 1) arr.push('…R');
-    arr.push(totalPages);
-    return arr;
-  })();
-
-  const commitJump = () => {
-    const n = parseInt(jumpVal, 10);
-    if (!isNaN(n) && n >= 1 && n <= totalPages) onPageChange(n);
-    setJumpVal(''); setJumpOpen(false);
-  };
-
-  const BtnPg = ({ children, active, disabled, onClick }) => {
-    const [hov, setHov] = useState(false);
-    return (
-      <button
-        onClick={disabled ? undefined : onClick}
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => setHov(false)}
-        disabled={disabled}
-        style={{
-          width: 34, height: 34, minWidth: 34,
-          borderRadius: 8,
-          border: active
-            ? `1.5px solid ${ACCENT}`
-            : `1px solid ${hov && !disabled ? T.borderMed : T.border}`,
-          background: active
-            ? ACCENT
-            : hov && !disabled ? T.surfaceHov : T.surface,
-          color: active
-            ? '#fff'
-            : disabled ? T.textMuted : hov ? T.text : T.textSub,
-          fontFamily: FONT, fontSize: 13,
-          fontWeight: active ? 700 : 500,
-          cursor: disabled ? 'default' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.13s',
-          opacity: disabled ? 0.4 : 1,
-          flexShrink: 0,
-          outline: 'none',
-        }}
-      >
-        {children}
-      </button>
-    );
-  };
-
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-      padding: '20px 0 6px',
-    }}>
-      {/* Info row */}
-      {from !== null && (
-        <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>
-          Đang hiển thị{' '}
-          <span style={{ color: T.text, fontWeight: 700 }}>{from}–{to}</span>
-          {' '}trong tổng số{' '}
-          <span style={{ color: T.text, fontWeight: 700 }}>{total?.toLocaleString()}</span>
-          {' '}{itemLabel}
-        </p>
-      )}
-
-      {/* Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {/* Prev */}
-        <BtnPg disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
-          ‹
-        </BtnPg>
-
-        <div style={{ width: 4 }} />
-
-        {/* Page numbers */}
-        {pageNums.map((p, i) => {
-          if (typeof p === 'string' && p.startsWith('…')) {
-            return (
-              <span key={p} style={{
-                width: 34, height: 34, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', color: T.textMuted, fontSize: 13,
-                letterSpacing: 2, flexShrink: 0,
-              }}>···</span>
-            );
-          }
-          return (
-            <BtnPg key={p} active={p === page} onClick={() => onPageChange(p)}>
-              {p}
-            </BtnPg>
-          );
-        })}
-
-        <div style={{ width: 4 }} />
-
-        {/* Next */}
-        <BtnPg disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-          ›
-        </BtnPg>
-
-        {/* Jump to page */}
-        {totalPages > 8 && (
-          <div style={{ position: 'relative', marginLeft: 8 }}>
-            <GhostBtn onClick={() => { setJumpOpen(v => !v); setTimeout(() => jumpRef.current?.focus(), 60); }}>
-              Đến trang
-            </GhostBtn>
-            <AnimatePresence>
-              {jumpOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
-                  style={{
-                    position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: T.surface,
-                    border: `1px solid ${T.borderMed}`,
-                    borderRadius: 12, padding: '10px 12px',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    zIndex: 99, whiteSpace: 'nowrap',
-                    boxShadow: T.shadowMd,
-                  }}
-                >
-                  <input
-                    ref={jumpRef}
-                    type="number" min={1} max={totalPages}
-                    value={jumpVal}
-                    onChange={e => setJumpVal(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') commitJump();
-                      if (e.key === 'Escape') setJumpOpen(false);
-                    }}
-                    placeholder="1"
-                    style={{
-                      width: 50, height: 30, padding: '0 8px', borderRadius: 7,
-                      border: `1px solid ${T.borderMed}`, background: T.bg,
-                      color: T.text, fontFamily: FONT, fontSize: 13,
-                      outline: 'none', textAlign: 'center',
-                    }}
-                  />
-                  <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>/ {totalPages}</span>
-                  <button
-                    onClick={commitJump}
-                    style={{
-                      height: 30, padding: '0 12px', borderRadius: 7,
-                      background: ACCENT, border: 'none', cursor: 'pointer',
-                      color: '#fff', fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
-                    }}
-                  >
-                    OK
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Chart: Custom Tooltip
-// ══════════════════════════════════════════════════════════════════════════════
-const ChartTooltip = ({ active, payload, label }) => {
+const ChartTooltip = ({ active, payload, label, metric }) => {
   if (!active || !payload?.length) return null;
+  const v = payload[0].value;
   return (
-    <div style={{
-      background: T.text, borderRadius: 10, padding: '10px 14px',
-      boxShadow: T.shadowLg, border: 'none',
-      fontFamily: FONT, minWidth: 140,
-    }}>
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
-        {label}
+    <div style={{ background: T.text, borderRadius: 10, padding: '8px 12px', boxShadow: T.shadowLg, fontFamily: FONT }}>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: '0 0 3px', fontWeight: 600 }}>{label}</p>
+      <p style={{ fontSize: 13, color: '#fff', fontWeight: 700, margin: 0 }}>
+        {metric === 'revenue' ? fmtVnd(v) : `${v} đơn`}
       </p>
-      {payload.map((p, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 3 }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{p.name}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>
-            {p.dataKey === 'revenue' ? fmtVnd(p.value) : p.value}
-          </span>
-        </div>
-      ))}
     </div>
   );
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Main Component
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 export default function AdminRevenue() {
-  const [tab, setTab] = useState('overview');
-
-  // Summary
-  const [summary,    setSummary]  = useState(null);
-  const [sumLoading, setSumLoad]  = useState(true);
-
-  // Chart
-  const [chartData,  setChartData]  = useState(null);
-  const [byPlan,     setByPlan]     = useState([]);
-  const [chartLoad,  setChartLoad]  = useState(false);
-  const [groupBy,    setGroupBy]    = useState('month');
-  const [chartYear,  setChartYear]  = useState(new Date().getFullYear());
-  const [chartMonth, setChartMonth] = useState(new Date().getMonth() + 1);
-
-  // Orders
-  const [orders,     setOrders]    = useState([]);
-  const [ordTotal,   setOrdTotal]  = useState(0);
-  const [ordPage,    setOrdPage]   = useState(1);
-  const [ordLoad,    setOrdLoad]   = useState(false);
-  const [fStatus,    setFStatus]   = useState('');
-  const [fPlan,      setFPlan]     = useState('');
-  const [fSearch,    setFSearch]   = useState('');
-  const [fSearchTmp, setFSearchTmp]= useState('');
-  const PAGE_SIZE = 15;
-
-  const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
-
-  // Load summary
-  useEffect(() => {
-    (async () => {
-      setSumLoad(true);
-      try { setSummary(await paymentService.adminGetRevenueSummary()); }
-      catch (e) { console.error(e); }
-      finally { setSumLoad(false); }
-    })();
+  const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const report = useCallback((e, fallback) => {
+    console.error(e);
+    toastRef.current?.error?.(getApiErrorMessage(e, fallback));
   }, []);
 
-  // Load chart
-  const loadChart = useCallback(async () => {
-    setChartLoad(true);
+  const now = vnNow(); // mặc định kỳ biểu đồ theo giờ VN, khớp mặc định của BE
+  const curYear = now.getUTCFullYear();
+  const YEARS = Array.from({ length: 5 }, (_, i) => curYear - i);
+
+  // Summary
+  const [summary, setSummary] = useState(null);
+  const [sumLoading, setSumLoading] = useState(true);
+  const [sumError, setSumError] = useState(false);
+
+  // Chart + by-plan (chung một kỳ)
+  const [groupBy, setGroupBy] = useState('month');
+  const [year, setYear] = useState(curYear);
+  const [month, setMonth] = useState(now.getUTCMonth() + 1);
+  const [metric, setMetric] = useState('revenue');
+  const [chart, setChart] = useState(null);
+  const [byPlan, setByPlan] = useState([]);
+  const [chartLoading, setChartLoading] = useState(true);
+  const [chartError, setChartError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  // Orders
+  const [orders, setOrders] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [ordLoading, setOrdLoading] = useState(true);
+  const [ordError, setOrdError] = useState(false);
+  const [fStatus, setFStatus] = useState('');
+  const [fPlan, setFPlan] = useState('');
+  const [fProvider, setFProvider] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [fSearch, setFSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState(''); // yyyy-MM-dd, ngày VN, lọc theo ngày tạo
+  const [dateTo, setDateTo] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const ordersRef = useRef(null);
+
+  // ── Summary ────────────────────────────────────────────────────────────────
+  const loadSummary = useCallback(async () => {
     try {
-      const params = groupBy === 'day'
-        ? { groupBy: 'day', year: chartYear, month: chartMonth }
-        : { groupBy: 'month', year: chartYear };
-      const [chart, plans] = await Promise.all([
-        paymentService.adminGetRevenueChart(params),
-        paymentService.adminGetRevenueByPlan(),
-      ]);
-      setChartData(chart);
-      setByPlan(plans);
-    } catch (e) { console.error(e); }
-    finally { setChartLoad(false); }
-  }, [groupBy, chartYear, chartMonth]);
+      setSummary(await paymentService.adminGetRevenueSummary());
+      setSumError(false);
+    } catch (e) {
+      setSumError(true);
+      report(e, 'Không tải được tổng quan doanh thu');
+    } finally {
+      setSumLoading(false);
+    }
+  }, [report]);
 
+  useEffect(() => { loadSummary(); }, [loadSummary]);
+
+  // ── Chart + by-plan (bỏ qua kết quả của request cũ khi đổi kỳ nhanh) ─────────
+  const chartReq = useRef(0);
   useEffect(() => {
-    if (tab === 'chart' || tab === 'overview') loadChart();
-  }, [tab, loadChart]);
+    const id = ++chartReq.current;
+    setChartLoading(true);
+    (async () => {
+      try {
+        const params = groupBy === 'day' ? { groupBy, year, month } : { groupBy, year };
+        const [c, p] = await Promise.all([
+          paymentService.adminGetRevenueChart(params),
+          paymentService.adminGetRevenueByPlan(buildRange(groupBy, year, month)),
+        ]);
+        if (id !== chartReq.current) return;
+        setChart(c);
+        setByPlan(Array.isArray(p) ? p : []);
+        setChartError(false);
+      } catch (e) {
+        if (id !== chartReq.current) return;
+        setChartError(true);
+        report(e, 'Không tải được biểu đồ doanh thu');
+      } finally {
+        if (id === chartReq.current) setChartLoading(false);
+      }
+    })();
+  }, [groupBy, year, month, reloadTick, report]);
 
-  // Load orders
-  const loadOrders = useCallback(async () => {
-    setOrdLoad(true);
+  // ── Orders ─────────────────────────────────────────────────────────────────
+  const ordReq = useRef(0);
+  const loadOrders = useCallback(async (silent = false) => {
+    const id = ++ordReq.current;
+    if (!silent) setOrdLoading(true);
     try {
       const res = await paymentService.adminGetOrders({
-        page: ordPage, pageSize: PAGE_SIZE,
+        page,
+        pageSize: PAGE_SIZE,
         ...(fStatus && { status: fStatus }),
-        ...(fPlan   && { planId: fPlan }),
+        ...(fPlan && { planId: fPlan }),
+        ...(fProvider && { provider: fProvider }),
         ...(fSearch && { search: fSearch }),
+        ...(dateFrom && { from: dateFrom }),
+        ...(dateTo && { to: dateTo }),
       });
+      if (id !== ordReq.current) return;
       setOrders(res?.items ?? []);
-      setOrdTotal(res?.totalCount ?? 0);
-    } catch (e) { console.error(e); }
-    finally { setOrdLoad(false); }
-  }, [ordPage, fStatus, fPlan, fSearch]);
+      setTotal(res?.totalCount ?? 0);
+      setOrdError(false);
+    } catch (e) {
+      if (id !== ordReq.current) return;
+      setOrdError(true);
+      if (!silent) report(e, 'Không tải được danh sách đơn hàng');
+    } finally {
+      if (id === ordReq.current && !silent) setOrdLoading(false);
+    }
+  }, [page, fStatus, fPlan, fProvider, fSearch, dateFrom, dateTo, report]);
 
+  const loadOrdersRef = useRef(loadOrders);
+  loadOrdersRef.current = loadOrders;
+  useEffect(() => { loadOrders(); }, [loadOrders]);
+
+  // Tìm kiếm có debounce, không cần bấm Enter
   useEffect(() => {
-    if (tab === 'orders') loadOrders();
-  }, [tab, loadOrders]);
+    const t = setTimeout(() => {
+      const v = searchInput.trim();
+      setFSearch((prev) => {
+        if (prev !== v) setPage(1);
+        return v;
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const totalPages = Math.ceil(ordTotal / PAGE_SIZE);
+  // Còn đơn pending thì tự làm mới đều đặn (IPN có thể tới sau redirect vài giây)
+  const pending = summary?.pendingOrders ?? 0;
+  useEffect(() => {
+    if (!pending) return undefined;
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      loadSummary();
+      loadOrdersRef.current(true);
+    }, POLL_MS);
+    return () => clearInterval(t);
+  }, [pending, loadSummary]);
 
-  // Prepare chart data for Recharts
-  const rechartsData = (chartData?.dataPoints ?? []).map(d => ({
-    label: groupBy === 'month'
-      ? MONTHS_VI[parseInt(d.label.split('-')[1]) - 1]
-      : d.label.split('-')[2],
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const refreshAll = () => {
+    loadSummary();
+    loadOrders();
+    setReloadTick((t) => t + 1);
+  };
+
+  const setFilter = (setter) => (v) => { setter(v); setPage(1); };
+
+  const showStatus = (status) => {
+    setFilter(setFStatus)(status);
+    ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const resetFilters = () => {
+    setFStatus(''); setFPlan(''); setFProvider(''); setSearchInput(''); setFSearch('');
+    setDateFrom(''); setDateTo(''); setPage(1);
+  };
+  const hasFilter = !!(fStatus || fPlan || fProvider || fSearch || dateFrom || dateTo);
+
+  // Giữ from <= to (BE trả 400 nếu ngược)
+  const onDateFrom = (v) => { setDateFrom(v); if (v && dateTo && v > dateTo) setDateTo(v); setPage(1); };
+  const onDateTo = (v) => { setDateTo(v); if (v && dateFrom && v < dateFrom) setDateFrom(v); setPage(1); };
+
+  // Xuất Excel theo bộ lọc hiện tại (trừ ô tìm kiếm — BE export không hỗ trợ search)
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { blob, filename } = await paymentService.adminExportRevenue({
+        from: dateFrom, to: dateTo, status: fStatus, provider: fProvider, planId: fPlan,
+      });
+      downloadBlob(blob, filename);
+      toastRef.current?.success?.('Đã xuất báo cáo Excel');
+    } catch (e) {
+      report(e, 'Không thể xuất báo cáo');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const chartData = (chart?.dataPoints ?? []).map((d) => ({
+    label: groupBy === 'month' ? MONTHS_VI[parseInt(d.label.split('-')[1], 10) - 1] : d.label.split('-')[2],
     revenue: d.revenue,
-    orders:  d.orders,
+    orders: d.orders,
   }));
+  const periodLabel = groupBy === 'month' ? `Năm ${year}` : `${MONTHS_VI[month - 1]}/${year}`;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const maxPlanRevenue = Math.max(1, ...byPlan.map((p) => p.revenue));
 
-  // Pie data for byPlan
-  const pieData = byPlan.map(p => ({
-    name:   p.planName,
-    value:  p.revenue,
-    share:  p.revenueShare,
-    orders: p.orders,
-    planId: p.planId,
-  }));
-
-  const COL = '150px 1fr 130px 120px 110px 130px 130px';
-  const COL_HEADERS = ['Mã đơn', 'Email', 'Gói', 'Số tiền', 'Trạng thái', 'Tạo lúc', 'Thanh toán'];
-
-  // Y axis tick formatter
-  const yFmt = (v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v;
+  // Tổng số đơn giảm (vd. polling) khiến trang hiện tại vượt quá → lùi về trang cuối
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   return (
     <div style={{ padding: '28px 28px 80px', maxWidth: 1400, fontFamily: FONT }}>
-      <style>{GLOBAL_CSS}</style>
+      <style>{CSS}</style>
 
-      {/* ── Page Header ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{ marginBottom: 24 }}
-      >
-        <p style={{
-          fontFamily: FONT, fontSize: 11.5, color: T.textMuted,
-          marginBottom: 3, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600,
-        }}>
-          Quản lý tài chính
-        </p>
-        <h2 style={{
-          fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800,
-          color: T.text, letterSpacing: '-0.03em', margin: 0,
-        }}>
-          Doanh thu &amp; Thanh toán
-        </h2>
-      </motion.div>
-
-      {/* ── Tab bar ── */}
-      <div style={{
-        display: 'flex',
-        borderBottom: `1px solid ${T.border}`,
-        marginBottom: 22,
-        background: T.surface,
-        borderRadius: '14px 14px 0 0',
-        padding: '0 8px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      }}>
-        <Tab active={tab === 'overview'} onClick={() => setTab('overview')}>Tổng quan</Tab>
-        <Tab active={tab === 'chart'}    onClick={() => setTab('chart')}>Biểu đồ chi tiết</Tab>
-        <Tab active={tab === 'orders'}   onClick={() => setTab('orders')} count={ordTotal || undefined}>
-          Đơn hàng
-        </Tab>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div>
+          <p style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.textMuted, margin: '0 0 3px' }}>
+            Quản lý tài chính
+          </p>
+          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', color: T.text, margin: 0 }}>
+            Doanh thu và thanh toán
+          </h2>
+        </div>
+        <Btn onClick={refreshAll}>Làm mới</Btn>
       </div>
 
-      <AnimatePresence mode="wait">
+      {/* Cảnh báo đơn đang chờ */}
+      {pending > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+          background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 16px', marginBottom: 14,
+        }}>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: '#92400E', margin: 0 }}>
+            <strong>{pending}</strong> đơn đang chờ cổng thanh toán xác nhận. Trang tự làm mới mỗi {POLL_MS / 1000} giây.
+          </p>
+          <Btn onClick={() => showStatus('pending')}>Xem đơn chờ</Btn>
+        </div>
+      )}
 
-        {/* ══════════ TAB: OVERVIEW ══════════ */}
-        {tab === 'overview' && (
-          <motion.div key="overview"
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
-          >
-            {/* Row 1 — 4 KPI (featured + 3) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
-              <StatCard index={0} featured icon="💰"
-                label="Tổng doanh thu"
-                value={fmtVnd(summary?.totalRevenue)}
-                sub={summary ? `${summary.successOrders} giao dịch thành công` : ''}
-                loading={sumLoading}
-              />
-              <StatCard index={1} icon="📅"
-                label="Doanh thu tháng này"
-                value={fmtVnd(summary?.currentMonthRevenue)}
-                sub={summary ? `Tháng trước: ${fmtVnd(summary.lastMonthRevenue)}` : ''}
-                delta={summary?.monthOverMonthGrowth}
-                loading={sumLoading}
-              />
-              <StatCard index={2} icon="👑"
-                label="Premium đang hoạt động"
-                value={summary?.activePremiumUsers}
-                sub={summary ? `${summary.expiringIn7Days} sắp hết hạn (7 ngày)` : ''}
-                subColor={summary?.expiringIn7Days > 0 ? T.gold : undefined}
-                loading={sumLoading}
-              />
-              <StatCard index={3} icon="✅"
-                label="Tỉ lệ thành công"
-                value={summary ? `${summary.successRate}%` : null}
-                sub={summary ? `Tổng ${summary.totalOrders} đơn · ${summary.pendingOrders} chờ` : ''}
-                loading={sumLoading}
-              />
-            </div>
+      {/* KPI */}
+      {sumError && !summary ? (
+        <Card><ErrorBox text="Không tải được tổng quan." onRetry={loadSummary} /></Card>
+      ) : (
+        <div className="rv-kpis" style={{ marginBottom: 16 }}>
+          <StatCard index={0} featured label="Tổng doanh thu" loading={sumLoading}
+            value={fmtVnd(summary?.totalRevenue)}
+            sub={summary && `${summary.successOrders} giao dịch · TB ${fmtVnd(summary.averageOrderValue)}/đơn`} />
+          <StatCard index={1} label="Hôm nay" loading={sumLoading}
+            value={fmtVnd(summary?.todayRevenue)}
+            sub={summary && `${summary.todayOrders} đơn thành công`} />
+          <StatCard index={2} label="Doanh thu tháng này" loading={sumLoading}
+            value={fmtVnd(summary?.currentMonthRevenue)}
+            delta={summary?.monthOverMonthGrowth}
+            sub={summary && `${summary.currentMonthOrders} đơn · Tháng trước: ${fmtVnd(summary.lastMonthRevenue)}`} />
+          <StatCard index={3} label="Premium đang hoạt động" loading={sumLoading}
+            value={summary?.activePremiumUsers}
+            sub={summary && `${summary.expiringIn7Days} sắp hết hạn trong 7 ngày`}
+            subColor={summary?.expiringIn7Days > 0 ? T.gold : undefined} />
+          <StatCard index={4} label="Đơn chờ thanh toán" loading={sumLoading}
+            value={summary?.pendingOrders}
+            sub="Chưa quá 15 phút"
+            subColor={summary?.pendingOrders > 0 ? T.gold : undefined} />
+          <StatCard index={5} label="Tỉ lệ thành công" loading={sumLoading}
+            value={summary && `${summary.successRate}%`}
+            sub={summary && `${summary.failedOrders} thất bại · ${summary.expiredOrders} hết hạn / ${summary.totalOrders} đơn`}
+            subColor={summary && (summary.failedOrders + summary.expiredOrders) > 0 ? T.red : undefined} />
+        </div>
+      )}
 
-            {/* Row 2 — 3 KPI */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 22 }}>
-              <StatCard index={4} icon="📦"
-                label="Tổng đơn hàng"
-                value={summary?.totalOrders}
-                sub={summary ? `Tháng này: ${summary.currentMonthOrders} đơn` : ''}
-                loading={sumLoading}
-              />
-              <StatCard index={5} icon="⚠️"
-                label="Đơn thất bại / hết hạn"
-                value={summary?.failedOrders}
-                sub="Cần kiểm tra"
-                subColor={summary?.failedOrders > 0 ? T.red : undefined}
-                loading={sumLoading}
-              />
-              <StatCard index={6} icon="⏳"
-                label="Đơn đang chờ"
-                value={summary?.pendingOrders}
-                sub="Chưa xác nhận thanh toán"
-                loading={sumLoading}
-              />
-            </div>
-
-            {/* Charts row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '3fr 1.2fr', gap: 16 }}>
-
-              {/* Area chart */}
-              <Card
-                title={`Doanh thu theo tháng — ${chartYear}`}
-                subtitle="Doanh thu (₫) theo từng tháng trong năm"
-                action={
-                  <Select
-                    value={chartYear}
-                    onChange={v => setChartYear(+v)}
-                    options={YEARS.map(y => ({ value: y, label: String(y) }))}
-                  />
-                }
-              >
-                {chartLoad ? <Spin /> : rechartsData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={rechartsData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor={ACCENT} stopOpacity={0.18} />
-                          <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontFamily: FONT, fontSize: 11, fill: T.textMuted }}
-                        axisLine={false} tickLine={false}
-                      />
-                      <YAxis
-                        tickFormatter={yFmt}
-                        tick={{ fontFamily: FONT, fontSize: 10, fill: T.textMuted }}
-                        axisLine={false} tickLine={false} width={46}
-                      />
-                      <Tooltip content={<ChartTooltip />} cursor={{ stroke: T.border, strokeWidth: 1 }} />
-                      <Area
-                        type="monotone"
-                        dataKey="revenue"
-                        name="Doanh thu"
-                        stroke={ACCENT}
-                        strokeWidth={2.5}
-                        fill="url(#gradRev)"
-                        dot={{ r: 3.5, fill: ACCENT, strokeWidth: 0 }}
-                        activeDot={{ r: 5, fill: ACCENT, stroke: '#fff', strokeWidth: 2 }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : <Empty />}
-              </Card>
-
-              {/* Pie chart + legend */}
-              <Card title="Phân bổ theo gói" subtitle="Theo doanh thu">
-                {chartLoad ? <Spin /> : pieData.length > 0 ? (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-                      <PieChart width={150} height={150}>
-                        <Pie
-                          data={pieData} cx={75} cy={75}
-                          innerRadius={44} outerRadius={70}
-                          paddingAngle={2} dataKey="value"
-                          strokeWidth={0}
-                        >
-                          {pieData.map((entry, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(v) => [fmtVnd(v), 'Doanh thu']}
-                          contentStyle={{
-                            fontFamily: FONT, background: T.text,
-                            border: 'none', borderRadius: 8, fontSize: 12,
-                            color: '#fff',
-                          }}
-                        />
-                      </PieChart>
-                    </div>
-                    {pieData.map((p, i) => (
-                      <div key={p.planId ?? i}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center',
-                          justifyContent: 'space-between', padding: '9px 0',
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                            <div style={{
-                              width: 9, height: 9, borderRadius: 3, flexShrink: 0,
-                              background: CHART_COLORS[i % CHART_COLORS.length],
-                            }} />
-                            <div>
-                              <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: T.text, margin: 0 }}>
-                                {p.name}
-                              </p>
-                              <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, margin: 0 }}>
-                                {p.orders} đơn · {p.share}%
-                              </p>
-                            </div>
-                          </div>
-                          <span style={{ fontFamily: FONT_TITLE, fontSize: 12, fontWeight: 700, color: T.text }}>
-                            {fmtVnd(p.value)}
-                          </span>
-                        </div>
-                        {i < pieData.length - 1 && <Divider />}
-                      </div>
-                    ))}
-                  </>
-                ) : <Empty />}
-              </Card>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ══════════ TAB: CHART ══════════ */}
-        {tab === 'chart' && (
-          <motion.div key="chart"
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
-          >
-            {/* Controls bar */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              marginBottom: 18, flexWrap: 'wrap',
-            }}>
-              {/* Toggle */}
-              <div style={{
-                display: 'flex', borderRadius: 9, overflow: 'hidden',
-                border: `1px solid ${T.border}`, background: T.surface,
-              }}>
-                {[{ key: 'month', label: 'Theo tháng' }, { key: 'day', label: 'Theo ngày' }].map(opt => (
-                  <button key={opt.key} onClick={() => setGroupBy(opt.key)}
-                    style={{
-                      fontFamily: FONT, fontSize: 12.5,
-                      fontWeight: groupBy === opt.key ? 700 : 400,
-                      color: groupBy === opt.key ? '#fff' : T.textSub,
-                      background: groupBy === opt.key ? ACCENT : 'transparent',
-                      border: 'none', cursor: 'pointer', padding: '7px 16px',
-                      transition: 'all 0.13s',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-
-              <Select
-                value={chartYear}
-                onChange={v => setChartYear(+v)}
-                options={YEARS.map(y => ({ value: y, label: String(y) }))}
-              />
-
+      {/* Biểu đồ + theo gói */}
+      <div className="rv-split" style={{ marginBottom: 16 }}>
+        <Card
+          title="Doanh thu theo thời gian"
+          subtitle={periodLabel}
+          action={
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Segmented value={metric} onChange={setMetric}
+                options={[{ value: 'revenue', label: 'Doanh thu' }, { value: 'orders', label: 'Số đơn' }]} />
+              <Segmented value={groupBy} onChange={setGroupBy}
+                options={[{ value: 'month', label: 'Tháng' }, { value: 'day', label: 'Ngày' }]} />
+              <Select value={year} onChange={(v) => setYear(+v)}
+                options={YEARS.map((y) => ({ value: y, label: String(y) }))} />
               {groupBy === 'day' && (
-                <Select
-                  value={chartMonth}
-                  onChange={v => setChartMonth(+v)}
-                  options={MONTHS_VI.map((m, i) => ({ value: i + 1, label: m }))}
-                />
+                <Select value={month} onChange={(v) => setMonth(+v)}
+                  options={MONTHS_VI.map((m, i) => ({ value: i + 1, label: m }))} />
               )}
-
-              <GhostBtn onClick={loadChart}>↻ Làm mới</GhostBtn>
-
-              {/* Summary inline */}
-              {chartData && (
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, alignItems: 'center' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, margin: '0 0 2px' }}>
-                      Tổng doanh thu
-                    </p>
-                    <p style={{ fontFamily: FONT_TITLE, fontSize: 16, fontWeight: 800, color: ACCENT, margin: 0, letterSpacing: '-0.02em' }}>
-                      {fmtVnd(chartData.totalRevenue)}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, margin: '0 0 2px' }}>
-                      Tổng đơn
-                    </p>
-                    <p style={{ fontFamily: FONT_TITLE, fontSize: 16, fontWeight: 800, color: T.text, margin: 0 }}>
-                      {chartData.totalOrders}
-                    </p>
-                  </div>
+            </div>
+          }
+        >
+          {chartLoading ? <Spinner /> : chartError ? (
+            <ErrorBox text="Không tải được biểu đồ." onRetry={() => setReloadTick((t) => t + 1)} />
+          ) : chartData.length === 0 ? <Empty /> : (
+            <>
+              <div style={{ display: 'flex', gap: 28, marginBottom: 14 }}>
+                <div>
+                  <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, margin: '0 0 2px' }}>Tổng doanh thu kỳ này</p>
+                  <p style={{ fontFamily: FONT_TITLE, fontSize: 18, fontWeight: 800, color: ACCENT, margin: 0, letterSpacing: '-0.02em' }}>
+                    {fmtVnd(chart?.totalRevenue)}
+                  </p>
                 </div>
-              )}
-            </div>
-
-            {/* Area + Bar chart side by side */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <Card
-                title={groupBy === 'month' ? `Doanh thu — ${chartYear}` : `Doanh thu — ${MONTHS_VI[chartMonth - 1]}/${chartYear}`}
-                subtitle="Đường xu hướng doanh thu"
-              >
-                {chartLoad ? <Spin /> : rechartsData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={rechartsData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="gradRev2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor={ACCENT} stopOpacity={0.2} />
-                          <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontFamily: FONT, fontSize: 10.5, fill: T.textMuted }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={yFmt} tick={{ fontFamily: FONT, fontSize: 10, fill: T.textMuted }} axisLine={false} tickLine={false} width={46} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Area
-                        type="monotone" dataKey="revenue" name="Doanh thu"
-                        stroke={ACCENT} strokeWidth={2.5} fill="url(#gradRev2)"
-                        dot={{ r: 3.5, fill: ACCENT, strokeWidth: 0 }}
-                        activeDot={{ r: 5.5, fill: ACCENT, stroke: '#fff', strokeWidth: 2 }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : <Empty />}
-              </Card>
-
-              <Card title="Số đơn hàng" subtitle="Theo từng kỳ">
-                {chartLoad ? <Spin /> : rechartsData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={rechartsData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontFamily: FONT, fontSize: 10.5, fill: T.textMuted }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontFamily: FONT, fontSize: 10, fill: T.textMuted }} axisLine={false} tickLine={false} width={36} />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: T.accentLight, radius: 6 }} />
-                      <Bar dataKey="orders" name="Đơn hàng" fill={ACCENT2} radius={[5, 5, 0, 0]} maxBarSize={28} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <Empty />}
-              </Card>
-            </div>
-
-            {/* By-plan analysis */}
-            <Card title="Phân tích theo gói" subtitle="So sánh doanh thu và tỉ lệ phân bổ">
-              {chartLoad ? <Spin /> : byPlan.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 32, alignItems: 'center' }}>
-                  {/* Pie */}
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <PieChart width={190} height={190}>
-                      <Pie
-                        data={pieData} cx={95} cy={95}
-                        innerRadius={52} outerRadius={88}
-                        paddingAngle={2} dataKey="value" strokeWidth={0}
-                      >
-                        {pieData.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v) => [fmtVnd(v), 'Doanh thu']}
-                        contentStyle={{
-                          fontFamily: FONT, background: T.text,
-                          border: 'none', borderRadius: 8, fontSize: 12, color: '#fff',
-                        }}
-                      />
-                    </PieChart>
-                  </div>
-
-                  {/* Plan list */}
-                  <div>
-                    {/* Bar comparison */}
-                    <ResponsiveContainer width="100%" height={120}>
-                      <BarChart
-                        data={pieData}
-                        layout="vertical"
-                        margin={{ top: 0, right: 12, left: 0, bottom: 0 }}
-                        barSize={16}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false} />
-                        <XAxis type="number" tickFormatter={yFmt} tick={{ fontFamily: FONT, fontSize: 10, fill: T.textMuted }} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="name" type="category" tick={{ fontFamily: FONT, fontSize: 11.5, fill: T.text, fontWeight: 600 }} axisLine={false} tickLine={false} width={100} />
-                        <Tooltip content={<ChartTooltip />} cursor={{ fill: T.accentLight }} />
-                        <Bar dataKey="value" name="Doanh thu" radius={[0, 6, 6, 0]}>
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-
-                    <Divider style={{ margin: '12px 0' }} />
-
-                    {/* Detailed rows */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-                      {byPlan.map((p, i) => (
-                        <div key={p.planId ?? i} style={{
-                          background: T.bg, borderRadius: 10, padding: '12px 14px',
-                          border: `1px solid ${T.border}`,
-                          display: 'flex', alignItems: 'center', gap: 12,
-                        }}>
-                          <div style={{
-                            width: 10, height: 36, borderRadius: 3, flexShrink: 0,
-                            background: CHART_COLORS[i % CHART_COLORS.length],
-                          }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 700, color: T.text, margin: '0 0 2px' }}>
-                              {p.planName}
-                            </p>
-                            <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, margin: 0 }}>
-                              {p.orders} đơn · {p.revenueShare}%
-                            </p>
-                          </div>
-                          <p style={{ fontFamily: FONT_TITLE, fontSize: 13.5, fontWeight: 800, color: T.text, margin: 0, flexShrink: 0 }}>
-                            {fmtVnd(p.revenue)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <div>
+                  <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, margin: '0 0 2px' }}>Số đơn thành công</p>
+                  <p style={{ fontFamily: FONT_TITLE, fontSize: 18, fontWeight: 800, color: T.text, margin: 0 }}>
+                    {chart?.totalOrders ?? 0}
+                  </p>
                 </div>
-              ) : <Empty />}
-            </Card>
-          </motion.div>
-        )}
-
-        {/* ══════════ TAB: ORDERS ══════════ */}
-        {tab === 'orders' && (
-          <motion.div key="orders"
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
-          >
-            {/* Filter bar */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              marginBottom: 14, flexWrap: 'wrap',
-            }}>
-              {/* Search */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                background: T.surface, border: `1px solid ${T.border}`,
-                borderRadius: 9, padding: '6px 12px',
-                flex: '1 1 220px', minWidth: 220,
-                transition: 'border-color 0.13s',
-              }}
-                onFocusCapture={e => e.currentTarget.style.borderColor = T.borderFocus}
-                onBlurCapture={e => e.currentTarget.style.borderColor = T.border}
-              >
-                <span style={{ color: T.textMuted, fontSize: 14, lineHeight: 1 }}>🔍</span>
-                <input
-                  value={fSearchTmp}
-                  onChange={e => setFSearchTmp(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { setFSearch(fSearchTmp); setOrdPage(1); }
-                  }}
-                  placeholder="Tìm mã đơn hoặc email… (Enter)"
-                  style={{
-                    border: 'none', outline: 'none', background: 'transparent',
-                    fontFamily: FONT, fontSize: 12.5, color: T.text, width: '100%',
-                  }}
-                />
-                {fSearchTmp && (
-                  <button
-                    onClick={() => { setFSearchTmp(''); setFSearch(''); setOrdPage(1); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, lineHeight: 1, fontSize: 16 }}
-                  >×</button>
-                )}
               </div>
-
-              <Select
-                value={fStatus} onChange={v => { setFStatus(v); setOrdPage(1); }}
-                placeholder="Tất cả trạng thái"
-                options={[
-                  { value: 'success', label: '✅ Thành công' },
-                  { value: 'failed',  label: '❌ Thất bại'   },
-                  { value: 'pending', label: '⏳ Chờ xử lý'  },
-                  { value: 'expired', label: '🕐 Hết hạn'    },
-                ]}
-              />
-
-              <Select
-                value={fPlan} onChange={v => { setFPlan(v); setOrdPage(1); }}
-                placeholder="Tất cả gói"
-                options={[
-                  { value: 'monthly_premium', label: 'Gói tháng' },
-                  { value: 'yearly_premium',  label: 'Gói năm'   },
-                ]}
-              />
-
-              <GhostBtn onClick={() => loadOrders()}>↻ Tải lại</GhostBtn>
-
-              {ordTotal > 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, marginLeft: 'auto', fontWeight: 600 }}>
-                  {ordTotal.toLocaleString()} đơn hàng
-                </span>
-              )}
-            </div>
-
-            {/* Table */}
-            <div style={{
-              background: T.surface, borderRadius: 16,
-              border: `1px solid ${T.border}`,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              overflow: 'hidden',
-            }}>
-              {/* Table header */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: COL,
-                padding: '10px 18px', background: T.bg,
-                borderBottom: `1px solid ${T.border}`,
-              }}>
-                {COL_HEADERS.map(h => (
-                  <span key={h} style={{
-                    fontFamily: FONT, fontSize: 10.5, fontWeight: 800,
-                    color: T.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase',
-                  }}>
-                    {h}
-                  </span>
-                ))}
-              </div>
-
-              {/* Table body */}
-              {ordLoad ? <Spin /> : orders.length === 0 ? (
-                <Empty text="Không có đơn hàng nào" icon="📋" />
-              ) : (
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={`page-${ordPage}`}
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    transition={{ duration: 0.13 }}
-                  >
-                    {orders.map((o, i) => (
-                      <div
-                        key={o.id ?? i}
-                        style={{
-                          display: 'grid', gridTemplateColumns: COL,
-                          padding: '11px 18px',
-                          borderBottom: `1px solid ${T.border}`,
-                          alignItems: 'center',
-                          background: i % 2 === 0 ? T.surface : T.surfaceAlt,
-                          transition: 'background 0.1s',
-                          cursor: 'default',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = T.accentLight}
-                        onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? T.surface : T.surfaceAlt}
-                      >
-                        <span style={{
-                          fontFamily: FONT, fontSize: 12, fontWeight: 700, color: ACCENT,
-                          letterSpacing: '0.01em',
-                        }}>
-                          {o.orderCode}
-                        </span>
-                        <span style={{
-                          fontFamily: FONT, fontSize: 12, color: T.textSub,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8,
-                        }}>
-                          {o.userEmail || '—'}
-                        </span>
-                        <span style={{ fontFamily: FONT, fontSize: 12, color: T.text, fontWeight: 500 }}>
-                          {o.planName}
-                        </span>
-                        <span style={{ fontFamily: FONT_TITLE, fontSize: 13, fontWeight: 800, color: T.text }}>
-                          {fmtVnd(o.amount)}
-                        </span>
-                        <StatusBadge status={o.status} />
-                        <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
-                          {fmtDateTime(o.createdAt)}
-                        </span>
-                        <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
-                          {fmtDateTime(o.paidAt)}
-                        </span>
-                      </div>
-                    ))}
-                  </motion.div>
-                </AnimatePresence>
-              )}
-
-              {/* ── Pagination (light theme, built-in) ── */}
-              {totalPages > 1 && (
-                <div style={{
-                  borderTop: `1px solid ${T.border}`,
-                  background: T.bg,
-                  padding: '4px 18px 16px',
-                }}>
-                  <AdminPagination
-                    page={ordPage}
-                    totalPages={totalPages}
-                    total={ordTotal}
-                    pageSize={PAGE_SIZE}
-                    onPageChange={p => setOrdPage(p)}
-                    itemLabel="đơn hàng"
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={chartData} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontFamily: FONT, fontSize: 11, fill: T.textMuted }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tickFormatter={metric === 'revenue' ? yFmt : undefined}
+                    allowDecimals={false}
+                    tick={{ fontFamily: FONT, fontSize: 10.5, fill: T.textMuted }}
+                    axisLine={false} tickLine={false} width={48}
                   />
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
+                  <Tooltip content={<ChartTooltip metric={metric} />} cursor={{ fill: T.accentLight }} />
+                  <Bar dataKey={metric} fill={metric === 'revenue' ? ACCENT : ACCENT2} radius={[5, 5, 0, 0]} maxBarSize={34} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </Card>
 
-      </AnimatePresence>
+        <Card title="Doanh thu theo gói" subtitle={periodLabel}>
+          {chartLoading ? <Spinner /> : byPlan.length === 0 ? <Empty text="Chưa có đơn thành công trong kỳ" /> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {byPlan.map((p, i) => (
+                <div key={p.planId ?? i}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text }}>{p.planName}</span>
+                    <span style={{ fontFamily: FONT_TITLE, fontSize: 13, fontWeight: 800, color: T.text }}>{fmtVnd(p.revenue)}</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 99, background: T.bg, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${(p.revenue / maxPlanRevenue) * 100}%`,
+                      background: PLAN_COLORS[i % PLAN_COLORS.length], borderRadius: 99, transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                  <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, margin: '5px 0 0' }}>
+                    {p.orders} đơn, chiếm {p.revenueShare}% doanh thu
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Đơn hàng */}
+      <div ref={ordersRef} style={{ scrollMarginTop: 16 }}>
+        <Card
+          title="Đơn hàng"
+          subtitle={`${total.toLocaleString('vi-VN')} đơn${hasFilter ? ' khớp bộ lọc' : ''} · giờ Việt Nam (GMT+7)`}
+          noPad
+          action={
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {hasFilter && <Btn onClick={resetFilters}>Xóa bộ lọc</Btn>}
+              <Btn primary disabled={exporting} onClick={handleExport}>
+                {exporting ? 'Đang xuất…' : 'Xuất Excel'}
+              </Btn>
+            </div>
+          }
+        >
+          {/* Bộ lọc */}
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {STATUS_FILTERS.map((s) => (
+                <Btn key={s.value} active={fStatus === s.value} onClick={() => setFilter(setFStatus)(s.value)}>
+                  {s.label}
+                </Btn>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Tìm theo mã đơn hoặc email"
+                style={{
+                  flex: '1 1 240px', minWidth: 200, fontFamily: FONT, fontSize: 12.5, color: T.text,
+                  background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8,
+                  padding: '7px 12px', outline: 'none',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = T.borderFocus; }}
+                onBlur={(e) => { e.target.style.borderColor = T.border; }}
+              />
+              <Select value={fPlan} onChange={setFilter(setFPlan)} placeholder="Tất cả gói" options={PLANS} />
+              <Select value={fProvider} onChange={setFilter(setFProvider)} placeholder="Tất cả cổng" options={PROVIDERS} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <DateInput label="Tạo từ ngày" value={dateFrom} onChange={onDateFrom} max={dateTo} />
+              <DateInput label="đến ngày" value={dateTo} onChange={onDateTo} min={dateFrom} />
+            </div>
+            <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, margin: 0, lineHeight: 1.6 }}>
+              Xuất Excel áp dụng bộ lọc trạng thái, gói, cổng và ngày (không áp dụng ô tìm kiếm).
+              {!fStatus && ' Chưa chọn trạng thái thì chỉ xuất đơn thành công.'}
+              {' '}Đơn thành công lọc theo ngày thanh toán, các trạng thái khác theo ngày tạo.
+            </p>
+            {(fStatus === 'pending' || fStatus === 'expired') && (
+              <p style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, margin: 0, lineHeight: 1.6 }}>
+                {fStatus === 'pending'
+                  ? 'Đơn chờ sẽ tự chuyển sang thành công khi cổng gửi IPN hợp lệ.'
+                  : 'Đơn hết hạn vẫn được xác nhận nếu IPN đến muộn. Nếu khách đã trả tiền mà đơn không đổi trạng thái, hãy đối chiếu trong Nhật ký IPN của cổng rồi gửi lại IPN hoặc cấp Premium thủ công.'}
+              </p>
+            )}
+          </div>
+
+          {/* Bảng */}
+          {ordLoading ? <Spinner /> : ordError ? (
+            <ErrorBox text="Không tải được danh sách đơn hàng." onRetry={() => loadOrders()} />
+          ) : orders.length === 0 ? (
+            <Empty text={hasFilter ? 'Không có đơn nào khớp bộ lọc' : 'Chưa có đơn hàng nào'} />
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 1020, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: T.bg }}>
+                    {['Mã đơn', 'Khách hàng', 'Gói', 'Số tiền', 'Cổng', 'Trạng thái', 'Tạo lúc', 'Thanh toán lúc'].map((h) => (
+                      <th key={h} style={{
+                        textAlign: 'left', padding: '10px 14px', fontFamily: FONT, fontSize: 10.5, fontWeight: 800,
+                        letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textMuted,
+                        borderBottom: `1px solid ${T.border}`, whiteSpace: 'nowrap',
+                      }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.id} className="rv-row">
+                      <Td strong color={ACCENT}>{o.orderCode}</Td>
+                      <Td ellipsis title={o.userEmail}>{o.userEmail || '—'}</Td>
+                      <Td>{o.planName}</Td>
+                      <Td title strong font={FONT_TITLE}>{fmtVnd(o.amount)}</Td>
+                      <Td>{PROVIDER_LABEL[o.provider] ?? o.provider}</Td>
+                      <Td>
+                        <StatusBadge status={o.status} />
+                        {o.status === 'failed' && o.failureReason && (
+                          <p title={o.failureReason} style={{
+                            fontFamily: FONT, fontSize: 11, color: T.textMuted, margin: '4px 0 0',
+                            maxWidth: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {o.failureReason}
+                          </p>
+                        )}
+                      </Td>
+                      <Td muted>{fmtVnDateTime(o.createdAt)}</Td>
+                      <Td muted>{fmtVnDateTime(o.paidAt)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!ordLoading && !ordError && (
+            <div style={{ borderTop: `1px solid ${T.border}`, padding: '0 18px 16px' }}>
+              <AdminPagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={PAGE_SIZE}
+                onPageChange={setPage}
+                itemLabel="đơn"
+              />
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
+
+const Td = ({ children, strong, muted, color, ellipsis, font, title }) => (
+  <td
+    title={typeof title === 'string' ? title : undefined}
+    style={{
+      padding: '11px 14px', borderBottom: `1px solid ${T.border}`, verticalAlign: 'middle',
+      fontFamily: font ?? FONT, fontSize: muted ? 11.5 : 12.5,
+      fontWeight: strong ? 700 : 500,
+      color: color ?? (muted ? T.textMuted : T.text),
+      whiteSpace: 'nowrap', background: T.surface, transition: 'background 0.1s',
+      ...(ellipsis ? { maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' } : null),
+    }}
+  >
+    {children}
+  </td>
+);

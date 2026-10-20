@@ -1,6 +1,7 @@
 // src/pages/user/TvShowDetailPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { List } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -73,14 +74,8 @@ export default function TvShowDetailPage() {
   // Cache episodes theo season để tránh gọi API nhiều lần
   const [seasonEpisodesCache, setSeasonEpisodesCache] = useState({});
 
-  const [currentUser] = useState(() => {
-    try {
-      const r = localStorage.getItem("currentUser");
-      return r ? JSON.parse(r) : null;
-    } catch {
-      return null;
-    }
-  });
+  // Đọc hồ sơ từ sessionStore: tự cập nhật khi refreshPremiumStatus(), đăng xuất/đăng nhập ở tab khác.
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getStoredUser, () => null);
 
   const isFreeUser = currentUser ? !currentUser.isPremium : true;
 
@@ -140,7 +135,7 @@ export default function TvShowDetailPage() {
         // Cast
         if (Array.isArray(tvData?.cast) && tvData.cast.length > 0) {
           setActors(
-            tvData.cast
+            [...tvData.cast]
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
               .map((c) => ({
                 id: c.id ?? c.personId ?? null,
@@ -493,6 +488,7 @@ export default function TvShowDetailPage() {
                   nextEpisode={nextEpisode}
                   onNextEpisode={nextEpisode ? handleNextEpisode : null}
                   isFreeUser={isFreeUser}
+                  isLoggedIn={!!currentUser}
                 />
               )}
             </motion.div>

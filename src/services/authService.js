@@ -1,96 +1,71 @@
 // src/services/authService.js
-import axiosInstance from '../config/axios';
+import axiosInstance, {
+  refreshAccessToken,
+  bootstrapSession,
+  clearSession,
+} from '../config/axios';
+import { getAccessToken, setAccessToken } from '../config/tokenStore';
+import { getStoredUser, setStoredUser, hasStoredUser } from '../config/sessionStore';
 
 const extractData = (res) => (res && res.data !== undefined ? res.data : res);
+
+const post = async (url, body) => extractData(await axiosInstance.post(url, body));
 
 const authService = {
 
   // ── Register ──────────────────────────────────────────────────────────────
 
-  register: async ({ email, username, password, confirmPassword }) => {
-    const res = await axiosInstance.post('/auth/register', {
-      email,
-      username,
-      password,
-      confirmPassword,
-    });
-    return extractData(res);
-  },
+  register: ({ email, username, password, confirmPassword }) =>
+    post('/auth/register', { email, username, password, confirmPassword }),
 
-  verifyRegisterOtp: async ({ email, code }) => {
-    const res = await axiosInstance.post('/auth/register/verify-otp', { email, code });
-    return extractData(res);
-  },
+  verifyRegisterOtp: ({ email, code }) =>
+    post('/auth/register/verify-otp', { email, code }),
 
   // ── Login ─────────────────────────────────────────────────────────────────
 
-  login: async ({ email, password }) => {
-    const res = await axiosInstance.post('/auth/login', { email, password });
-    return extractData(res);
-  },
+  login: ({ email, password }) => post('/auth/login', { email, password }),
 
   // ── OTP (Login 2FA) ───────────────────────────────────────────────────────
 
-  sendOtp: async (userId) => {
-    const res = await axiosInstance.post('/auth/otp/send', { userId });
-    return extractData(res);
-  },
+  sendOtp: (userId) => post('/auth/otp/send', { userId }),
 
-  verifyOtp: async ({ userId, code }) => {
-    const res = await axiosInstance.post('/auth/otp/verify', { userId, code });
-    return extractData(res);
-  },
+  verifyOtp: ({ userId, code }) => post('/auth/otp/verify', { userId, code }),
 
   // ── 2FA ───────────────────────────────────────────────────────────────────
 
-  enable2FA: async () => {
-    const res = await axiosInstance.post('/auth/2fa/enable');
-    return extractData(res);
-  },
+  enable2FA: () => post('/auth/2fa/enable'),
 
-  confirmEnable2FA: async (code) => {
-    const res = await axiosInstance.post('/auth/2fa/confirm', { code });
-    return extractData(res);
-  },
+  confirmEnable2FA: (code) => post('/auth/2fa/confirm', { code }),
 
-  disable2FA: async (code) => {
-    const res = await axiosInstance.post('/auth/2fa/disable', { code });
-    return extractData(res);
-  },
+  disable2FA: (code) => post('/auth/2fa/disable', { code }),
 
   // ── Forgot / Reset Password ───────────────────────────────────────────────
 
-  forgotPassword: async (email) => {
-    const res = await axiosInstance.post('/auth/forgot-password', { email });
-    return extractData(res);
-  },
+  forgotPassword: (email) => post('/auth/forgot-password', { email }),
 
-  resetPassword: async ({ email, code, newPassword, confirmPassword }) => {
-    const res = await axiosInstance.post('/auth/reset-password', {
-      email,
-      code,
-      newPassword,
-      confirmPassword,
-    });
-    return extractData(res);
-  },
+  resetPassword: ({ email, code, newPassword, confirmPassword }) =>
+    post('/auth/reset-password', { email, code, newPassword, confirmPassword }),
 
   // ── Token ─────────────────────────────────────────────────────────────────
 
-  refreshToken: async () => {
-    // Không cần truyền refreshToken thủ công, cookie tự đính kèm
-    const res = await axiosInstance.post('/auth/refresh-token');
-    return extractData(res);
-  },
+  /** Giữ để tương thích code cũ. Dùng chung single-flight với interceptor. */
+  refreshToken: async () => ({ accessToken: await refreshAccessToken() }),
+
+  /**
+   * Gọi MỘT LẦN khi khởi động app (xem main.jsx), không cần chờ.
+   * - Khách chưa từng đăng nhập: bỏ qua, trả false.
+   * - Đã từng đăng nhập: lấy lại accessToken từ cookie HttpOnly, trả true nếu thành công.
+   * Gọi nhiều lần (vd React StrictMode) vẫn chỉ refresh đúng một lần.
+   */
+  initSession: bootstrapSession,
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
   logout: async () => {
     try {
-      const res = await axiosInstance.post('/auth/logout');
-      return extractData(res);
+      return await post('/auth/logout');
     } finally {
-      authService.clearSession();
+      clearSession();
     }
   },
 
@@ -99,55 +74,47 @@ const authService = {
   saveSession: (data) => {
     if (!data) return;
 
-    // CHỈ LƯU accessToken và profile người dùng (refreshToken đã nằm an toàn trong HttpOnly Cookie)
+    // accessToken chỉ giữ trong bộ nhớ; refreshToken nằm trong HttpOnly Cookie.
     if (data.accessToken) {
-      localStorage.setItem('accessToken', data.accessToken);
+      setAccessToken(data.accessToken);
     }
     if (data.user) {
-      localStorage.setItem(
-        'currentUser',
-        JSON.stringify({
-          id: data.user.id,
-          name: data.user.username,
-          email: data.user.email,
-          avatar: data.user.avatarUrl,
-          role: data.user.role,
-          is2FaEnabled: data.user.is2FaEnabled ?? false,
-          isPremium: data.user.isPremium ?? false,
-        })
-      );
+      setStoredUser({
+        id: data.user.id,
+        name: data.user.username,
+        email: data.user.email,
+        avatar: data.user.avatarUrl,
+        role: data.user.role,
+        is2FaEnabled: data.user.is2FaEnabled ?? false,
+        // BE trả subscriptionType ("free" | "standard" | "premium"), không có isPremium.
+        // Giá trị tạm; refreshPremiumStatus (đã kiểm tra hạn) sẽ chốt lại.
+        isPremium:
+          data.user.isPremium ??
+          String(data.user.subscriptionType || 'free').toLowerCase() !== 'free',
+      });
     }
   },
 
   refreshPremiumStatus: async () => {
     try {
-      const res = await axiosInstance.get('/payments/subscription-status');
-      const status = extractData(res);
-      const raw = localStorage.getItem('currentUser');
-      if (!raw) return;
-      const user = JSON.parse(raw);
-      user.isPremium = status?.isPremium === true;
-      localStorage.setItem('currentUser', JSON.stringify(user));
+      const status = extractData(await axiosInstance.get('/payments/subscription-status'));
+      const user = getStoredUser();
+      if (!user) return;
+      setStoredUser({ ...user, isPremium: status?.isPremium === true });
     } catch {
       // Bỏ qua lỗi
     }
   },
 
-  clearSession: () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('currentUser');
-  },
+  clearSession,
 
-  getCurrentUser: () => {
-    try {
-      const raw = localStorage.getItem('currentUser');
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  },
+  getCurrentUser: getStoredUser,
 
-  isLoggedIn: () => !!localStorage.getItem('accessToken'),
+  // Dựa trên hồ sơ đã lưu (giống router), đúng ngay cả khi token đang được refresh nền.
+  isLoggedIn: hasStoredUser,
+
+  // Chỉ true sau khi đã có accessToken trong bộ nhớ.
+  hasAccessToken: () => !!getAccessToken(),
 };
 
 export default authService;

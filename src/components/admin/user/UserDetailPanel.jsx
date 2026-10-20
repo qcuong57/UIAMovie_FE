@@ -1,7 +1,7 @@
 // src/components/admin/user/UserDetailPanel.jsx  ← REDESIGNED
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil, CheckCircle, XCircle, Crown, AlertCircle } from 'lucide-react';
+import { X, Mail, Calendar, Shield, User, Star, Clock, Pencil, CheckCircle, XCircle, Crown, AlertCircle, Ban } from 'lucide-react';
 import axiosInstance from '../../../config/axios';
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -184,6 +184,15 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
                   value={user.is2FaEnabled ? 'Đã bật' : 'Chưa bật'}
                   accent={user.is2FaEnabled ? '#16A34A' : undefined}
                 />
+                <MetaRow
+                  icon={user.isActive === false ? Ban : CheckCircle}
+                  label="Trạng thái"
+                  value={user.isActive === false ? 'Đã khóa' : 'Hoạt động'}
+                  accent={user.isActive === false ? '#DC2626' : '#16A34A'}
+                />
+                {user.isActive === false && user.banReason && (
+                  <MetaRow icon={AlertCircle} label="Lý do khóa" value={user.banReason} accent="#DC2626" />
+                )}
               </div>
 
               {/* ID */}

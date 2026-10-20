@@ -2,7 +2,7 @@
 // Trang thông tin chi tiết TV Show — hiển thị trước khi vào xem
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -20,15 +20,7 @@ import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { useToast } from "../../components/common/Toast";
-
-function getCurrentUser() {
-  try {
-    const raw = localStorage.getItem("currentUser");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
+import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -64,7 +56,7 @@ export default function TvShowInfoPage() {
   const [seasonEpisodesCache, setSeasonEpisodesCache] = useState({});
   const [loadingSeasonEpisodes, setLoadingSeasonEpisodes] = useState(false);
 
-  const [currentUser] = useState(() => getCurrentUser());
+  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });

@@ -1,5 +1,5 @@
 // src/pages/LandingPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
@@ -16,7 +16,10 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService";
+import { getApiErrorMessage } from "../utils/apiError";
+import { validateUsername } from "../utils/validators";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useStoredUser } from "../hooks/useStoredUser";
 
 const C = {
   bg: "#070707",
@@ -41,13 +44,11 @@ const extractErrorMessage = (e, defaultMsg = "Đã có lỗi xảy ra") => {
   if (e.response?.status === 429) {
     return "Bạn thao tác quá nhanh hoặc nhập sai nhiều lần. Vui lòng đợi 1 phút trước khi thử lại.";
   }
-  return (
-    e.response?.data?.message ||
-    e.response?.data?.data?.message ||
-    e.message ||
-    defaultMsg
-  );
+  return getApiErrorMessage(e, defaultMsg);
 };
+
+const homePathFor = (user) =>
+  user?.role?.toLowerCase() === "admin" ? "/admin" : "/";
 
 // ─── Banned account banner ───────────────────────────────────────────────────
 function BannedMsg({ reason }) {
@@ -113,7 +114,6 @@ function BannedMsg({ reason }) {
 
 // ─── Validation helpers (Khớp hoàn toàn với Backend Validators) ───────────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
 const HAS_UPPER = /[A-Z]/;
 const HAS_LOWER = /[a-z]/;
 const HAS_DIGIT = /[0-9]/;
@@ -122,16 +122,7 @@ const HAS_SPECIAL = /[!@#$%^&*]/;
 function validateEmail(v) {
   if (!v.trim()) return "Email không được để trống";
   if (!EMAIL_RE.test(v.trim())) return "Email không hợp lệ";
-  if (v.length > 255) return "Email tối đa 255 ký tự";
-  return "";
-}
-
-function validateUsername(v) {
-  if (!v.trim()) return "Username không được để trống";
-  if (v.trim().length < 3 || v.trim().length > 50)
-    return "Username phải từ 3–50 ký tự";
-  if (!USERNAME_RE.test(v.trim()))
-    return "Username chỉ được chứa chữ, số, dấu gạch dưới";
+  if (v.trim().length > 254) return "Email tối đa 254 ký tự";
   return "";
 }
 
@@ -143,6 +134,7 @@ function validatePassword(v) {
   if (!HAS_DIGIT.test(v)) return "Mật khẩu phải chứa ít nhất 1 số";
   if (!HAS_SPECIAL.test(v))
     return "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*)";
+  if (new TextEncoder().encode(v).length > 72) return "Mật khẩu tối đa 72 byte";
   return "";
 }
 
@@ -410,14 +402,10 @@ function LoginView({ onSwitch, onOtp, navigate }) {
 
   const hasFieldErrors = Object.values(errors).some(Boolean);
 
+  // Chỉ khớp các từ khóa đặc trưng; tránh "ban" khớp nhầm "urban", "banner"...
   const isBannedError = (msg = "") => {
     const lower = msg.toLowerCase();
-    return (
-      lower.includes("khóa") ||
-      lower.includes("ban") ||
-      lower.includes("bị khóa") ||
-      lower.includes("locked")
-    );
+    return lower.includes("khóa") || lower.includes("locked");
   };
 
   const submit = async () => {
@@ -435,12 +423,16 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       }
 
       authService.saveSession(data);
-      navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
+      navigate(homePathFor(data.user), { replace: true });
     } catch (e) {
       const data = e.response?.data;
       const msg = extractErrorMessage(e, "Email hoặc mật khẩu không đúng");
 
-      if (isBannedError(msg)) {
+      // Ưu tiên tín hiệu từ backend (banReason / 403), rồi mới đến so khớp văn bản.
+      const isBanned =
+        !!data?.banReason || e.response?.status === 403 || isBannedError(msg);
+
+      if (isBanned) {
         setBanned({ reason: data?.banReason || null });
       } else {
         setError(msg);
@@ -466,6 +458,8 @@ function LoginView({ onSwitch, onOtp, navigate }) {
         onChange={(v) => {
           setEmail(v);
           touch("email");
+          setBanned(null);
+          setError("");
         }}
         onBlur={() => touch("email")}
         onEnter={submit}
@@ -481,6 +475,8 @@ function LoginView({ onSwitch, onOtp, navigate }) {
         onChange={(v) => {
           setPassword(v);
           touch("password");
+          setBanned(null);
+          setError("");
         }}
         onBlur={() => touch("password")}
         onEnter={submit}
@@ -691,13 +687,19 @@ function RegisterView({ onSwitch, onRegisterOtp }) {
 }
 
 // ── OTP View ─────────────────────────────────────────────────────────────────
+const OTP_LENGTH = 6;
+
 function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSuccess }) {
-  const [code, setCode] = useState("");
+  // Mảng cố định 6 ô: xóa ô giữa không làm các số dồn lại.
+  const [digits, setDigits] = useState(() => Array(OTP_LENGTH).fill(""));
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [cooldown, setCooldown] = useState(60); // giây chờ trước khi cho gửi lại OTP
+
+  const code = digits.join("");
+  const isRegister = mode === "register";
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -705,10 +707,44 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const isRegister = mode === "register";
+  const focusBox = (i) => document.getElementById(`otp-${i}`)?.focus();
+
+  const handleChange = (i, raw) => {
+    const val = raw.replace(/\D/g, "").slice(-1);
+    setDigits((prev) => {
+      const next = [...prev];
+      next[i] = val;
+      return next;
+    });
+    if (val && i < OTP_LENGTH - 1) focusBox(i + 1);
+  };
+
+  const handleKeyDown = (i, e) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      focusBox(i - 1);
+    } else if (e.key === "ArrowLeft" && i > 0) {
+      focusBox(i - 1);
+    } else if (e.key === "ArrowRight" && i < OTP_LENGTH - 1) {
+      focusBox(i + 1);
+    } else if (e.key === "Enter" && code.length === OTP_LENGTH) {
+      submit();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    if (!text) return;
+    e.preventDefault();
+    const next = Array(OTP_LENGTH).fill("");
+    text.split("").forEach((ch, idx) => {
+      next[idx] = ch;
+    });
+    setDigits(next);
+    focusBox(Math.min(text.length, OTP_LENGTH - 1));
+  };
 
   const submit = async () => {
-    if (code.length !== 6) {
+    if (code.length !== OTP_LENGTH) {
       setError("Mã OTP gồm 6 chữ số");
       return;
     }
@@ -721,7 +757,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       } else {
         const data = await authService.verifyOtp({ userId, code });
         authService.saveSession(data);
-        navigate(data.user?.role?.toLowerCase() === "admin" ? "/admin" : "/");
+        navigate(homePathFor(data.user), { replace: true });
       }
     } catch (e) {
       setError(extractErrorMessage(e, "Mã OTP không đúng hoặc đã hết hạn"));
@@ -735,13 +771,9 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
     setSent(false);
     setError("");
     try {
-      if (isRegister) {
-        setError("OTP đã hết hạn. Vui lòng quay lại và đăng ký lại để nhận mã mới.");
-      } else {
-        await authService.sendOtp(userId);
-        setSent(true);
-        setCooldown(60);
-      }
+      await authService.sendOtp(userId);
+      setSent(true);
+      setCooldown(60);
     } catch (e) {
       setError(extractErrorMessage(e, "Không thể gửi lại OTP"));
     } finally {
@@ -787,32 +819,25 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       </p>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 20 }}>
-        {Array.from({ length: 6 }).map((_, i) => (
+        {digits.map((d, i) => (
           <input
             key={i}
             id={`otp-${i}`}
             type="text"
             inputMode="numeric"
-            maxLength={1}
-            value={code[i] || ""}
-            onChange={(e) => {
-              const val = e.target.value.replace(/\D/, "");
-              const arr = code.split("");
-              arr[i] = val;
-              const next = arr.join("").slice(0, 6);
-              setCode(next);
-              if (val && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Backspace" && !code[i] && i > 0)
-                document.getElementById(`otp-${i - 1}`)?.focus();
-            }}
+            autoComplete={i === 0 ? "one-time-code" : "off"}
+            autoFocus={i === 0}
+            value={d}
+            onChange={(e) => handleChange(i, e.target.value)}
+            onKeyDown={(e) => handleKeyDown(i, e)}
+            onPaste={handlePaste}
+            onFocus={(e) => e.target.select()}
             style={{
               width: 44,
               height: 52,
               textAlign: "center",
               background: C.input,
-              border: `1px solid ${code[i] ? C.borderF : C.border}`,
+              border: `1px solid ${d ? C.borderF : C.border}`,
               borderRadius: 8,
               color: C.text,
               outline: "none",
@@ -828,28 +853,35 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       {sent && <SuccessMsg>Đã gửi lại OTP</SuccessMsg>}
       {error && <ErrorMsg>{error}</ErrorMsg>}
 
-      <SubmitBtn loading={loading} onClick={submit} disabled={code.length !== 6}>
+      <SubmitBtn loading={loading} onClick={submit} disabled={code.length !== OTP_LENGTH}>
         Xác nhận
       </SubmitBtn>
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
-        <button
-          onClick={resend}
-          disabled={resending || cooldown > 0}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: resending || cooldown > 0 ? "default" : "pointer",
-            opacity: cooldown > 0 ? 0.6 : 1,
-            fontFamily: "'Nunito',sans-serif",
-            fontSize: 12.5,
-            color: C.sub,
-            textDecoration: "underline",
-            textDecorationColor: C.dim,
-          }}
-        >
-          {resending ? "Đang gửi..." : cooldown > 0 ? `Gửi lại mã sau ${cooldown}s` : "Gửi lại mã OTP"}
-        </button>
+        {isRegister ? (
+          // Chưa có endpoint gửi lại OTP đăng ký: không hiện nút đếm ngược gây hiểu nhầm.
+          <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12.5, color: C.sub, lineHeight: 1.6 }}>
+            Mã hết hạn hoặc chưa nhận được? Hãy bấm "Quay lại" và đăng ký lại để nhận mã mới.
+          </p>
+        ) : (
+          <button
+            onClick={resend}
+            disabled={resending || cooldown > 0}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: resending || cooldown > 0 ? "default" : "pointer",
+              opacity: cooldown > 0 ? 0.6 : 1,
+              fontFamily: "'Nunito',sans-serif",
+              fontSize: 12.5,
+              color: C.sub,
+              textDecoration: "underline",
+              textDecorationColor: C.dim,
+            }}
+          >
+            {resending ? "Đang gửi..." : cooldown > 0 ? `Gửi lại mã sau ${cooldown}s` : "Gửi lại mã OTP"}
+          </button>
+        )}
       </div>
     </>
   );
@@ -947,6 +979,7 @@ function ForgotView({ onSwitch }) {
           setTouched({ email: true });
         }}
         onBlur={touch}
+        onEnter={submit}
         placeholder="email@example.com"
         autoFocus
         error={emailError}
@@ -972,6 +1005,13 @@ function ResetView({ email: initEmail, onSwitch }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [touched, setTouched] = useState({});
+
+  // Dọn timer chuyển trang khi component bị unmount sớm.
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => onSwitch("login"), 2000);
+    return () => clearTimeout(t);
+  }, [done, onSwitch]);
 
   // Khớp đồng bộ với ResetPasswordValidator ở Backend
   const errors = {
@@ -1004,7 +1044,6 @@ function ResetView({ email: initEmail, onSwitch }) {
         confirmPassword: confirm,
       });
       setDone(true);
-      setTimeout(() => onSwitch("login"), 2000);
     } catch (e) {
       setError(extractErrorMessage(e, "Mã OTP không đúng hoặc đã hết hạn"));
     } finally {
@@ -1088,7 +1127,7 @@ function ResetView({ email: initEmail, onSwitch }) {
         label="Mã OTP"
         value={code}
         onChange={(v) => {
-          setCode(v.replace(/\D/, ""));
+          setCode(v.replace(/\D/g, "").slice(0, 6));
           touch("code");
         }}
         onBlur={() => touch("code")}
@@ -1120,6 +1159,7 @@ function ResetView({ email: initEmail, onSwitch }) {
           touch("confirm");
         }}
         onBlur={() => touch("confirm")}
+        onEnter={submit}
         placeholder="Nhập lại mật khẩu"
         error={errors.confirm}
         touched={touched.confirm}
@@ -1145,6 +1185,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const storedUser = useStoredUser();
   const [view, setView] = useState(
     location.state?.view === "register" ? "register" : "login"
   );
@@ -1152,10 +1193,18 @@ export default function LandingPage() {
   const [registerOtpData, setRegisterOtpData] = useState(null);
   const [resetEmail, setResetEmail] = useState("");
 
-  const handleSwitch = (next, data) => {
+  // Đã đăng nhập thì không ở lại trang /welcome.
+  // (Khi hết phiên thật, axios đã xóa hồ sơ trước khi chuyển về đây nên không bị lặp.)
+  useEffect(() => {
+    if (storedUser) {
+      navigate(homePathFor(storedUser), { replace: true });
+    }
+  }, [storedUser, navigate]);
+
+  const handleSwitch = useCallback((next, data) => {
     if (next === "reset") setResetEmail(data || "");
     setView(next);
-  };
+  }, []);
 
   const handleOtp = ({ userId, email }) => {
     setOtpData({ userId, email });
@@ -1167,9 +1216,15 @@ export default function LandingPage() {
     setView("register-otp");
   };
 
+  // Chuyển sang đăng nhập sau khi đăng ký thành công (timer được dọn khi unmount).
+  useEffect(() => {
+    if (view !== "register-success") return;
+    const t = setTimeout(() => setView("login"), 2000);
+    return () => clearTimeout(t);
+  }, [view]);
+
   const handleRegisterSuccess = () => {
     setView("register-success");
-    setTimeout(() => setView("login"), 2000);
   };
 
   return (
