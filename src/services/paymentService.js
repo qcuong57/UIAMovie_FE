@@ -121,7 +121,8 @@ const paymentService = {
 
   /**
    * GET /api/payments/history
-   * status: 'pending' | 'success' | 'failed' | 'expired' (chữ thường); provider: 'vnpay' | 'sepay'
+   * status: 'pending' | 'success' | 'failed' | 'expired' | 'cancelled' (chữ thường); provider: 'vnpay' | 'sepay'
+   * 'cancelled' = đơn bị thay bằng đơn mới (user chọn lại gói). Trang lịch sử thanh toán nên hiển thị "Đã thay thế".
    * @returns {Promise<Array<{ id, orderCode, planName, amount, provider, status, failureReason, createdAt, paidAt }>>}
    */
   getPaymentHistory: async () => {
@@ -223,15 +224,17 @@ const paymentService = {
    * [Admin] GET /api/payments/admin/revenue/summary
    * Ngày/tháng tính theo giờ VN; tiền là VND thật.
    * @returns {Promise<{
-   *   totalRevenue, totalOrders, successOrders, pendingOrders, failedOrders, expiredOrders,
-   *   successRate,          // success / (success + failed + expired), %
+   *   totalRevenue,         // GỘP: số khách đã trả qua cổng, chưa trừ phí cổng / hoàn tiền
+   *   totalOrders, successOrders, pendingOrders, failedOrders, expiredOrders, cancelledOrders,
+   *   successRate,          // success / (success + failed + expired), %. KHÔNG tính pending và cancelled
    *   averageOrderValue,
    *   todayRevenue, todayOrders,
    *   currentMonthRevenue, currentMonthOrders, lastMonthRevenue,
    *   monthOverMonthGrowth, // null khi tháng trước = 0
    *   activePremiumUsers, expiringIn7Days, generatedAt
    * }>}
-   * LƯU Ý: pendingOrders chỉ gồm đơn còn hạn; failedOrders KHÔNG còn gồm đơn hết hạn (xem expiredOrders).
+   * LƯU Ý: pendingOrders chỉ gồm đơn còn hạn; failedOrders KHÔNG gồm đơn hết hạn (xem expiredOrders);
+   * cancelledOrders = đơn bị thay bằng đơn mới, có trong totalOrders nhưng không tính vào successRate.
    */
   adminGetRevenueSummary: async () => {
     try {
@@ -291,7 +294,7 @@ const paymentService = {
    * [Admin] GET /api/payments/admin/orders
    *
    * @param {{
-   *   status?: string,       // 'pending' | 'success' | 'failed' | 'expired'
+   *   status?: string,       // 'pending' | 'success' | 'failed' | 'expired' | 'cancelled' (giá trị lạ → 400)
    *   planId?: string,       // 'monthly_premium' | 'yearly_premium'
    *   provider?: string,
    *   search?: string,       // email hoặc orderCode

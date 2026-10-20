@@ -7,9 +7,10 @@
 // Quy ước của BE:
 //   - Ngày/tháng trong thống kê và bộ lọc tính theo GIỜ VN (GMT+7). FE chỉ gửi NGÀY dạng "yyyy-MM-dd"
 //     (gồm cả ngày cuối), BE tự đổi mốc sang UTC. Thời gian BE trả về là UTC → hiển thị theo múi giờ VN.
-//   - status: pending (còn hạn) | expired (pending quá hạn) | failed | success.
-//   - summary.failedOrders CHỈ gồm failed; expiredOrders tách riêng; pendingOrders chỉ gồm pending còn hạn.
-//     successRate = success / (success + failed + expired).
+//   - status: pending (còn hạn) | expired (pending quá hạn) | failed | success | cancelled (bị thay bằng đơn mới).
+//   - summary.failedOrders CHỈ gồm failed; expiredOrders, cancelledOrders tách riêng; pendingOrders chỉ gồm pending còn hạn.
+//     successRate = success / (success + failed + expired). Pending và cancelled KHÔNG nằm trong mẫu số.
+//   - Doanh thu là số GỘP khách đã trả qua cổng (chưa trừ phí cổng / hoàn tiền), không phải lợi nhuận.
 //   - Export: không chọn trạng thái thì chỉ xuất đơn success. Đơn success lọc theo ngày THANH TOÁN,
 //     các trạng thái khác lọc theo ngày TẠO. Tối đa 50.000 dòng.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,7 +32,9 @@ import AdminPagination from '../../components/common/AdminPagination';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 15;
-const POLL_MS = 20_000; // tự làm mới khi còn đơn pending
+const POLL_MS = 20_000;       // tự làm mới khi còn đơn pending
+const IDLE_POLL_MS = 60_000;  // không còn đơn pending: vẫn kiểm tra thưa để thấy đơn mới
+const STALE_MS = 15_000;      // quay lại tab sau ngần này thì tải lại
 const PLAN_COLORS = [ACCENT, ACCENT2, ACCENT3, ACCENT4];
 
 const STATUS = {
@@ -39,6 +42,7 @@ const STATUS = {
   pending: { label: 'Chờ thanh toán', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
   expired: { label: 'Hết hạn',        color: T.textSub, bg: T.bg,      border: T.border },
   failed:  { label: 'Thất bại',       color: T.red,     bg: '#FEF2F2', border: '#FECACA' },
+  cancelled: { label: 'Đã thay thế',  color: T.textSub, bg: T.bg,      border: T.border },
 };
 
 const STATUS_FILTERS = [
@@ -47,6 +51,7 @@ const STATUS_FILTERS = [
   { value: 'pending', label: STATUS.pending.label },
   { value: 'expired', label: STATUS.expired.label },
   { value: 'failed',  label: STATUS.failed.label },
+  { value: 'cancelled', label: STATUS.cancelled.label },
 ];
 
 const PROVIDERS = [
@@ -89,6 +94,21 @@ const fmtVnDateTime = (v) => {
   if (!v) return '—';
   const d = new Date(typeof v === 'string' && !HAS_TZ.test(v) ? `${v}Z` : v);
   return Number.isNaN(d.getTime()) ? '—' : VN_FMT.format(d);
+};
+
+/** "2026-10-19" → "19/10/2026", "2026-10" → "10/2026". Cắt chuỗi, không qua Date nên không lệch múi giờ. */
+const fmtYmd = (s) => {
+  const [y, m, d] = s.split('-');
+  return d ? `${d}/${m}/${y}` : `${m}/${y}`;
+};
+
+const copyText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const downloadBlob = (blob, filename) => {
@@ -249,8 +269,13 @@ const Card = ({ title, subtitle, action, children, noPad, style }) => (
   </section>
 );
 
-const StatCard = ({ label, value, sub, subColor, delta, featured, loading, index }) => (
+const StatCard = ({ label, value, sub, subColor, delta, featured, loading, index, onClick }) => (
   <motion.div
+    onClick={onClick}
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    title={onClick ? 'Bấm để lọc bảng đơn hàng' : undefined}
+    onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: index * 0.04, duration: 0.22 }}
@@ -259,6 +284,7 @@ const StatCard = ({ label, value, sub, subColor, delta, featured, loading, index
       border: `1px solid ${featured ? 'transparent' : T.border}`,
       borderRadius: 16, padding: '18px 20px', boxShadow: featured ? '0 8px 28px rgba(28,95,58,0.22)' : T.shadow,
       display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14, minHeight: 112,
+      cursor: onClick ? 'pointer' : 'default',
     }}
   >
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -313,7 +339,7 @@ const ChartTooltip = ({ active, payload, label, metric }) => {
   const v = payload[0].value;
   return (
     <div style={{ background: T.text, borderRadius: 10, padding: '8px 12px', boxShadow: T.shadowLg, fontFamily: FONT }}>
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: '0 0 3px', fontWeight: 600 }}>{label}</p>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: '0 0 3px', fontWeight: 600 }}>{payload[0].payload?.full ?? label}</p>
       <p style={{ fontSize: 13, color: '#fff', fontWeight: 700, margin: 0 }}>
         {metric === 'revenue' ? fmtVnd(v) : `${v} đơn`}
       </p>
@@ -350,7 +376,6 @@ export default function AdminRevenue() {
   const [byPlan, setByPlan] = useState([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
-  const [reloadTick, setReloadTick] = useState(0);
 
   // Orders
   const [orders, setOrders] = useState([]);
@@ -369,11 +394,15 @@ export default function AdminRevenue() {
   const ordersRef = useRef(null);
 
   // ── Summary ────────────────────────────────────────────────────────────────
-  const loadSummary = useCallback(async () => {
+  const lastRefreshRef = useRef(Date.now());
+  const loadSummary = useCallback(async (silent = false) => {
+    lastRefreshRef.current = Date.now();
     try {
       setSummary(await paymentService.adminGetRevenueSummary());
       setSumError(false);
     } catch (e) {
+      // Làm mới ngầm thất bại: giữ số cũ, không báo lỗi liên tục mỗi chu kỳ
+      if (silent) return;
       setSumError(true);
       report(e, 'Không tải được tổng quan doanh thu');
     } finally {
@@ -384,36 +413,44 @@ export default function AdminRevenue() {
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
   // ── Chart + by-plan (bỏ qua kết quả của request cũ khi đổi kỳ nhanh) ─────────
+  // `silent` = làm mới ngầm (polling): không bật spinner, lỗi thì giữ dữ liệu cũ.
+  // Request ngầm không được chen vào lúc đang tải thật (đổi kỳ) để khỏi làm kẹt spinner hay hiện sai kỳ.
   const chartReq = useRef(0);
-  useEffect(() => {
+  const chartBusy = useRef(false);
+  const loadChart = useCallback(async (silent = false) => {
+    if (silent && chartBusy.current) return;
     const id = ++chartReq.current;
-    setChartLoading(true);
-    (async () => {
-      try {
-        const params = groupBy === 'day' ? { groupBy, year, month } : { groupBy, year };
-        const [c, p] = await Promise.all([
-          paymentService.adminGetRevenueChart(params),
-          paymentService.adminGetRevenueByPlan(buildRange(groupBy, year, month)),
-        ]);
-        if (id !== chartReq.current) return;
-        setChart(c);
-        setByPlan(Array.isArray(p) ? p : []);
-        setChartError(false);
-      } catch (e) {
-        if (id !== chartReq.current) return;
-        setChartError(true);
-        report(e, 'Không tải được biểu đồ doanh thu');
-      } finally {
-        if (id === chartReq.current) setChartLoading(false);
-      }
-    })();
-  }, [groupBy, year, month, reloadTick, report]);
+    if (!silent) { chartBusy.current = true; setChartLoading(true); }
+    try {
+      const params = groupBy === 'day' ? { groupBy, year, month } : { groupBy, year };
+      const [c, p] = await Promise.all([
+        paymentService.adminGetRevenueChart(params),
+        paymentService.adminGetRevenueByPlan(buildRange(groupBy, year, month)),
+      ]);
+      if (id !== chartReq.current) return;
+      setChart(c);
+      setByPlan(Array.isArray(p) ? p : []);
+      setChartError(false);
+    } catch (e) {
+      if (id !== chartReq.current || silent) return;
+      setChartError(true);
+      report(e, 'Không tải được biểu đồ doanh thu');
+    } finally {
+      if (id === chartReq.current) { chartBusy.current = false; setChartLoading(false); }
+    }
+  }, [groupBy, year, month, report]);
+
+  const loadChartRef = useRef(loadChart);
+  loadChartRef.current = loadChart;
+  useEffect(() => { loadChart(); }, [loadChart]);
 
   // ── Orders ─────────────────────────────────────────────────────────────────
   const ordReq = useRef(0);
+  const ordBusy = useRef(false);
   const loadOrders = useCallback(async (silent = false) => {
+    if (silent && ordBusy.current) return;
     const id = ++ordReq.current;
-    if (!silent) setOrdLoading(true);
+    if (!silent) { ordBusy.current = true; setOrdLoading(true); }
     try {
       const res = await paymentService.adminGetOrders({
         page,
@@ -430,11 +467,11 @@ export default function AdminRevenue() {
       setTotal(res?.totalCount ?? 0);
       setOrdError(false);
     } catch (e) {
-      if (id !== ordReq.current) return;
+      if (id !== ordReq.current || silent) return; // làm mới ngầm lỗi: giữ bảng cũ
       setOrdError(true);
-      if (!silent) report(e, 'Không tải được danh sách đơn hàng');
+      report(e, 'Không tải được danh sách đơn hàng');
     } finally {
-      if (id === ordReq.current && !silent) setOrdLoading(false);
+      if (id === ordReq.current) { ordBusy.current = false; setOrdLoading(false); }
     }
   }, [page, fStatus, fPlan, fProvider, fSearch, dateFrom, dateTo, report]);
 
@@ -454,23 +491,37 @@ export default function AdminRevenue() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Còn đơn pending thì tự làm mới đều đặn (IPN có thể tới sau redirect vài giây)
+  // Làm mới ngầm cả KPI, bảng, biểu đồ và doanh thu theo gói (đơn pending chuyển thành công
+  // làm đổi tất cả các khối này, không riêng KPI và bảng).
+  const refreshSilent = useCallback(() => {
+    loadSummary(true);
+    loadOrdersRef.current(true);
+    loadChartRef.current(true);
+  }, [loadSummary]);
+
+  // Còn đơn pending → 20 giây/lần (IPN có thể tới sau redirect vài giây); không còn → 60 giây/lần.
   const pending = summary?.pendingOrders ?? 0;
   useEffect(() => {
-    if (!pending) return undefined;
     const t = setInterval(() => {
-      if (document.hidden) return;
-      loadSummary();
-      loadOrdersRef.current(true);
-    }, POLL_MS);
+      if (!document.hidden) refreshSilent();
+    }, pending ? POLL_MS : IDLE_POLL_MS);
     return () => clearInterval(t);
-  }, [pending, loadSummary]);
+  }, [pending, refreshSilent]);
+
+  // Quay lại tab sau một lúc → tải lại ngay thay vì chờ chu kỳ kế tiếp
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && Date.now() - lastRefreshRef.current > STALE_MS) refreshSilent();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshSilent]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const refreshAll = () => {
     loadSummary();
     loadOrders();
-    setReloadTick((t) => t + 1);
+    loadChart();
   };
 
   const setFilter = (setter) => (v) => { setter(v); setPage(1); };
@@ -485,6 +536,12 @@ export default function AdminRevenue() {
     setDateFrom(''); setDateTo(''); setPage(1);
   };
   const hasFilter = !!(fStatus || fPlan || fProvider || fSearch || dateFrom || dateTo);
+
+  const copyId = async (v) => {
+    const ok = await copyText(v);
+    if (ok) toastRef.current?.success?.('Đã sao chép mã giao dịch');
+    else toastRef.current?.error?.('Không sao chép được, hãy chọn và copy thủ công');
+  };
 
   // Giữ from <= to (BE trả 400 nếu ngược)
   const onDateFrom = (v) => { setDateFrom(v); if (v && dateTo && v > dateTo) setDateTo(v); setPage(1); };
@@ -508,14 +565,24 @@ export default function AdminRevenue() {
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const chartData = (chart?.dataPoints ?? []).map((d) => ({
-    label: groupBy === 'month' ? MONTHS_VI[parseInt(d.label.split('-')[1], 10) - 1] : d.label.split('-')[2],
-    revenue: d.revenue,
-    orders: d.orders,
-  }));
+  // Dựa vào định dạng nhãn BE trả ("2026-10" hoặc "2026-10-19") để không lệch khi vừa đổi groupBy
+  const chartData = (chart?.dataPoints ?? []).map((d) => {
+    const parts = d.label.split('-');
+    const isDay = parts.length === 3;
+    return {
+      label: isDay ? parts[2] : MONTHS_VI[parseInt(parts[1], 10) - 1],
+      full: fmtYmd(d.label), // tooltip: ngày/tháng đầy đủ
+      revenue: d.revenue,
+      orders: d.orders,
+    };
+  });
+  const hasChartActivity = chartData.some((d) => d.revenue > 0 || d.orders > 0);
   const periodLabel = groupBy === 'month' ? `Năm ${year}` : `${MONTHS_VI[month - 1]}/${year}`;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const maxPlanRevenue = Math.max(1, ...byPlan.map((p) => p.revenue));
+  const sumFinalized = summary ? summary.successOrders + summary.failedOrders + summary.expiredOrders : 0;
+  const sumCancelled = summary?.cancelledOrders ?? 0;
+  const exportLabel = `Xuất Excel (${fStatus ? STATUS[fStatus].label.toLowerCase() : 'đơn thành công'})`;
 
   // Tổng số đơn giảm (vd. polling) khiến trang hiện tại vượt quá → lùi về trang cuối
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -533,8 +600,19 @@ export default function AdminRevenue() {
           <h2 style={{ fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', color: T.text, margin: 0 }}>
             Doanh thu và thanh toán
           </h2>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, margin: '6px 0 0', lineHeight: 1.5, maxWidth: 640 }}>
+            Doanh thu là số <strong>gộp</strong> khách đã trả qua cổng thanh toán, chưa trừ phí cổng hay hoàn tiền,
+            nên không phải lợi nhuận.
+          </p>
         </div>
-        <Btn onClick={refreshAll}>Làm mới</Btn>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {summary?.generatedAt && (
+            <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>
+              Cập nhật lúc {fmtVnDateTime(summary.generatedAt)}
+            </span>
+          )}
+          <Btn onClick={refreshAll}>Làm mới</Btn>
+        </div>
       </div>
 
       {/* Cảnh báo đơn đang chờ */}
@@ -552,10 +630,10 @@ export default function AdminRevenue() {
 
       {/* KPI */}
       {sumError && !summary ? (
-        <Card><ErrorBox text="Không tải được tổng quan." onRetry={loadSummary} /></Card>
+        <Card><ErrorBox text="Không tải được tổng quan." onRetry={() => loadSummary()} /></Card>
       ) : (
         <div className="rv-kpis" style={{ marginBottom: 16 }}>
-          <StatCard index={0} featured label="Tổng doanh thu" loading={sumLoading}
+          <StatCard index={0} featured label="Tổng doanh thu (gộp)" loading={sumLoading}
             value={fmtVnd(summary?.totalRevenue)}
             sub={summary && `${summary.successOrders} giao dịch · TB ${fmtVnd(summary.averageOrderValue)}/đơn`} />
           <StatCard index={1} label="Hôm nay" loading={sumLoading}
@@ -572,11 +650,20 @@ export default function AdminRevenue() {
           <StatCard index={4} label="Đơn chờ thanh toán" loading={sumLoading}
             value={summary?.pendingOrders}
             sub="Chưa quá 15 phút"
-            subColor={summary?.pendingOrders > 0 ? T.gold : undefined} />
+            subColor={summary?.pendingOrders > 0 ? T.gold : undefined}
+            onClick={() => showStatus('pending')} />
           <StatCard index={5} label="Tỉ lệ thành công" loading={sumLoading}
             value={summary && `${summary.successRate}%`}
-            sub={summary && `${summary.failedOrders} thất bại · ${summary.expiredOrders} hết hạn / ${summary.totalOrders} đơn`}
-            subColor={summary && (summary.failedOrders + summary.expiredOrders) > 0 ? T.red : undefined} />
+            sub={summary && `${summary.successOrders}/${sumFinalized} đơn đã có kết quả${sumCancelled > 0 ? ` · ${sumCancelled} đã thay thế (không tính)` : ''}`} />
+          <StatCard index={6} label="Thất bại" loading={sumLoading}
+            value={summary?.failedOrders}
+            sub="Cổng báo lỗi hoặc sai số tiền"
+            subColor={summary?.failedOrders > 0 ? T.red : undefined}
+            onClick={() => showStatus('failed')} />
+          <StatCard index={7} label="Hết hạn" loading={sumLoading}
+            value={summary?.expiredOrders}
+            sub="Bỏ dở, quá hạn thanh toán"
+            onClick={() => showStatus('expired')} />
         </div>
       )}
 
@@ -601,8 +688,8 @@ export default function AdminRevenue() {
           }
         >
           {chartLoading ? <Spinner /> : chartError ? (
-            <ErrorBox text="Không tải được biểu đồ." onRetry={() => setReloadTick((t) => t + 1)} />
-          ) : chartData.length === 0 ? <Empty /> : (
+            <ErrorBox text="Không tải được biểu đồ." onRetry={() => loadChart()} />
+          ) : !hasChartActivity ? <Empty text="Chưa có doanh thu trong kỳ" /> : (
             <>
               <div style={{ display: 'flex', gap: 28, marginBottom: 14 }}>
                 <div>
@@ -671,7 +758,7 @@ export default function AdminRevenue() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {hasFilter && <Btn onClick={resetFilters}>Xóa bộ lọc</Btn>}
               <Btn primary disabled={exporting} onClick={handleExport}>
-                {exporting ? 'Đang xuất…' : 'Xuất Excel'}
+                {exporting ? 'Đang xuất…' : exportLabel}
               </Btn>
             </div>
           }
@@ -710,10 +797,12 @@ export default function AdminRevenue() {
               {!fStatus && ' Chưa chọn trạng thái thì chỉ xuất đơn thành công.'}
               {' '}Đơn thành công lọc theo ngày thanh toán, các trạng thái khác theo ngày tạo.
             </p>
-            {(fStatus === 'pending' || fStatus === 'expired') && (
+            {(fStatus === 'pending' || fStatus === 'expired' || fStatus === 'cancelled') && (
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.textSub, margin: 0, lineHeight: 1.6 }}>
                 {fStatus === 'pending'
                   ? 'Đơn chờ sẽ tự chuyển sang thành công khi cổng gửi IPN hợp lệ.'
+                  : fStatus === 'cancelled'
+                  ? 'Đơn bị thay thế khi khách chọn gói khác lúc đang chờ, không tính vào tỉ lệ thành công. Nếu khách đã trả tiền cho đơn này, IPN đến muộn vẫn được xác nhận.'
                   : 'Đơn hết hạn vẫn được xác nhận nếu IPN đến muộn. Nếu khách đã trả tiền mà đơn không đổi trạng thái, hãy đối chiếu trong Nhật ký IPN của cổng rồi gửi lại IPN hoặc cấp Premium thủ công.'}
               </p>
             )}
@@ -726,10 +815,10 @@ export default function AdminRevenue() {
             <Empty text={hasFilter ? 'Không có đơn nào khớp bộ lọc' : 'Chưa có đơn hàng nào'} />
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: 1020, borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', minWidth: 1200, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: T.bg }}>
-                    {['Mã đơn', 'Khách hàng', 'Gói', 'Số tiền', 'Cổng', 'Trạng thái', 'Tạo lúc', 'Thanh toán lúc'].map((h) => (
+                    {['Mã đơn', 'Khách hàng', 'Gói', 'Số tiền', 'Cổng', 'Mã GD cổng', 'Trạng thái', 'Tạo lúc', 'Thanh toán lúc'].map((h) => (
                       <th key={h} style={{
                         textAlign: 'left', padding: '10px 14px', fontFamily: FONT, fontSize: 10.5, fontWeight: 800,
                         letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textMuted,
@@ -746,8 +835,16 @@ export default function AdminRevenue() {
                       <Td strong color={ACCENT}>{o.orderCode}</Td>
                       <Td ellipsis title={o.userEmail}>{o.userEmail || '—'}</Td>
                       <Td>{o.planName}</Td>
-                      <Td title strong font={FONT_TITLE}>{fmtVnd(o.amount)}</Td>
+                      <Td strong font={FONT_TITLE}>{fmtVnd(o.amount)}</Td>
                       <Td>{PROVIDER_LABEL[o.provider] ?? o.provider}</Td>
+                      <Td
+                        ellipsis muted
+                        font="ui-monospace, SFMono-Regular, Menlo, monospace"
+                        title={o.gatewayTransId ? `${o.gatewayTransId} (bấm để sao chép)` : undefined}
+                        onClick={o.gatewayTransId ? () => copyId(o.gatewayTransId) : undefined}
+                      >
+                        {o.gatewayTransId || '—'}
+                      </Td>
                       <Td>
                         <StatusBadge status={o.status} />
                         {o.status === 'failed' && o.failureReason && (
@@ -786,15 +883,17 @@ export default function AdminRevenue() {
   );
 }
 
-const Td = ({ children, strong, muted, color, ellipsis, font, title }) => (
+const Td = ({ children, strong, muted, color, ellipsis, font, title, onClick }) => (
   <td
     title={typeof title === 'string' ? title : undefined}
+    onClick={onClick}
     style={{
       padding: '11px 14px', borderBottom: `1px solid ${T.border}`, verticalAlign: 'middle',
       fontFamily: font ?? FONT, fontSize: muted ? 11.5 : 12.5,
       fontWeight: strong ? 700 : 500,
       color: color ?? (muted ? T.textMuted : T.text),
       whiteSpace: 'nowrap', background: T.surface, transition: 'background 0.1s',
+      cursor: onClick ? 'copy' : undefined,
       ...(ellipsis ? { maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' } : null),
     }}
   >
