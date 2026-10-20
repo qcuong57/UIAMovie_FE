@@ -2,7 +2,7 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    
+
     <!-- ── Favicon cho trình duyệt & Google Search ── -->
     <link rel="icon" type="image/png" sizes="48x48" href="/logo.png" />
     <link rel="icon" type="image/png" sizes="96x96" href="/logo.png" />
@@ -11,13 +11,132 @@
 
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
+    <meta name="theme-color" content="#0a0a0a" />
 
-    <title>UIA Movie</title>
+    <!-- ── SEO tĩnh: bot không chạy JavaScript (AI crawler, Zalo, Facebook) vẫn đọc được ── -->
+    <title>UIAMovie - Xem Phim Online HD, 4K Vietsub &amp; Trợ Lý AI Gợi Ý Phim</title>
+    <meta
+      name="description"
+      content="UIAMovie là nền tảng xem phim trực tuyến tiếng Việt: phim điện ảnh, series, K-Drama, Anime chất lượng HD/4K, có phụ đề, tiếp tục xem trên mọi thiết bị và trợ lý AI gợi ý phim theo tâm trạng."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="application-name" content="UIAMovie" />
+    <meta name="apple-mobile-web-app-title" content="UIAMovie" />
+    <link rel="canonical" href="https://uiamovie.vercel.app/" />
+    <link rel="alternate" hreflang="vi" href="https://uiamovie.vercel.app/" />
+    <link rel="alternate" hreflang="x-default" href="https://uiamovie.vercel.app/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="UIAMovie" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:title" content="UIAMovie - Xem Phim Online HD, 4K Vietsub &amp; Trợ Lý AI Gợi Ý Phim" />
+    <meta
+      property="og:description"
+      content="Phim điện ảnh, series, K-Drama, Anime chất lượng HD/4K, có phụ đề và trợ lý AI gợi ý phim theo tâm trạng."
+    />
+    <meta property="og:url" content="https://uiamovie.vercel.app/" />
+    <meta property="og:image" content="https://uiamovie.vercel.app/logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="UIAMovie - Xem Phim Online HD, 4K Vietsub &amp; Trợ Lý AI" />
+    <meta
+      name="twitter:description"
+      content="Nền tảng xem phim trực tuyến tiếng Việt với trợ lý AI gợi ý phim theo tâm trạng."
+    />
+    <meta name="twitter:image" content="https://uiamovie.vercel.app/logo.png" />
+
+    <!-- Gợi ý cho AI crawler -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs.txt" />
+
+    <!-- ── JSON-LD: tên website + thương hiệu (sửa lỗi Google hiện "Vercel") ── -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://uiamovie.vercel.app/#website",
+            "url": "https://uiamovie.vercel.app/",
+            "name": "UIAMovie",
+            "alternateName": ["UIA Movie", "UIA Movie Vietnam"],
+            "inLanguage": "vi-VN",
+            "description": "Nền tảng xem phim trực tuyến tiếng Việt với trợ lý AI gợi ý phim theo tâm trạng.",
+            "publisher": { "@id": "https://uiamovie.vercel.app/#organization" },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://uiamovie.vercel.app/movies?search={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://uiamovie.vercel.app/#organization",
+            "name": "UIAMovie",
+            "alternateName": ["UIA Movie", "UIA Movie Vietnam"],
+            "url": "https://uiamovie.vercel.app/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://uiamovie.vercel.app/logo.png",
+              "width": 512,
+              "height": 512
+            }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://uiamovie.vercel.app/#app",
+            "name": "UIAMovie",
+            "url": "https://uiamovie.vercel.app/",
+            "applicationCategory": "EntertainmentApplication",
+            "operatingSystem": "Web, iOS, Android",
+            "inLanguage": "vi-VN",
+            "description": "Xem phim điện ảnh, series, K-Drama, Anime chất lượng HD/4K có phụ đề; tiếp tục xem trên mọi thiết bị; trợ lý AI gợi ý và so sánh phim.",
+            "featureList": [
+              "Phim điện ảnh, series, K-Drama, Anime",
+              "Chất lượng HD và 4K",
+              "Phụ đề nhiều ngôn ngữ, phụ đề do AI dịch và tạo",
+              "Tiếp tục xem dở trên mọi thiết bị",
+              "Trợ lý AI gợi ý phim theo tâm trạng và so sánh phim",
+              "Gói Premium xem không quảng cáo"
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Nội dung tĩnh cho bot/AI không chạy JavaScript -->
+    <noscript>
+      <main>
+        <h1>UIAMovie - Nền tảng xem phim trực tuyến tiếng Việt</h1>
+        <p>
+          UIAMovie cho phép xem phim điện ảnh, series truyền hình, K-Drama và
+          Anime chất lượng HD/4K có phụ đề. Trợ lý AI gợi ý phim theo tâm trạng,
+          so sánh phim và giải đáp thắc mắc về website. Hỗ trợ tiếp tục xem dở
+          trên mọi thiết bị.
+        </p>
+        <h2>Tính năng chính</h2>
+        <ul>
+          <li>Kho phim lẻ và phim bộ, phân loại theo thể loại và quốc gia</li>
+          <li>Trợ lý AI gợi ý phim theo cảm xúc</li>
+          <li>Phụ đề nhiều ngôn ngữ, có phụ đề do AI dịch và tạo</li>
+          <li>Lưu lịch sử xem, danh sách yêu thích, đánh giá phim</li>
+          <li>Gói Premium xem không quảng cáo</li>
+        </ul>
+        <nav>
+          <a href="/">Trang chủ</a>
+          <a href="/intro">Về chúng tôi</a>
+          <a href="/premium">Gói Premium</a>
+        </nav>
+        <p>Vui lòng bật JavaScript để xem phim trên UIAMovie.</p>
+      </main>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

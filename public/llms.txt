@@ -1,0 +1,21 @@
+# UIAMovie
+
+> UIAMovie là nền tảng xem phim trực tuyến tiếng Việt. Người dùng xem phim điện ảnh, phim bộ (series), K-Drama và Anime ở chất lượng HD/4K, có phụ đề nhiều ngôn ngữ, tiếp tục xem dở trên mọi thiết bị và được trợ lý AI gợi ý phim theo tâm trạng.
+
+Website: https://uiamovie.vercel.app
+Ngôn ngữ: Tiếng Việt (vi-VN)
+
+## Tính năng chính
+- Kho phim điện ảnh và series: phim lẻ, phim bộ, K-Drama, Anime, phân loại theo thể loại và quốc gia.
+- Trợ lý AI: tư vấn và gợi ý phim theo cảm xúc, so sánh phim, hỗ trợ hỏi đáp về website.
+- Phụ đề: nhiều ngôn ngữ, có phụ đề do AI dịch/tạo.
+- Tiếp tục xem: lưu tiến độ xem phim và tập phim, mở lại đúng vị trí đang xem.
+- Gói Premium: xem không quảng cáo và nội dung dành riêng cho thành viên.
+- Yêu thích, lịch sử xem, đánh giá và bình luận của người dùng.
+
+## Trang quan trọng
+- [Trang chủ](https://uiamovie.vercel.app/): phim nổi bật, top xếp hạng, phim theo thể loại và quốc gia, trailer mới.
+- [Về chúng tôi](https://uiamovie.vercel.app/intro): câu chuyện, triết lý và công nghệ của UIAMovie.
+- [Gói Premium](https://uiamovie.vercel.app/premium): quyền lợi và giá gói thành viên.
+- Trang chi tiết phim: https://uiamovie.vercel.app/movie/{id}
+- Trang chi tiết phim bộ: https://uiamovie.vercel.app/tvshow/{id}

@@ -21,79 +21,34 @@ import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../context/homeTokens"
 import { useIsMobile } from "../hooks/useIsMobile";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import Technology from "../components/ui/TechnologyMarquee";
+import SeoMeta from "../components/common/SeoMeta";
+import { SITE_URL, organizationSchema } from "../config/seo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SEO Configuration
 // ─────────────────────────────────────────────────────────────────────────────
-const SEO = {
-  title: "Về chúng tôi — UIA Movie | Nền tảng xem phim cao cấp",
-  description:
-    "Khám phá câu chuyện của UIAMovie — nơi điện ảnh được tôn trọng, công nghệ phục vụ nghệ thuật, và mỗi trải nghiệm là một tác phẩm.",
-  url: "https://uiamovie.com/intro",
-  image: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=1200&auto=format&fit=crop",
-};
-
-function useSeo() {
-  useEffect(() => {
-    const prevTitle = document.title;
-    document.title = SEO.title;
-
-    const tags = [
-      { name: "description", content: SEO.description },
-      { property: "og:title", content: SEO.title },
-      { property: "og:description", content: SEO.description },
-      { property: "og:type", content: "website" },
-      { property: "og:url", content: SEO.url },
-      { property: "og:image", content: SEO.image },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: SEO.title },
-      { name: "twitter:description", content: SEO.description },
-    ];
-
-    const created = [];
-    tags.forEach(({ name, property, content }) => {
-      const attr = name ? "name" : "property";
-      const key = name || property;
-      let el = document.head.querySelector(`meta[${attr}="${key}"]`);
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute(attr, key);
-        document.head.appendChild(el);
-        created.push(el);
-      }
-      el.setAttribute("content", content);
-    });
-
-    let canonical = document.head.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.setAttribute("rel", "canonical");
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute("href", SEO.url);
-
-    const ld = document.createElement("script");
-    ld.type = "application/ld+json";
-    ld.text = JSON.stringify({
-      "@context": "https://schema.org",
+const ABOUT_SCHEMA = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
       "@type": "AboutPage",
-      name: SEO.title,
-      description: SEO.description,
-      url: SEO.url,
-      publisher: {
-        "@type": "Organization",
-        name: "UIA Movie",
-      },
-    });
-    document.head.appendChild(ld);
-
-    return () => {
-      document.title = prevTitle;
-      created.forEach((el) => el.remove());
-      ld.remove();
-    };
-  }, []);
-}
+      "@id": `${SITE_URL}/intro#webpage`,
+      url: `${SITE_URL}/intro`,
+      name: "Về chúng tôi — UIAMovie",
+      inLanguage: "vi-VN",
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      about: { "@id": `${SITE_URL}/#organization` },
+    },
+    organizationSchema,
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Trang chủ", item: SITE_URL },
+        { "@type": "ListItem", position: 2, name: "Về chúng tôi", item: `${SITE_URL}/intro` },
+      ],
+    },
+  ],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Assets & Content
@@ -1115,7 +1070,6 @@ export default function IntroPage() {
   const [loaded, setLoaded] = useState(
     () => sessionStorage.getItem("uia_intro_seen") === "1"
   );
-  useSeo();
 
   const handleEnter = () => navigate("/");
   const handlePremium = () => navigate("/premium");
@@ -1148,6 +1102,13 @@ export default function IntroPage() {
         position: "relative",
       }}
     >
+      <SeoMeta
+        title="Về chúng tôi — UIAMovie | Nền tảng xem phim trực tuyến"
+        description="Khám phá câu chuyện của UIAMovie — nơi điện ảnh được tôn trọng, công nghệ phục vụ nghệ thuật, và trợ lý AI giúp mỗi người tìm đúng bộ phim cho tâm trạng của mình."
+        image={ASSETS.hero}
+        url="/intro"
+        schemaData={ABOUT_SCHEMA}
+      />
       <style>{GOOGLE_FONTS}</style>
       <style>{`
         html {
