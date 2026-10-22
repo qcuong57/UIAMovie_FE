@@ -9,6 +9,8 @@ import tvShowService from "../../services/tvShowService";
 import PersonScrollRow from "../../components/movie/Personscrollrow";
 import ReviewSection from "../../components/movie/Reviewsection";
 import BackButton from "../../components/common/BackButton";
+import SeoMeta from "../../components/common/SeoMeta";
+import { buildTvShowSeo } from "../../config/seo";
 
 import { C, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
 import SectionTitle from "../../components/movie/ui/SectionTitle";
@@ -333,6 +335,7 @@ export default function TvShowDetailPage() {
       }}
     >
       <style>{GLOBAL_STYLES}</style>
+      <SeoMeta {...buildTvShowSeo(tvShow, id)} />
 
       {/* Nav */}
       <div

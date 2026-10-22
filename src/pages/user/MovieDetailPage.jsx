@@ -14,6 +14,8 @@ import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import movieService from "../../services/movieService";
 import BackButton from "../../components/common/BackButton";
+import SeoMeta from "../../components/common/SeoMeta";
+import { buildMovieSeo } from "../../config/seo";
 
 import { C, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
 import LoadingScreen from "../../components/ui/LoadingScreen";
@@ -163,6 +165,7 @@ export default function MovieDetailPage() {
       }}
     >
       <style>{GLOBAL_STYLES}</style>
+      <SeoMeta {...buildMovieSeo(movie, id)} />
 
       {/* ── Nav bar ── */}
       <div
