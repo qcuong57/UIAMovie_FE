@@ -14,6 +14,7 @@ import { sortComingSoonMovies } from "../../utils/releaseDateUtils";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import BackButton from "../../components/common/BackButton";
+import SeoMeta from "../../components/common/SeoMeta";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import SectionReveal from "../../motion-configs/SectionReveal";
 import ComingSoonFeatured from "../../components/home/coming-soon/ComingSoonFeatured";
@@ -387,6 +388,11 @@ export default function ComingSoonPage() {
 
   return (
     <>
+      <SeoMeta
+        title="Phim sắp chiếu - Lịch phát hành phim mới | UIAMovie"
+        description="Xem lịch phim sắp chiếu và phim bộ sắp phát sóng: ngày ra mắt, thể loại và poster. Cập nhật liên tục tại UIA Movie (UIAMovie)."
+        url="/coming-soon"
+      />
       <AnimatePresence>
         {status === "loading" && <LoadingScreen key="loading-screen" />}
       </AnimatePresence>

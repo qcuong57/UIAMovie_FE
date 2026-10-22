@@ -8,6 +8,7 @@ import movieService   from '../../services/movieService';
 import tvShowService  from '../../services/tvShowService';
 import MovieCard      from '../../components/movie/MovieCard';
 import BackButton   from '../../components/common/BackButton';
+import SeoMeta      from '../../components/common/SeoMeta';
 import Pagination   from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, FONT_BEBAS, GOOGLE_FONTS } from '../../context/homeTokens';
@@ -260,6 +261,7 @@ export default function FavoritesPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: C.text, paddingTop: 68 }}>
+      <SeoMeta title="Phim yêu thích - UIAMovie" noindex />
       <style>{GOOGLE_FONTS}</style>
       <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
 

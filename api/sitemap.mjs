@@ -6,7 +6,9 @@
 //   API_BASE_URL   Gốc API backend, ví dụ https://xxx.onrender.com  (có hoặc không có "/api" đều được)
 //   SITE_URL       (tuỳ chọn) mặc định https://uiamovie.vercel.app
 
-const SITE_URL = (process.env.SITE_URL || "https://uiamovie.vercel.app").replace(/\/+$/, "");
+const SITE_URL = (
+  process.env.SITE_URL || "https://uiamovie.vercel.app"
+).replace(/\/+$/, "");
 const API_BASE = (process.env.API_BASE_URL || process.env.VITE_API_URL || "")
   .replace(/\/+$/, "")
   .replace(/\/api$/i, "");
@@ -15,7 +17,14 @@ const PAGE_SIZE = 200;
 const MAX_PAGES = 100; // chặn vòng lặp vô hạn
 const MAX_URLS = 49000; // giới hạn của 1 sitemap là 50.000 URL
 
-const STATIC_PATHS = ["/", "/browse", "/coming-soon", "/announcements", "/about-us", "/premium"];
+const STATIC_PATHS = [
+  "/",
+  "/browse",
+  "/coming-soon",
+  "/announcements",
+  "/about-us",
+  "/premium",
+];
 
 const esc = (s) =>
   String(s)
@@ -31,10 +40,14 @@ async function fetchAll(resource) {
   let total = Infinity;
 
   for (let page = 1; page <= MAX_PAGES && items.length < total; page++) {
-    const res = await fetch(`${API_BASE}/api/${resource}?page=${page}&pageSize=${PAGE_SIZE}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`${resource} page ${page}: HTTP ${res.status}`);
+    const res = await fetch(
+      `${API_BASE}/api/${resource}?page=${page}&pageSize=${PAGE_SIZE}`,
+      {
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!res.ok)
+      throw new Error(`${resource} page ${page}: HTTP ${res.status}`);
 
     const json = await res.json();
     const data = json?.data ?? json;
@@ -68,9 +81,14 @@ export default async function handler(req, res) {
 
   if (API_BASE) {
     try {
-      const [movies, shows] = await Promise.all([fetchAll("movies"), fetchAll("tvshows")]);
-      for (const m of movies) nodes.push(urlNode(`/movie/${m.id}/info`, m.posterUrl));
-      for (const s of shows) nodes.push(urlNode(`/tvshow/${s.id}/info`, s.posterUrl));
+      const [movies, shows] = await Promise.all([
+        fetchAll("movies"),
+        fetchAll("tvshows"),
+      ]);
+      for (const m of movies)
+        nodes.push(urlNode(`/movie/${m.id}/info`, m.posterUrl));
+      for (const s of shows)
+        nodes.push(urlNode(`/tvshow/${s.id}/info`, s.posterUrl));
     } catch (err) {
       // API lỗi → vẫn trả sitemap các trang tĩnh (hợp lệ), không cache lâu
       console.error("[sitemap] fetch failed:", err);
@@ -90,7 +108,10 @@ export default async function handler(req, res) {
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   if (!res.getHeader("Cache-Control")) {
-    res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
+    res.setHeader(
+      "Cache-Control",
+      "s-maxage=3600, stale-while-revalidate=86400",
+    );
   }
   res.status(200).send(xml);
 }

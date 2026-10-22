@@ -172,3 +172,61 @@ export function buildTvShowSeo(rawTvShow, id) {
     },
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEO cho trang Bản tin & Thông báo (danh sách và từng bài ?id=...)
+// ─────────────────────────────────────────────────────────────────────────────
+const stripMarkdown = (text) =>
+  String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^[#>\-*+\s]+/gm, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export function buildAnnouncementSeo(article) {
+  if (!article?.title) {
+    return {
+      title: `Bản tin & Thông báo - ${SITE_NAME}`,
+      description:
+        "Trung tâm thông báo chính thức từ ban quản trị UIA Movie: cập nhật phim mới, tính năng mới và thông tin vận hành.",
+      url: "/announcements",
+    };
+  }
+
+  const path = `/announcements?id=${encodeURIComponent(article.id)}`;
+  const url = absoluteUrl(path);
+  const image = absoluteUrl(article.thumbnailUrl || SITE_DEFAULT_IMAGE);
+  const summary = clip(stripMarkdown(article.message));
+
+  return {
+    title: `${article.title} - Bản tin ${SITE_NAME}`,
+    description: summary || `${article.title} - thông báo chính thức từ ${SITE_NAME}.`,
+    image,
+    url: path,
+    type: "article",
+    schemaData: {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "NewsArticle",
+          "@id": `${url}#article`,
+          mainEntityOfPage: url,
+          headline: clip(article.title, 110),
+          image,
+          inLanguage: "vi-VN",
+          ...(summary && { description: summary }),
+          ...(article.createdAt && { datePublished: new Date(article.createdAt).toISOString() }),
+          publisher: { "@id": `${SITE_URL}/#organization` },
+        },
+        breadcrumb([
+          { name: "Trang chủ", url: SITE_URL },
+          { name: "Bản tin", url: absoluteUrl("/announcements") },
+          { name: article.title, url },
+        ]),
+      ],
+    },
+  };
+}

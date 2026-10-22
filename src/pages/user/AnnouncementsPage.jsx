@@ -14,6 +14,7 @@ import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeToke
 import notificationService from "../../services/notificationService";
 import Footer from "../../components/layout/Footer";
 import SeoMeta from "../../components/common/SeoMeta";
+import { buildAnnouncementSeo } from "../../config/seo";
 import { LoadingScreen } from "../../components/ui";
 
 // ── Định dạng ngày tháng tiếng Việt ──────────────────────────────────────────
@@ -266,14 +267,7 @@ export default function AnnouncementsPage() {
 
   return (
     <>
-      <SeoMeta
-        title={
-          activeArticle
-            ? `${activeArticle.title} — Bản tin UIA Movie`
-            : "Bản tin & Thông báo vận hành — UIA Movie"
-        }
-        description="Trung tâm phát ngôn và thông báo chính thức từ ban quản trị UIA Movie."
-      />
+      <SeoMeta {...buildAnnouncementSeo(activeArticle)} />
 
       <style>{GOOGLE_FONTS}</style>
       <style>{`
