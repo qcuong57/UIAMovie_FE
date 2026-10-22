@@ -9,6 +9,50 @@
       "destination": "https://uiamovie-be.onrender.com/api/:path*"
     },
     {
+      "source": "/movie/:id/info",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|meta-externalagent|Twitterbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Discordbot|Zalo|Applebot|bingbot|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot).*"
+        }
+      ],
+      "destination": "/api/og?type=movie&id=:id"
+    },
+    {
+      "source": "/movie/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|meta-externalagent|Twitterbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Discordbot|Zalo|Applebot|bingbot|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot).*"
+        }
+      ],
+      "destination": "/api/og?type=movie&id=:id"
+    },
+    {
+      "source": "/tvshow/:id/info",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|meta-externalagent|Twitterbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Discordbot|Zalo|Applebot|bingbot|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot).*"
+        }
+      ],
+      "destination": "/api/og?type=tvshow&id=:id"
+    },
+    {
+      "source": "/tvshow/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|meta-externalagent|Twitterbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Discordbot|Zalo|Applebot|bingbot|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot).*"
+        }
+      ],
+      "destination": "/api/og?type=tvshow&id=:id"
+    },
+    {
       "source": "/((?!api/|.*\\..*).*)",
       "destination": "/index.html"
     }
