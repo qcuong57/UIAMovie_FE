@@ -7,6 +7,8 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
+import SeoMeta from "../../components/common/SeoMeta";
+import { buildTvShowSeo } from "../../config/seo";
 import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
 import TrailerModal from "../../components/movie/ui/TrailerModal";
@@ -342,6 +344,7 @@ export default function TvShowInfoPage() {
       }}
     >
       <style>{GLOBAL_STYLES}</style>
+      <SeoMeta {...buildTvShowSeo({ ...show, cast }, id)} />
 
       {/* Hero */}
       <TvShowInfoHero

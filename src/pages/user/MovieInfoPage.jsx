@@ -7,6 +7,8 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import movieService from "../../services/movieService";
+import SeoMeta from "../../components/common/SeoMeta";
+import { buildMovieSeo } from "../../config/seo";
 import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
 import TrailerModal from "../../components/movie/ui/TrailerModal";
@@ -324,6 +326,12 @@ export default function MovieInfoPage() {
       }}
     >
       <style>{GLOBAL_STYLES}</style>
+      <SeoMeta
+        {...buildMovieSeo(
+          { ...movie, duration: movie?.runtime, director: directors[0]?.name, cast },
+          id,
+        )}
+      />
 
       {/* Hero */}
       <MovieInfoHero

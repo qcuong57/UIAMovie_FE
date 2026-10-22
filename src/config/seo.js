@@ -80,7 +80,7 @@ const breadcrumb = (items) => ({
 
 export function buildMovieSeo(movie, id) {
   if (!movie?.title) return {};
-  const path = `/movie/${id}`;
+  const path = `/movie/${id}/info`; // canonical = trang thông tin (trang /movie/:id chỉ là player)
   const url = absoluteUrl(path);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : movie.year;
   const genres = toNames(movie.genres);
@@ -128,7 +128,7 @@ export function buildMovieSeo(movie, id) {
 export function buildTvShowSeo(rawTvShow, id) {
   const tvShow = rawTvShow ? { ...rawTvShow, title: rawTvShow.title ?? rawTvShow.name } : null;
   if (!tvShow?.title) return {};
-  const path = `/tvshow/${id}`;
+  const path = `/tvshow/${id}/info`; // canonical = trang thông tin
   const url = absoluteUrl(path);
   const year = tvShow.firstAirDate ? new Date(tvShow.firstAirDate).getFullYear() : tvShow.year;
   const genres = toNames(tvShow.genres);
