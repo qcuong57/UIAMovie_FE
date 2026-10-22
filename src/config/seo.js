@@ -12,9 +12,9 @@ export const SITE_LOGO = `${SITE_URL}/logo.png`;
 export const SITE_DEFAULT_IMAGE = `${SITE_URL}/logo.png`;
 
 export const SITE_TITLE =
-  "UIAMovie - Xem Phim Online HD, 4K Vietsub & Trợ Lý AI Gợi Ý Phim";
+  "UIA Movie (UIAMovie) - Xem Phim Online HD, 4K Vietsub & Trợ Lý AI";
 export const SITE_DESCRIPTION =
-  "UIAMovie là nền tảng xem phim trực tuyến tiếng Việt: phim điện ảnh, series, K-Drama, Anime chất lượng HD/4K, có phụ đề, tiếp tục xem trên mọi thiết bị và trợ lý AI gợi ý phim theo tâm trạng.";
+  "UIA Movie (UIAMovie) là nền tảng xem phim trực tuyến tiếng Việt: phim điện ảnh, series, K-Drama, Anime chất lượng HD/4K, có phụ đề, tiếp tục xem trên mọi thiết bị và trợ lý AI gợi ý phim theo tâm trạng.";
 
 // Biến đường dẫn/ảnh tương đối thành URL tuyệt đối (bắt buộc cho og:image, canonical).
 export const absoluteUrl = (pathOrUrl = "/") => {
