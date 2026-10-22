@@ -251,9 +251,10 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
       <div
         className="relative bg-cover bg-center flex items-end overflow-hidden"
         style={{
-          height: isMobile ? "75vh" : "100vh",
-          minHeight: isMobile ? 480 : 520,
-          maxHeight: isMobile ? 640 : "none",
+          // Mobile: banner thấp hơn (trước 75vh) để lộ nội dung bên dưới sớm hơn.
+          height: isMobile ? "54vh" : "100vh",
+          minHeight: isMobile ? 380 : 520,
+          maxHeight: isMobile ? 460 : "none",
         }}
       >
         {/* ── Background ── */}
@@ -292,7 +293,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
             style={{
               paddingLeft: isMobile ? 16 : 32,
               paddingRight: isMobile ? 16 : 32,
-              paddingBottom: isMobile ? 54 : 112,
+              paddingBottom: isMobile ? 46 : 112,
             }}
           >
             {/* Type badge & Premium */}
@@ -460,7 +461,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
               className="font-black leading-tight text-white drop-shadow-lg"
               style={{
                 fontSize: isMobile
-                  ? "clamp(20px, 5.5vw, 28px)"
+                  ? "clamp(18px, 5vw, 24px)"
                   : "clamp(36px, 5vw, 64px)",
                 marginBottom: isMobile ? 6 : 14,
               }}
@@ -471,7 +472,7 @@ const HeroBanner = ({ movie, movies, tvShows }) => {
             {/* Description */}
             <p
               style={{
-                marginBottom: isMobile ? 14 : 28,
+                marginBottom: isMobile ? 12 : 28,
                 fontSize: isMobile ? 12 : 15,
                 color: "rgba(255,255,255,0.75)",
                 lineHeight: 1.5,

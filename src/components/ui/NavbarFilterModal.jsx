@@ -1,33 +1,86 @@
-// src/components/layout/NavbarFilterModal.jsx
-
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  SlidersHorizontal,
-  X,
-  Search,
-  RotateCcw,
-  ArrowRight,
-} from "lucide-react";
+// src/components/ui/NavbarFilterModal.jsx
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
+import { SlidersHorizontal, X, RotateCcw } from "lucide-react";
 import genreService from "../../services/genreService";
+import movieService from "../../services/movieService";
+import tvShowService from "../../services/tvShowService";
 import { C, FONT_BODY } from "../../context/homeTokens";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import BottomSheet from "./BottomSheet";
 
 const ACCENT = C.accent;
 
-const COUNTRIES = [
-  { code: "US", label: "Âu Mỹ" },
-  { code: "PL", label: "Ba Lan" },
-  { code: "TW", label: "Đài Loan" },
-  { code: "KR", label: "Hàn Quốc" },
-  { code: "HK", label: "Hồng Kông" },
-  { code: "JP", label: "Nhật Bản" },
-  { code: "PH", label: "Philippines" },
-  { code: "TH", label: "Thái Lan" },
-  { code: "CN", label: "Trung Quốc" },
-  { code: "VN", label: "Việt Nam" },
-];
+/* ---------- Quốc gia: lấy từ BE (chỉ nước THỰC SỰ có phim), FE chỉ lo nhãn ---------- */
+
+// Chỉ dùng khi gọi API lỗi, để bộ lọc vẫn hoạt động.
+const FALLBACK_COUNTRIES = ["US", "KR", "JP", "CN", "TH", "HK", "TW", "VN", "PH", "PL"];
+
+// Nhãn ngắn gọn hơn Intl cho các nước hay gặp.
+const COUNTRY_LABEL_OVERRIDES = {
+  US: "Mỹ",
+  GB: "Anh",
+  HK: "Hồng Kông",
+  TW: "Đài Loan",
+  CN: "Trung Quốc",
+};
+
+// Nước hiện lên đầu danh sách (còn lại xếp A-Z theo tên tiếng Việt).
+const PRIORITY_COUNTRIES = ["VN", "US", "KR", "JP", "CN", "TH", "HK", "TW", "GB"];
+const COUNTRY_COLLAPSED_COUNT = 11; // + pill "Tất cả" = 12 ô (lưới 3 cột × 4 hàng)
+
+let regionNames = null;
+try {
+  regionNames = new Intl.DisplayNames(["vi"], { type: "region" });
+} catch {
+  regionNames = null;
+}
+
+const countryLabel = (code) => {
+  if (COUNTRY_LABEL_OVERRIDES[code]) return COUNTRY_LABEL_OVERRIDES[code];
+  try {
+    return regionNames?.of(code) || code;
+  } catch {
+    return code;
+  }
+};
+
+const normalizeCountryList = (res) => {
+  const raw = Array.isArray(res) ? res : (res?.data ?? []);
+  const codes = (Array.isArray(raw) ? raw : [])
+    .map((c) => (typeof c === "string" ? c : c?.code))
+    .filter(Boolean)
+    .map((c) => c.trim().toUpperCase())
+    .filter((c) => /^[A-Z]{2}$/.test(c));
+  return [...new Set(codes)];
+};
+
+// Cache cấp module: mở modal nhiều lần / đổi tab không gọi lại API.
+const countryCache = {};
+const loadCountries = (tab) => {
+  if (!countryCache[tab]) {
+    const fetcher =
+      tab === "tvshow" ? tvShowService.getAvailableCountries : movieService.getAvailableCountries;
+    countryCache[tab] = fetcher()
+      .then(normalizeCountryList)
+      .catch(() => {
+        delete countryCache[tab]; // lỗi thì cho phép thử lại lần sau
+        return null;
+      });
+  }
+  return countryCache[tab];
+};
+
+const sortCountries = (codes) =>
+  codes
+    .map((code) => ({ value: code, label: countryLabel(code) }))
+    .sort((a, b) => {
+      const ia = PRIORITY_COUNTRIES.indexOf(a.value);
+      const ib = PRIORITY_COUNTRIES.indexOf(b.value);
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      return a.label.localeCompare(b.label, "vi");
+    });
+
 
 const SORT_OPTIONS = {
   movie: [
@@ -43,44 +96,43 @@ const SORT_OPTIONS = {
 };
 
 const TV_STATUS_OPTIONS = [
-  { value: "", label: "Tất cả" },
   { value: "Returning Series", label: "Đang chiếu" },
   { value: "Ended", label: "Đã kết thúc" },
   { value: "Canceled", label: "Đã hủy" },
   { value: "In Production", label: "Đang sản xuất" },
 ];
 
-const RATING_OPTIONS = [
-  { min: 9, label: "9+" },
-  { min: 8, label: "8+" },
-  { min: 7, label: "7+" },
-  { min: 6, label: "6+" },
-  { min: 0, label: "Tất cả" },
-];
+const RATING_OPTIONS = [9, 8, 7, 6].map((v) => ({ value: v, label: `${v}+` }));
 
-const YEAR_RANGE = Array.from({ length: 17 }, (_, i) => 2026 - i);
+const CURRENT_YEAR = new Date().getFullYear();
+// 15 năm + pill "Tất cả" = 16 ô → vừa đúng lưới 4 cột x 4 hàng
+const YEAR_OPTIONS = Array.from({ length: 15 }, (_, i) => {
+  const y = CURRENT_YEAR - i;
+  return { value: y, label: String(y) };
+});
 
 const DEFAULT_FILTER = {
   genreIds: [],
   minRating: null,
   originCountry: null,
-  fromYear: null,
-  toYear: null,
+  year: null,
   sortBy: "rating",
   sortDesc: true,
   tvStatus: "",
 };
 
-const Section = ({ label, children, isMobile }) => (
-  <div style={{ marginBottom: isMobile ? 16 : 20 }}>
+/* ---------- UI nhỏ dùng lại ---------- */
+
+const Section = ({ label, children }) => (
+  <div style={{ marginBottom: 22 }}>
     <p
       style={{
-        fontSize: isMobile ? 11 : 11.5,
+        margin: "0 0 10px",
+        fontSize: 11,
         fontWeight: 700,
         letterSpacing: "0.08em",
         textTransform: "uppercase",
         color: "rgba(255,255,255,0.45)",
-        marginBottom: 8,
         fontFamily: FONT_BODY,
       }}
     >
@@ -90,50 +142,94 @@ const Section = ({ label, children, isMobile }) => (
   </div>
 );
 
-const Pill = ({ active, onClick, children, small, isMobile }) => (
+/** `fill` = pill nằm trong lưới → căn giữa chữ, bớt padding ngang. */
+const Pill = ({ active, onClick, children, fill }) => (
   <motion.button
     type="button"
     onClick={onClick}
     whileTap={{ scale: 0.95 }}
+    aria-pressed={active}
     style={{
-      padding: small
-        ? isMobile ? "4px 9px" : "4px 10px"
-        : isMobile ? "5px 12px" : "6px 14px",
+      minHeight: 38, // vùng chạm đủ lớn cho ngón tay
+      padding: fill ? "0 6px" : "0 14px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
       borderRadius: 999,
-      border: active ? `1px solid ${ACCENT}` : "1px solid rgba(255,255,255,0.12)",
+      border: `1px solid ${active ? ACCENT : "rgba(255,255,255,0.12)"}`,
       background: active ? `${ACCENT}25` : "rgba(255,255,255,0.05)",
-      color: active ? "#ffffff" : "rgba(255,255,255,0.65)",
-      fontSize: small ? (isMobile ? 11.5 : 12) : (isMobile ? 12.5 : 13),
+      color: active ? "#fff" : "rgba(255,255,255,0.65)",
+      fontSize: 13,
       fontWeight: active ? 700 : 400,
       fontFamily: FONT_BODY,
       cursor: "pointer",
       whiteSpace: "nowrap",
-      transition: "all 0.15s ease",
-      flexShrink: 0,
+      minWidth: 0,
+      maxWidth: "100%",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      transition: "background .15s, border-color .15s, color .15s",
     }}
   >
     {children}
   </motion.button>
 );
 
-const NavbarFilterModal = ({
-  isOpen,
-  onClose,
-  onApply,
-  currentTab = "movie",
-}) => {
+/**
+ * Nhóm pill dùng chung.
+ * `cols`: lưới cột cố định (mobile) → pill luôn nằm gọn trong khung, KHÔNG cuộn ngang.
+ * Không có `cols`: flex-wrap xuống dòng (desktop).
+ * `onClear` thêm pill "Tất cả".
+ */
+const PillGroup = ({ options, isActive, onSelect, onClear, allActive, cols }) => (
+  <div
+    style={{
+      display: cols ? "grid" : "flex",
+      ...(cols
+        ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }
+        : { flexWrap: "wrap" }),
+      gap: 8,
+      maxWidth: "100%",
+      minWidth: 0,
+      overflow: "hidden", // không bao giờ tràn ngang
+    }}
+  >
+    {onClear && (
+      <Pill fill={!!cols} active={allActive} onClick={onClear}>
+        Tất cả
+      </Pill>
+    )}
+    {options.map(({ value, label }) => (
+      <Pill key={value} fill={!!cols} active={isActive(value)} onClick={() => onSelect(value)}>
+        {label}
+      </Pill>
+    ))}
+  </div>
+);
+
+/* ---------- Component chính ---------- */
+
+const NavbarFilterModal = ({ isOpen, onClose, onApply, currentTab = "movie" }) => {
   const isMobile = useIsMobile();
+  const isTv = currentTab === "tvshow";
   const [filter, setFilter] = useState(DEFAULT_FILTER);
   const [genres, setGenres] = useState([]);
-  const [yearSearch, setYearSearch] = useState("");
-  const panelRef = useRef(null);
+  const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRIES);
+  const [showAllCountries, setShowAllCountries] = useState(false);
 
-  // 1. Đặt isTv lên đầu để các hàm bên dưới sử dụng an toàn
-  const isTv = currentTab === "tvshow";
-
-  // 2. Load genres
+  // Đổi tab Phim ⇄ TV: reset toàn bộ (sortBy "releaseDate" / "firstairdate" và status không dùng chung được).
   useEffect(() => {
-    if (!isOpen) return;
+    setFilter(DEFAULT_FILTER);
+    setShowAllCountries(false);
+  }, [currentTab]);
+
+  const patch = useCallback((p) => setFilter((f) => ({ ...f, ...p })), []);
+  const toggleField = (key) => (value) =>
+    setFilter((f) => ({ ...f, [key]: f[key] === value ? null : value }));
+
+  useEffect(() => {
+    if (!isOpen || genres.length) return; // chỉ tải 1 lần
     genreService
       .getAllGenres()
       .then((res) => {
@@ -141,517 +237,221 @@ const NavbarFilterModal = ({
         setGenres(Array.isArray(list) ? list : []);
       })
       .catch(() => setGenres([]));
-  }, [isOpen]);
+  }, [isOpen, genres.length]);
 
-  // 3. Khóa scroll khi mở modal
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isOpen]);
-
-  // 4. Bấm Escape để đóng
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+    let cancelled = false;
+    loadCountries(currentTab).then((codes) => {
+      if (cancelled) return;
+      setCountryCodes(codes?.length ? codes : FALLBACK_COUNTRIES);
+    });
+    return () => {
+      cancelled = true;
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, currentTab]);
 
-  // 5. Handlers
-  const toggleGenre = useCallback((id) => {
+  const countryOptions = useMemo(() => {
+    const all = sortCountries(countryCodes);
+    if (showAllCountries || all.length <= COUNTRY_COLLAPSED_COUNT) return all;
+    const head = all.slice(0, COUNTRY_COLLAPSED_COUNT);
+    // Nước đang chọn luôn phải nhìn thấy dù đang thu gọn.
+    const selected = all.find((c) => c.value === filter.originCountry);
+    return selected && !head.includes(selected) ? [...head.slice(0, -1), selected] : head;
+  }, [countryCodes, showAllCountries, filter.originCountry]);
+
+  const hasMoreCountries = countryCodes.length > COUNTRY_COLLAPSED_COUNT;
+
+  const genreOptions = useMemo(
+    () => genres.map((g) => ({ value: g.id, label: g.name })),
+    [genres],
+  );
+
+  const toggleGenre = (id) =>
     setFilter((f) => ({
       ...f,
       genreIds: f.genreIds.includes(id)
         ? f.genreIds.filter((g) => g !== id)
         : [...f.genreIds, id],
     }));
-  }, []);
 
-  const toggleCountry = useCallback((code) => {
-    setFilter((f) => ({
-      ...f,
-      originCountry: f.originCountry === code ? null : code,
-    }));
-  }, []);
+  const activeCount =
+    filter.genreIds.length +
+    [filter.minRating, filter.originCountry, filter.year].filter((v) => v != null).length +
+    (isTv && filter.tvStatus ? 1 : 0);
 
-  const setRating = useCallback((min) => {
-    setFilter((f) => ({ ...f, minRating: min === 0 ? null : min }));
-  }, []);
-
-  const toggleYear = useCallback((year) => {
-    setFilter((f) => {
-      if (f.fromYear === year && f.toYear === year)
-        return { ...f, fromYear: null, toYear: null };
-      return { ...f, fromYear: year, toYear: year };
-    });
-  }, []);
-
-  const reset = useCallback(() => {
-    setFilter(DEFAULT_FILTER);
-    setYearSearch("");
-  }, []);
-
-  const handleApply = useCallback(() => {
-    const params = {
-      page: 1,
-      pageSize: 20,
-      sortBy: filter.sortBy,
-      sortDesc: filter.sortDesc,
-    };
-
+  const handleApply = () => {
+    const params = { page: 1, pageSize: 20, sortBy: filter.sortBy, sortDesc: filter.sortDesc };
     if (filter.genreIds.length) params.genreIds = filter.genreIds;
     if (filter.minRating != null) params.minRating = filter.minRating;
     if (filter.originCountry) params.originCountry = filter.originCountry;
     if (isTv && filter.tvStatus) params.status = filter.tvStatus;
-
-    if (filter.fromYear || filter.toYear) {
-      const from = filter.fromYear ?? filter.toYear;
-      const to = filter.toYear ?? filter.fromYear;
-      params.fromYear = Math.min(from, to);
-      params.toYear = Math.max(from, to);
+    if (filter.year) {
+      // Tên tham số phải khớp DTO của BE: FilterMoviesDTO (…ReleaseDate) / FilterTvShowsDTO (…FirstAirDate).
+      const [fromKey, toKey] = isTv
+        ? ["fromFirstAirDate", "toFirstAirDate"]
+        : ["fromReleaseDate", "toReleaseDate"];
+      params[fromKey] = `${filter.year}-01-01`;
+      params[toKey] = `${filter.year}-12-31`;
     }
-
     onApply?.(params);
     onClose();
-  }, [filter, onApply, onClose, isTv]);
+  };
 
-  // 6. Derived states
-  const activeCount =
-    filter.genreIds.length +
-    (filter.minRating != null ? 1 : 0) +
-    (filter.originCountry ? 1 : 0) +
-    (filter.fromYear || filter.toYear ? 1 : 0) +
-    (isTv && filter.tvStatus ? 1 : 0);
-
-  const filteredYears = yearSearch
-    ? YEAR_RANGE.filter((y) => String(y).includes(yearSearch))
-    : YEAR_RANGE;
-
-  const yearSectionLabel = (() => {
-    if (filter.fromYear && filter.toYear && filter.fromYear !== filter.toYear)
-      return `Năm: ${filter.fromYear} – ${filter.toYear}`;
-    if (filter.fromYear) return `Năm: ${filter.fromYear}`;
-    return isTv ? "Năm phát sóng đầu tiên" : "Năm sản xuất";
-  })();
-
-  if (!isOpen) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {/* Backdrop */}
-      <motion.div
-        key="filter-backdrop"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <SlidersHorizontal size={17} style={{ color: ACCENT }} />
+        <span style={{ fontSize: 17, fontWeight: 800, color: "#fff", fontFamily: FONT_BODY }}>
+          Bộ lọc {isTv ? "TV Series" : "Phim"}
+        </span>
+        {activeCount > 0 && (
+          <span style={{ background: ACCENT, color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 8px" }}>
+            {activeCount}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
         onClick={onClose}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "rgba(0, 0, 0, 0.78)",
-          backdropFilter: "blur(6px)",
-          zIndex: 99998,
-        }}
-      />
+        aria-label="Đóng bộ lọc"
+        style={{ width: 36, height: 36, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.7)", cursor: "pointer" }}
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
 
-      {/* Sheet Container */}
+  // Footer: Đặt lại + Áp dụng (đã có X, backdrop, Esc để đóng).
+  const footer = (
+    <div style={{ display: "flex", gap: 10 }}>
+      {activeCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setFilter(DEFAULT_FILTER)}
+          style={{ display: "flex", alignItems: "center", gap: 6, height: 44, padding: "0 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: 600, fontFamily: FONT_BODY, cursor: "pointer" }}
+        >
+          <RotateCcw size={13} /> Đặt lại
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleApply}
+        style={{ flex: 1, height: 44, background: ACCENT, border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: FONT_BODY, cursor: "pointer", boxShadow: `0 4px 16px ${ACCENT}55` }}
+      >
+        Áp dụng{activeCount > 0 ? ` (${activeCount})` : ""}
+      </button>
+    </div>
+  );
+
+  const sortOptions = SORT_OPTIONS[isTv ? "tvshow" : "movie"];
+
+  return (
+    <BottomSheet isOpen={isOpen} onClose={onClose} header={header} footer={footer}>
       <div
-        key="filter-container"
         style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: "100vw",
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: isMobile ? "flex-end" : "flex-start",
-          padding: isMobile ? 0 : "74px 16px 20px",
-          zIndex: 99999,
-          pointerEvents: "none",
+          display: "grid",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: isMobile ? 0 : "0 36px",
+          width: "100%",
+          minWidth: 0,
+          boxSizing: "border-box",
         }}
       >
-        <motion.div
-          ref={panelRef}
-          initial={isMobile ? { y: "100%" } : { opacity: 0, y: -16, scale: 0.98 }}
-          animate={isMobile ? { y: 0 } : { opacity: 1, y: 0, scale: 1 }}
-          exit={isMobile ? { y: "100%" } : { opacity: 0, y: -16, scale: 0.98 }}
-          transition={{ type: "spring", damping: 28, stiffness: 300 }}
-          style={{
-            pointerEvents: "auto",
-            width: "100%",
-            maxWidth: isMobile ? "100%" : 960,
-            maxHeight: isMobile ? "82vh" : "85vh",
-            display: "flex",
-            flexDirection: "column",
-            background: "#121212",
-            border: isMobile ? "none" : "1px solid rgba(255,255,255,0.12)",
-            borderTop: isMobile ? "1px solid rgba(255,255,255,0.16)" : undefined,
-            borderRadius: isMobile ? "20px 20px 0 0" : 16,
-            boxShadow: "0 -8px 40px rgba(0,0,0,0.85)",
-            padding: isMobile ? "14px 16px 24px" : "20px 24px 22px",
-            boxSizing: "border-box",
-          }}
-        >
-          {/* Thanh gạt bottom sheet trên Mobile */}
-          {isMobile && (
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-              <div
-                style={{
-                  width: 38,
-                  height: 4,
-                  borderRadius: 99,
-                  background: "rgba(255,255,255,0.25)",
-                }}
-              />
-            </div>
-          )}
+        <div style={{ minWidth: 0 }}>
+          <Section label={`Thể loại${filter.genreIds.length ? ` (${filter.genreIds.length})` : ""}`}>
+            <PillGroup
+              options={genreOptions}
+              isActive={(id) => filter.genreIds.includes(id)}
+              onSelect={toggleGenre}
+              onClear={() => patch({ genreIds: [] })}
+              allActive={!filter.genreIds.length}
+              cols={isMobile ? 2 : undefined}
+            />
+          </Section>
 
-          {/* Header */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 14,
-              paddingBottom: 12,
-              borderBottom: "1px solid rgba(255,255,255,0.08)",
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <SlidersHorizontal size={17} style={{ color: ACCENT }} />
-              <span
-                style={{
-                  fontSize: isMobile ? 15.5 : 17,
-                  fontWeight: 800,
-                  color: "#ffffff",
-                  fontFamily: FONT_BODY,
-                }}
-              >
-                Bộ lọc {isTv ? "TV Series" : "Phim"}
-              </span>
-
-              {activeCount > 0 && (
-                <span
-                  style={{
-                    background: ACCENT,
-                    color: "#fff",
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    borderRadius: 999,
-                    padding: "1px 7px",
-                    fontFamily: FONT_BODY,
-                  }}
-                >
-                  {activeCount}
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {activeCount > 0 && (
-                <button
-                  type="button"
-                  onClick={reset}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "4px 10px",
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    color: "rgba(255,255,255,0.65)",
-                    fontSize: 12,
-                    fontFamily: FONT_BODY,
-                    cursor: "pointer",
-                  }}
-                >
-                  <RotateCcw size={11} />
-                  Đặt lại
-                </button>
-              )}
-
+          <Section label="Quốc gia">
+            <PillGroup
+              options={countryOptions}
+              isActive={(v) => filter.originCountry === v}
+              onSelect={toggleField("originCountry")}
+              onClear={() => patch({ originCountry: null })}
+              allActive={!filter.originCountry}
+              cols={isMobile ? 3 : undefined}
+            />
+            {hasMoreCountries && (
               <button
                 type="button"
-                onClick={onClose}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 30,
-                  height: 30,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  color: "rgba(255,255,255,0.6)",
-                  cursor: "pointer",
-                }}
+                onClick={() => setShowAllCountries((v) => !v)}
+                style={{ marginTop: 10, background: "none", border: "none", padding: 0, color: ACCENT, fontSize: 13, fontWeight: 600, fontFamily: FONT_BODY, cursor: "pointer" }}
               >
-                <X size={16} />
+                {showAllCountries ? "Thu gọn" : `Xem thêm (${countryCodes.length - COUNTRY_COLLAPSED_COUNT})`}
               </button>
-            </div>
-          </div>
+            )}
+          </Section>
+        </div>
 
-          {/* Scrollable Body */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              paddingRight: isMobile ? 2 : 8,
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-              gap: isMobile ? "0px" : "0 36px",
-              WebkitOverflowScrolling: "touch",
-            }}
-          >
-            {/* CỘT 1 */}
-            <div>
-              <Section
-                label={`Thể loại${filter.genreIds.length ? ` (${filter.genreIds.length})` : ""}`}
-                isMobile={isMobile}
-              >
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  <Pill
-                    active={filter.genreIds.length === 0}
-                    onClick={() => setFilter((f) => ({ ...f, genreIds: [] }))}
-                    isMobile={isMobile}
-                  >
-                    Tất cả
-                  </Pill>
-                  {genres.map((g) => (
-                    <Pill
-                      key={g.id}
-                      active={filter.genreIds.includes(g.id)}
-                      onClick={() => toggleGenre(g.id)}
-                      small
-                      isMobile={isMobile}
-                    >
-                      {g.name}
-                    </Pill>
-                  ))}
-                </div>
-              </Section>
+        <div style={{ minWidth: 0 }}>
+          <Section label={filter.year ? `Năm: ${filter.year}` : isTv ? "Năm phát sóng đầu tiên" : "Năm sản xuất"}>
+            <PillGroup
+              options={YEAR_OPTIONS}
+              isActive={(y) => filter.year === y}
+              onSelect={toggleField("year")}
+              onClear={() => patch({ year: null })}
+              allActive={!filter.year}
+              cols={isMobile ? 4 : undefined}
+            />
+          </Section>
 
-              <Section label="Quốc gia" isMobile={isMobile}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  <Pill
-                    active={!filter.originCountry}
-                    onClick={() => setFilter((f) => ({ ...f, originCountry: null }))}
-                    isMobile={isMobile}
-                  >
-                    Tất cả
-                  </Pill>
-                  {COUNTRIES.map(({ code, label }) => (
-                    <Pill
-                      key={code}
-                      active={filter.originCountry === code}
-                      onClick={() => toggleCountry(code)}
-                      isMobile={isMobile}
-                    >
-                      {label}
-                    </Pill>
-                  ))}
-                </div>
-              </Section>
-            </div>
+          <Section label="Điểm IMDb tối thiểu">
+            {/* "Tất cả" + 4 mức = đúng 5 cột */}
+            <PillGroup
+              options={RATING_OPTIONS}
+              isActive={(v) => filter.minRating === v}
+              onSelect={toggleField("minRating")}
+              onClear={() => patch({ minRating: null })}
+              allActive={filter.minRating == null}
+              cols={isMobile ? 5 : undefined}
+            />
+          </Section>
 
-            {/* CỘT 2 */}
-            <div>
-              <Section label={yearSectionLabel} isMobile={isMobile}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    marginBottom: 8,
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    padding: "5px 9px",
-                    width: isMobile ? 120 : 130,
-                  }}
-                >
-                  <Search size={12} style={{ color: "rgba(255,255,255,0.4)" }} />
-                  <input
-                    value={yearSearch}
-                    onChange={(e) => setYearSearch(e.target.value)}
-                    placeholder="Tìm năm..."
-                    style={{
-                      background: "none",
-                      border: "none",
-                      outline: "none",
-                      color: "#fff",
-                      fontSize: 11.5,
-                      fontFamily: FONT_BODY,
-                      width: "100%",
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  <Pill
-                    active={!filter.fromYear && !filter.toYear}
-                    onClick={() => setFilter((f) => ({ ...f, fromYear: null, toYear: null }))}
-                    small
-                    isMobile={isMobile}
-                  >
-                    Tất cả
-                  </Pill>
-                  {filteredYears.map((y) => {
-                    const inRange =
-                      filter.fromYear &&
-                      filter.toYear &&
-                      y >= filter.fromYear &&
-                      y <= filter.toYear;
-                    const isEdge = y === filter.fromYear || y === filter.toYear;
-                    return (
-                      <Pill
-                        key={y}
-                        active={inRange || isEdge}
-                        onClick={() => toggleYear(y)}
-                        small
-                        isMobile={isMobile}
-                      >
-                        {y}
-                      </Pill>
-                    );
-                  })}
-                </div>
-              </Section>
-
-              <Section label="Điểm IMDb tối thiểu" isMobile={isMobile}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  {RATING_OPTIONS.map(({ min, label }) => (
-                    <Pill
-                      key={min}
-                      active={min === 0 ? filter.minRating == null : filter.minRating === min}
-                      onClick={() => setRating(min)}
-                      isMobile={isMobile}
-                    >
-                      {label}
-                    </Pill>
-                  ))}
-                </div>
-              </Section>
-
-              <Section label="Sắp xếp theo" isMobile={isMobile}>
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                  {(SORT_OPTIONS[isTv ? "tvshow" : "movie"] ?? SORT_OPTIONS["movie"]).map(
-                    ({ value, label }) => (
-                      <Pill
-                        key={value}
-                        active={filter.sortBy === value}
-                        onClick={() => setFilter((f) => ({ ...f, sortBy: value }))}
-                        isMobile={isMobile}
-                      >
-                        {label}
-                      </Pill>
-                    )
-                  )}
-                  <Pill
-                    active={!filter.sortDesc}
-                    onClick={() => setFilter((f) => ({ ...f, sortDesc: !f.sortDesc }))}
-                    isMobile={isMobile}
-                  >
-                    {filter.sortDesc ? "↓ Giảm dần" : "↑ Tăng dần"}
-                  </Pill>
-                </div>
-              </Section>
-
-              {isTv && (
-                <Section label="Trạng thái phim bộ" isMobile={isMobile}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {TV_STATUS_OPTIONS.map(({ value, label }) => (
-                      <Pill
-                        key={value}
-                        active={filter.tvStatus === value}
-                        onClick={() => setFilter((f) => ({ ...f, tvStatus: value }))}
-                        isMobile={isMobile}
-                      >
-                        {label}
-                      </Pill>
-                    ))}
-                  </div>
-                </Section>
-              )}
-            </div>
-          </div>
-
-          {/* Footer CTA */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-              marginTop: 14,
-              paddingTop: 12,
-              borderTop: "1px solid rgba(255,255,255,0.08)",
-              flexShrink: 0,
-            }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
+          <Section label="Sắp xếp theo">
+            <div
               style={{
-                padding: isMobile ? "8px 16px" : "9px 20px",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                borderRadius: 8,
-                color: "rgba(255,255,255,0.65)",
-                fontSize: isMobile ? 12.5 : 13,
-                fontWeight: 600,
-                fontFamily: FONT_BODY,
-                cursor: "pointer",
+                display: isMobile ? "grid" : "flex",
+                ...(isMobile
+                  ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }
+                  : { flexWrap: "wrap" }),
+                gap: 8,
+                minWidth: 0,
               }}
             >
-              Đóng
-            </button>
+              {sortOptions.map(({ value, label }) => (
+                <Pill key={value} fill={isMobile} active={filter.sortBy === value} onClick={() => patch({ sortBy: value })}>
+                  {label}
+                </Pill>
+              ))}
+              <Pill fill={isMobile} active={!filter.sortDesc} onClick={() => patch({ sortDesc: !filter.sortDesc })}>
+                {filter.sortDesc ? "↓ Giảm dần" : "↑ Tăng dần"}
+              </Pill>
+            </div>
+          </Section>
 
-            <button
-              type="button"
-              onClick={handleApply}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: isMobile ? "8px 18px" : "9px 22px",
-                background: ACCENT,
-                border: "none",
-                borderRadius: 8,
-                color: "#ffffff",
-                fontSize: isMobile ? 12.5 : 13,
-                fontWeight: 700,
-                fontFamily: FONT_BODY,
-                cursor: "pointer",
-                boxShadow: `0 4px 16px ${ACCENT}55`,
-              }}
-            >
-              Áp dụng
-              <ArrowRight size={13} />
-            </button>
-          </div>
-        </motion.div>
+          {isTv && (
+            <Section label="Trạng thái phim bộ">
+              <PillGroup
+                options={TV_STATUS_OPTIONS}
+                isActive={(v) => filter.tvStatus === v}
+                onSelect={(v) => patch({ tvStatus: filter.tvStatus === v ? "" : v })}
+                onClear={() => patch({ tvStatus: "" })}
+                allActive={!filter.tvStatus}
+                cols={isMobile ? 2 : undefined}
+              />
+            </Section>
+          )}
+        </div>
       </div>
-    </AnimatePresence>,
-    document.body
+    </BottomSheet>
   );
 };
 

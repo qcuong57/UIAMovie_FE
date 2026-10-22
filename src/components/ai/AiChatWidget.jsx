@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useIsMobile } from "../../hooks/useIsMobile";
+import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
 import { IconChevronDown } from "@tabler/icons-react";
 import aiService from "../../services/aiService";
 import { FONT_BODY, FONT_DISPLAY } from "../../context/homeTokens";
@@ -26,11 +29,21 @@ const capTo = (value, max) => (Number.isFinite(value) && value > 0 ? Math.min(va
 const MSG_LIMIT = capTo(MAX_CHAT_LENGTH, BE_MAX_MESSAGE);
 const HISTORY_LIMIT = capTo(MAX_HISTORY, BE_MAX_HISTORY_TURNS);
 
-export default function AiChatWidget() {
+// Hình học của MobileBottomNav (floating pill): bottom 12px + cao 62px.
+// Phải khớp với MobileBottomNav.jsx để FAB luôn nằm cách nav một khoảng đều.
+const NAV_BOTTOM_OFFSET = 12;
+const NAV_HEIGHT = 62;
+const NAV_SIDE_INSET = 12; // nav có left/right: 12 → FAB canh thẳng mép phải của nav
+const FAB_GAP_ABOVE_NAV = 16;
+
+export default function AiChatWidget({ visible = true }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
 
   const [open, setOpen] = useState(false);
+  // Mobile: panel full-màn hình → khoá scroll nền
+  useBodyScrollLock(open && isMobile);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
     { role: "assistant", content: GREETING },
@@ -220,10 +233,52 @@ export default function AiChatWidget() {
   const isFirst = messages.length === 1;
   const currentChips = INTENT_CHIPS[lastIntent] ?? INTENT_CHIPS.movie;
 
-  return (
+  // Panel mobile: full màn hình, phủ cả bottom nav. Desktop: cửa sổ nổi góc phải.
+  const panelStyle = isMobile
+    ? {
+        position: "fixed",
+        inset: 0,
+        height: "100dvh", // dvh: co theo bàn phím/toolbar Safari
+        zIndex: 100000,
+        background: W.bg,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        paddingTop: "env(safe-area-inset-top, 0px)",
+      }
+    : {
+        position: "fixed",
+        bottom: 92,
+        top: 72,
+        right: 24,
+        width: 368,
+        zIndex: 9998,
+        borderRadius: 18,
+        background: W.bg,
+        border: `1px solid ${W.border}`,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.35)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      };
+
+  // FAB mobile: tròn, nổi phía trên nav, canh thẳng mép phải của nav pill,
+  // cách nav FAB_GAP_ABOVE_NAV px để không dính/đè vào thanh điều hướng. Ẩn khi panel mở.
+  const fabStyle = isMobile
+    ? {
+        bottom: `calc(${NAV_BOTTOM_OFFSET + NAV_HEIGHT + FAB_GAP_ABOVE_NAV}px + env(safe-area-inset-bottom, 0px))`,
+        right: `max(${NAV_SIDE_INSET}px, env(safe-area-inset-right, 0px))`,
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        zIndex: 9980, // thấp hơn nav (9990) để không bao giờ che tab; vẫn trên nội dung trang
+      }
+    : { bottom: 24, right: 24, width: 52, height: 52, borderRadius: 16, zIndex: 9999 };
+
+  return createPortal(
     <>
       <AnimatePresence>
-        {proactive && !open && (
+        {proactive && !open && !isMobile && (
           <ProactiveBubble
             message={proactive}
             onOpen={() => setOpen(true)}
@@ -240,21 +295,7 @@ export default function AiChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.98 }}
             transition={{ duration: 0.26, ease: EASE_EXP }}
-            style={{
-              position: "fixed",
-              bottom: 92,
-              top: 72,
-              right: 24,
-              width: 368,
-              zIndex: 9998,
-              borderRadius: 18,
-              background: W.bg,
-              border: `1px solid ${W.border}`,
-              boxShadow: "0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.35)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
+            style={panelStyle}
           >
             {/* Header */}
             <div
@@ -299,13 +340,16 @@ export default function AiChatWidget() {
                   onClick={() => setOpen(false)}
                   aria-label="Đóng"
                   style={{
-                    background: "transparent",
+                    background: isMobile ? "rgba(255,255,255,0.06)" : "transparent",
                     border: "none",
+                    borderRadius: 10,
                     cursor: "pointer",
                     fontFamily: FONT_BODY,
-                    fontSize: 18,
+                    fontSize: isMobile ? 22 : 18,
                     lineHeight: 1,
-                    color: W.textDim,
+                    color: isMobile ? W.textSub : W.textDim,
+                    width: isMobile ? 40 : "auto",
+                    height: isMobile ? 40 : "auto",
                     padding: "2px 2px",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = W.textSub)}
@@ -471,7 +515,14 @@ export default function AiChatWidget() {
             </div>
 
             {/* Composer */}
-            <div style={{ padding: "0 12px 13px", flexShrink: 0, borderTop: `1px solid ${W.border}`, paddingTop: 10 }}>
+            <div
+              style={{
+                padding: "10px 12px 13px",
+                paddingBottom: isMobile ? "calc(13px + env(safe-area-inset-bottom, 0px))" : 13,
+                flexShrink: 0,
+                borderTop: `1px solid ${W.border}`,
+              }}
+            >
               <div
                 style={{
                   display: "flex",
@@ -509,7 +560,7 @@ export default function AiChatWidget() {
                     padding: "3px 0",
                     color: W.text,
                     fontFamily: FONT_BODY,
-                    fontSize: 13,
+                    fontSize: isMobile ? 16 : 13, // ≥16px: Safari không tự zoom
                     lineHeight: 1.55,
                     resize: "none",
                     outline: "none",
@@ -561,22 +612,24 @@ export default function AiChatWidget() {
       {/* FAB */}
       <motion.button
         onClick={() => setOpen((v) => !v)}
+        aria-label={open ? "Đóng trợ lý AI" : "Mở trợ lý AI"}
+        initial={false}
+        animate={{
+          opacity: visible && !(isMobile && open) ? 1 : 0,
+          scale: visible && !(isMobile && open) ? 1 : 0.9,
+        }}
         whileHover={{ scale: 1.06 }}
         whileTap={{ scale: 0.9 }}
         style={{
           position: "fixed",
-          bottom: 24,
-          right: 24,
-          width: 52,
-          height: 52,
-          borderRadius: 16,
+          ...fabStyle,
+          pointerEvents: visible && !(isMobile && open) ? "auto" : "none",
           background: open ? W.surfaceMid : W.accent,
           border: open ? `1px solid ${W.borderHi}` : "none",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 9999,
           boxShadow: open ? "0 4px 20px rgba(0,0,0,0.5)" : "0 6px 24px rgba(229,24,30,0.4)",
           transition: "background 0.2s, border 0.2s, box-shadow 0.2s",
         }}
@@ -603,6 +656,7 @@ export default function AiChatWidget() {
           )}
         </AnimatePresence>
       </motion.button>
-    </>
+    </>,
+    document.body,
   );
-} 
+}

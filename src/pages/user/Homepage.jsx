@@ -987,26 +987,9 @@ export default function HomePage() {
               </div>
 
               {/* ── AI CHAT WIDGET: LUÔN MOUNT ĐỂ BẢO TOÀN LỊCH SỬ TIN NHẮN ── */}
-              <motion.div
-                animate={{
-                  opacity: pastBanner ? 1 : 0,
-                  scale: pastBanner ? 1 : 0.92,
-                  y: pastBanner ? 0 : 12,
-                }}
-                transition={{
-                  duration: 0.35,
-                  ease: HOME_EASE,
-                }}
-                style={{
-                  position: "fixed",
-                  bottom: 0,
-                  right: 0,
-                  zIndex: 50,
-                  pointerEvents: pastBanner ? "auto" : "none",
-                }}
-              >
-                <AiChatWidget />
-              </motion.div>
+              {/* Widget tự render qua portal (thoát khỏi transform của wrapper,
+                  nổi trên bottom nav). `visible` điều khiển hiện/ẩn FAB. */}
+              <AiChatWidget visible={pastBanner} />
 
               <Footer />
             </>
