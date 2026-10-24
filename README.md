@@ -82,16 +82,22 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - TMDB-sourced cast, director bio, known-for filmography
 
 ### 💎 Premium & Payments
-- **Premium page** (`/premium`) with Free / Monthly (69,000 ₫) / Yearly (599,000 ₫, ~27.7% cheaper) plans, benefits and FAQ. Feature lists match the backend: Full HD / 4K, no ads, offline download, priority support (yearly)
-- **Two gateways**: the user picks **VNPay** (redirect) or **SePay** (hidden `form_post` built from the `formFields` the backend returns, in the original order). `paymentService.redirectToPayment(order)` handles both
-- **Confirm-before-order checkout**: clicking a plan only opens a confirmation dialog (plan, price, gateway). The order (`POST /payments/create-order`) is created **only when the user presses "Thanh toán"**, so an accidental click and "Quay lại" never leaves a `pending` order behind (and if the user does create several orders, the backend keeps only the newest one open). The dialog is closable with Esc / backdrop click until the request is sent, locks body scroll, and keeps the button locked after a successful order so a double-click cannot create two orders
-- **Back-from-gateway recovery**: when the browser restores the page from the back/forward cache, a `pageshow` handler clears the stuck spinner, closes the dialog, shows a "payment not completed" hint and silently refreshes the subscription status
-- **No "reload flash"** when coming back to `/premium`: the subscription status is cached at module level (stale-while-revalidate), the plan cards' entrance animation plays only once per session, and the Google-Fonts `<style>` tag is injected once and kept
-- **Renewal is allowed while Premium is active** — the backend adds the new period on top of the current expiry date. Paid cards show "Gia hạn" instead of "Bắt đầu ngay"
+- **Dynamic plans**: `/premium` renders whatever `GET /payments/plans` returns. Plans are configured by admins and nothing is hard-coded. Only the "Free" comparison card is static (`FREE_PLAN`)
+- **Savings badges** are computed on the client: "Giảm X%" when `originalPriceVnd > priceVnd`, otherwise "Tiết kiệm X%" (per-month price versus the most expensive paid plan, shown only when the saving is ≥ 5%). Free/trial plans get a "Dùng thử" badge
+- **Eligibility**: the plans request carries the access token, so the backend returns `isEligible` / `ineligibleReason` for every plan (trial already used, wrong e-mail domain, purchase limit reached, trial while Premium is active, plan no longer on sale). Ineligible cards are dimmed, show "Không khả dụng" and the reason
+- **Plan metadata on the card**: strikethrough original price, `≈ price/month` hint for long plans (≥ 300 days), sale deadline (`endsAt`, "Ưu đãi đến …"), allowed e-mail domains (e.g. a student plan), description and feature list
+- **Current plan marker**: `GET /payments/subscription-status` returns `planId` / `planName`, so the matching card shows "GÓI CỦA BẠN". Premium granted manually by an admin has `planId = null` and matches no card (the hero badge still shows the Premium status and expiry)
+- **Free / trial plans (0đ)**: the checkout dialog hides the gateway picker and shows "Kích hoạt dùng thử". `create-order` answers `paymentMethod: "none"` (no URL, no redirect); the page refreshes the Premium status via `authService.refreshPremiumStatus()` and goes straight to `/payment/result`
+- **Two gateways** for paid plans: **VNPay** (redirect) or **SePay** (hidden `form_post` built from the `formFields` the backend returns, in the original order). `paymentService.redirectToPayment(order)` handles both
+- **Confirm-before-order checkout**: clicking a plan only opens a confirmation dialog (plan, price, gateway). The order (`POST /payments/create-order`) is created **only when the user presses "Thanh toán"**, so an accidental click and "Quay lại" never leaves a `pending` order behind. If the user does create several orders, the backend keeps only the newest one open (older ones become `cancelled`). The dialog closes with Esc / backdrop click until the request is sent, locks body scroll, and keeps the button locked after a successful order so a double-click cannot create two orders
+- **Back-from-gateway recovery**: when the browser restores the page from the back/forward cache, a `pageshow` handler clears the stuck spinner, closes the dialog, shows a "payment not completed" hint and silently refreshes plans and subscription status
+- **No "reload flash"** when coming back to `/premium`: plans and subscription status are cached at module level (stale-while-revalidate), the plan cards' entrance animation plays only once per session, and the Google-Fonts `<style>` tag is injected once and kept
+- **Renewal is allowed while Premium is active** — the backend adds the new period on top of the current expiry date. Paid cards show "Gia hạn" instead of the plan's CTA (trial plans never show it) and a note with the current expiry date
 - **Payment result page** (`/payment/result`) does **not** trust the `status` query parameter; it looks the order up by `orderCode` in the payment history to confirm the real result
-- **Cancel Premium** from the Profile page: access ends immediately and the remaining time is **not refunded** (the confirmation modal and FAQ say so)
+- **Cancel Premium** from the Profile page: access ends immediately and the remaining time is **not refunded** (the confirmation modal and FAQ say so). Cancelling during a trial does not give the trial back
 - Subscription info on Profile is read from `GET /payments/subscription-status`, not from `User.SubscriptionType`, so it always matches what the paywall enforces
-- There is no money-back guarantee and no free trial; the UI no longer advertises either
+- There is no money-back guarantee. Free trials exist only as plans an admin creates with price 0 (one use per account by default)
+- **Design v4 ("soft")**: large radii, diffuse shadows, spring motion (`SPRING` / `SPRING_SOFT`), pill badges and a glow behind the featured block, with gradient dividers instead of ticket-style corners
 
 ### 📺 Advertising (Free users)
 - Ads are shown to **Free** users only; Premium users skip them (the "no ads" benefit)
@@ -120,9 +126,23 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **Genre CRUD** — create, edit, delete genres with color-coded cards
 - **Review moderation** — browse and delete reviews per film
 - **User management** — view details, edit username/avatar, change role, ban / unban with reason, delete. Premium is granted or revoked through the payment endpoints (`adminGrantSubscription` / `adminRevokeSubscription`), not by editing `subscriptionType`
+- **Plans management** (`AdminPlans`, backed by `AdminPlanController`): one page to create and edit Premium plans and to switch sales on and off
+  - KPI row (on sale, off / ended, scheduled, trial plans and the "most popular" plan), status filters with counts (**Đang bán / Chưa mở bán / Hết hạn bán / Đã tắt**) and search by name or plan id
+  - **Create / edit form** with a live preview of the user-facing card:
+    - plan id (`a-z`, `0-9`, `_`, 3–50 chars; immutable after creation), name, description
+    - price (0 = trial, paid plans at least 10,000đ) and a strikethrough original price (must be greater than the price)
+    - duration presets (7 / 30 / 90 / 365 days) or a custom 1–3650
+    - reorderable feature list, sort order
+    - per-user purchase limit (`maxPerUser`; a 0đ plan defaults to 1 on the server)
+    - e-mail domain whitelist (e.g. `edu.vn, hust.edu.vn` for a student plan)
+    - sale window (`startsAt` / `endsAt`), "Most popular" and "Trial" toggles
+  - Client validation mirrors the backend rules. The sale window is typed in **Vietnam time (GMT+7)** and converted to UTC before it is sent
+  - Plans are never deleted, only switched off, so the order history stays intact. Editing a plan does not change past orders (they keep the name, price and days from the moment of purchase)
+  - **Manual grant / revoke** dialog: user GUID, any plan (including switched-off ones, e.g. a trial to give away) and a required future expiry date (end of that day, Vietnam time). The expiry is set exactly as chosen and is **not** stacked on the remaining time. Revoking needs a second confirmation
 - **Revenue dashboard** (`AdminRevenue`) backed by `AdminRevenueController`:
   - KPI cards: total revenue (with average order value), **today**, this month (with month-over-month growth, hidden when last month is 0), active Premium users (and how many expire within 7 days), pending orders, and success rate (with failed vs expired counts)
   - Revenue chart by month or by day, revenue by plan, and a filterable order table (status, plan, gateway, e-mail / order-code search, **created-date range**) paged with the shared `AdminPagination`
+  - Free-trial orders (`provider: "free"`, 0đ) are not counted in the revenue figures
   - **Export Excel** (`GET /payments/admin/revenue/export`) uses the current status / plan / gateway / date filters (the search box is not applied). With no status selected only successful orders are exported; successful orders are filtered by **paid date**, all others by **created date**; the backend caps the file at 50,000 rows and returns a readable message when it is exceeded
   - **Time zone**: every date and month is Vietnam time (GMT+7). The UI sends plain `yyyy-MM-dd` dates (inclusive of the last day), computes the default year/month in GMT+7 instead of the browser zone, and renders the UTC timestamps the API returns as Vietnam time
 - **Ads management** (`AdminAds`): searchable / filterable ad list, create / edit / delete (video upload to Cloudinary or an external URL, brand image, skip-after seconds, click-through URL) and one-click active / paused toggle
@@ -167,7 +187,7 @@ UIA Movie is built around a **dark cinema aesthetic** — deep blacks, subtle gr
 ### Design System
 - **Color tokens** defined in `homeTokens.js` and `searchConstants.jsx` — a single source of truth for background, surface, accent (`#e5181e`), gold (`#f5c518`), and typography colors
 - **Two typefaces**: `Be Vietnam Pro` (display/headings) + `Nunito` (body/UI)
-- Consistent `border-radius`, spacing, and shadow scales across all components
+- Consistent `border-radius`, spacing, and shadow scales across all components (the Premium page uses the `RADIUS` / `SHADOW` / `SPRING` constants defined at the top of `PremiumPage.jsx`)
 
 ### Animation Philosophy
 - All transitions use **Framer Motion** with curated easing curves from `transitions.js`
@@ -204,20 +224,20 @@ Base URL: http://localhost:5000/api/
 - On a `401` the interceptor refreshes once and replays the request; if refresh fails with an auth error the session is cleared and the user is sent to `/welcome`
 - Cross-tab sync: signing out in one tab drops the token in the others; signing in elsewhere lets this tab pick up a token on its next request
 - `getFreshAccessToken()` serves non-Axios clients (SignalR, `fetch`) and refreshes when the token expires within 30 s
-- The interceptor returns the response **body** (`{ data, message }`). Services therefore return `res.data` for data endpoints and `res` for message-only endpoints (update, role, ban, delete, change-password)
+- The interceptor returns the response **body** (`{ data, message }`). Services therefore return `res.data` for data endpoints and `res` for message-only endpoints (update, role, ban, delete, change-password). The payment endpoints return bare objects, so `paymentService` returns the interceptor result as is
 - Errors are read with `getApiErrorMessage` (`utils/apiError.js`), which understands both `{ message }` and ProblemDetails responses
 
 ### Service Modules
 
 | Service | Responsibility |
 |---|---|
-| `authService.js` | Login, register, OTP, forgot/reset password, session management |
+| `authService.js` | Login, register, OTP, forgot/reset password, session management, `refreshPremiumStatus` |
 | `movieService.js` | Trending, search, by-genre, by-country, favorites, watch history, video progress |
 | `genreService.js` | Genre CRUD |
 | `personService.js` | Cast, person detail & images via TMDB proxy |
 | `reviewService.js` | Movie reviews — create, edit, delete, stats, check-if-reviewed |
 | `userService.js` | Own profile, change password, and admin user CRUD / role / ban / unban |
-| `paymentService.js` | Plans, create order, `redirectToPayment` (VNPay redirect / SePay form post), subscription status, history, order lookup by code, cancel own Premium, admin grant / revoke, revenue summary / chart / by-plan, orders, and `adminExportRevenue` (Blob download) |
+| `paymentService.js` | **Plans:** `getPlans` (with eligibility when signed in). **Checkout:** `createOrder` (returns `paymentMethod` `redirect` / `form_post` / `none`), `redirectToPayment` (VNPay redirect / SePay form post). **User:** `getSubscriptionStatus` (`planId`, `planName`), `getPaymentHistory`, `getOrderByCode`, `cancelMySubscription`, `isPremium`. **Admin plans:** `adminGetPlans`, `adminCreatePlan`, `adminUpdatePlan`, `adminSetPlanActive`. **Admin subscriptions:** `adminGrantSubscription`, `adminRevokeSubscription`. **Admin revenue:** `adminGetRevenueSummary`, `adminGetRevenueChart`, `adminGetRevenueByPlan`, `adminGetOrders`, `adminExportRevenue` (Blob download) |
 | `adService.js` | Ad CRUD, global slots / overrides, `getAdsForContent(type, id, durationSeconds)` for the player, admin `getScheduleSettings` / `updateScheduleSettings` / `previewSchedule` |
 
 ---
@@ -228,11 +248,12 @@ Base URL: http://localhost:5000/api/
 src/
 ├── components/
 │   ├── admin/          # Admin-only panels, modals, tables
+│   │   ├── AdminPlans.jsx  # Premium plan management + manual grant / revoke
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
 │   │   ├── user/       # UserDetailPanel, UserEditModal
 │   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
 │   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
-│   ├── common/         # BackButton, Pagination, AdminPagination, SeeAllButton
+│   ├── common/         # BackButton, Pagination, AdminPagination, SeeAllButton, Toast
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
 │   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
 │   ├── layout/         # Navbar, Footer
@@ -250,7 +271,7 @@ src/
 │
 ├── context/
 │   ├── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
-│   └── adminTokens.js  # Admin design tokens (used by AdminPagination, AdminRevenue)
+│   └── adminTokens.js  # Admin design tokens (AdminPagination, AdminRevenue, AdminPlans)
 │
 ├── hooks/
 │   ├── useIsMobile.js  # Responsive breakpoint hook
@@ -278,6 +299,9 @@ src/
 ├── utils/
 │   ├── apiError.js     # getApiErrorMessage
 │   └── validators.js   # validateUsername (shared by register + profile)
+│
+├── helper/
+│   └── format.js       # fmtVnd and other formatters
 │
 └── services/           # authService, movieService, genreService,
                         # personService, reviewService,
@@ -344,9 +368,10 @@ VITE_API_URL=http://localhost:5000/api
 4. Use the **Search** page to find movies or actors with advanced filters
 5. Manage your **Favorites** and review your **Watch History** from the navbar
 6. Update your profile or toggle 2FA under **Profile** / **Security Settings**
-7. Open **/premium**, pick a plan, confirm it in the dialog and pay through VNPay or SePay (nothing is created until you press "Thanh toán"); you return to `/payment/result`, where the order is verified against your payment history
-8. Manage the subscription under **Profile → Gói đăng ký** (renew from `/premium`, or cancel — access ends immediately, no refund)
-9. On a Free account, ads play before / during / after the video (skip when the countdown ends, or go Premium to remove them)
+7. Open **/premium** and pick a plan. For a paid plan, confirm it in the dialog and pay through VNPay or SePay (nothing is created until you press "Thanh toán"); you return to `/payment/result`, where the order is verified against your payment history. A free trial plan is activated right away from the dialog, with no gateway
+8. If a plan is greyed out as "Không khả dụng", the card explains why (for example the trial was already used or your e-mail domain does not qualify)
+9. Manage the subscription under **Profile → Gói đăng ký** (renew from `/premium`, or cancel — access ends immediately, no refund)
+10. On a Free account, ads play before / during / after the video (skip when the countdown ends, or go Premium to remove them)
 
 ### As an Admin
 1. Log in with an Admin-role account — you will see an **Admin** link in the navbar
@@ -354,8 +379,37 @@ VITE_API_URL=http://localhost:5000/api
 3. Go to **Movies → TMDB Search** to search and import new films
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
-6. Open **Ads** to manage ad videos. Use the schedule banner → **Cấu hình lịch phát** to pick Fixed or Random mode, tune the parameters and check them with the preview. Attach ads to **Global Slots** (calendar icon on each row) — in Random mode these slots are the pool the scheduler draws from
-7. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
+6. Open **Plans** to create Premium plans (price, duration, features, sale window, purchase limit, e-mail domains), preview the card, mark one as "most popular", and switch plans on or off. Use **Cấp / thu hồi Premium** to grant or revoke Premium for a user by ID. The page needs at least one plan on sale before `/premium` shows anything to buy
+7. Open **Ads** to manage ad videos. Use the schedule banner → **Cấu hình lịch phát** to pick Fixed or Random mode, tune the parameters and check them with the preview. Attach ads to **Global Slots** (calendar icon on each row) — in Random mode these slots are the pool the scheduler draws from
+8. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
+
+---
+
+## 🤝 Git Workflow
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): short summary`, with a body for the details when needed.
+
+| Type | When to use |
+|---|---|
+| `feat` | A new feature (`feat(premium): dynamic plans from API`) |
+| `fix` | A bug fix (`fix(premium): reset spinner on bfcache restore`) |
+| `docs` | README / comments only |
+| `refactor` | Code change without behaviour change |
+| `style` | Formatting or visual-only changes |
+| `perf` | Performance improvement |
+| `chore` | Tooling, dependencies, config |
+
+```bash
+git checkout -b feat/premium-plans     # work on a branch
+git status
+git add <files>                        # or: git add -A
+git commit -m "feat(premium): render plans from GET /payments/plans" \
+  -m "- eligibility reasons per plan
+- free trial activates without a gateway"
+git push -u origin feat/premium-plans  # then open a pull request into main
+```
+
+Commit the frontend and the backend separately: they live in different repositories.
 
 ---
 
@@ -376,11 +430,12 @@ VITE_API_URL=http://localhost:5000/api
 ## 🔮 Future Improvements
 
 - [ ] **Avatar upload** — needs a backend upload endpoint; today the avatar is preview-only
-- [ ] **Show the current plan** — the backend does not yet store `planId` on a subscription, so no plan card can be marked "GÓI CỦA BẠN" (the hero badge still shows Premium status)
+- [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
 - [ ] **Move the subscription-status cache into `paymentService`** and invalidate it on cancel / create-order, so `/premium` never shows a stale state for the first few hundred milliseconds
 - [ ] **Remove the hidden SePay form** from the DOM after submitting it
-- [ ] **Align Free-plan copy** (720p, 1 device) with what the backend actually enforces
+- [ ] **Free-plan card copy** (720p, 1 device) is static; align it with what the backend actually enforces
+- [ ] **Admin plans** — show how many users bought each plan; confirm before switching off a plan that is on sale
 - [ ] **Ads: list Content Overrides** — the per-ad dialog only lists Global Slots; the API has no endpoint to read Overrides back
 - [ ] **Ads: real runtime for the schedule** — the duration sent to the ad API is the TMDB runtime; re-requesting once the video's real duration is known would also cover titles with an empty runtime
 - [ ] **Video Player** — integrate a full-featured HLS player with quality switching

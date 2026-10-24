@@ -39,7 +39,9 @@ import {
   FONT_BODY,
   GOOGLE_FONTS,
 } from "../context/homeTokens";
+import { useNavigate } from "react-router-dom";
 import paymentService from "../services/paymentService";
+import authService from "../services/authService";
 import { useToast } from "../components/common/Toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -50,54 +52,75 @@ const PAYMENT_PROVIDERS = [
   { id: "sepay", label: "SePay" },
 ];
 
-const PLANS = [
-  {
-    id: null,
-    key: "free",
-    name: "Miễn phí",
-    price: 0,
-    period: null,
-    badge: null,
-    featured: false,
-    cta: "Gói mặc định",
-    icon: Play,
-    features: ["HD 720p", "1 thiết bị", "Kho phim cơ bản"],
-    missing: ["Full HD / 4K", "Không quảng cáo", "Tải về xem offline"],
-  },
-  {
-    id: "monthly_premium",
-    key: "monthly",
-    name: "Premium · Tháng",
-    price: 69000,
-    period: "/tháng",
-    badge: null,
-    featured: true,
-    cta: "Bắt đầu ngay",
-    icon: Crown,
-    features: [
-      "Full HD / 4K",
-      "Không quảng cáo",
-      "Tải về xem offline",
-    ],
-  },
-  {
-    id: "yearly_premium",
-    key: "yearly",
-    name: "Premium · Năm",
-    price: 599000,
-    period: "/năm",
-    badge: "Tiết kiệm 27,7%",
-    featured: false,
-    cta: "Tiết kiệm hơn",
-    icon: Gift,
-    features: [
-      "Full HD / 4K",
-      "Không quảng cáo",
-      "Tải về xem offline",
-      "Ưu tiên hỗ trợ",
-    ],
-  },
-];
+// Thẻ "Miễn phí" mặc định (không phải gói bán, chỉ để so sánh). Các gói còn lại
+// lấy từ GET /payments/plans do admin cấu hình, không còn hardcode.
+const FREE_PLAN = {
+  id: null,
+  key: "free",
+  name: "Miễn phí",
+  price: 0,
+  period: null,
+  badge: null,
+  featured: false,
+  cta: "Gói mặc định",
+  icon: Play,
+  isTrial: false,
+  isEligible: true,
+  features: ["HD 720p", "1 thiết bị", "Kho phim cơ bản"],
+  missing: ["Full HD / 4K", "Không quảng cáo", "Tải về xem offline"],
+};
+
+const periodOf = (days) =>
+  days === 30 ? "/tháng" : days === 365 ? "/năm" : `/${days} ngày`;
+
+/** Giá quy về mỗi tháng, để so sánh các gói có thời hạn khác nhau. */
+const perMonth = (p) => (p.priceVnd * 30) / Math.max(1, p.durationDays);
+
+/**
+ * API → dữ liệu thẻ. Nhãn tiết kiệm: ưu tiên mức giảm so với giá gốc admin đặt;
+ * nếu không có thì so giá/tháng với gói trả phí đắt nhất (chỉ khi chênh >= 5%).
+ */
+const buildPlans = (apiPlans) => {
+  const paid = apiPlans.filter((p) => p.priceVnd > 0 && !p.isTrial);
+  const ref = paid.length ? Math.max(...paid.map(perMonth)) : 0;
+
+  return apiPlans.map((p) => {
+    const free = p.priceVnd === 0;
+    let badge = null;
+    if (p.originalPriceVnd > p.priceVnd) {
+      badge = `Giảm ${Math.round((1 - p.priceVnd / p.originalPriceVnd) * 100)}%`;
+    } else if (!free && !p.isTrial && ref > 0) {
+      const save = Math.round((1 - perMonth(p) / ref) * 100);
+      if (save >= 5) badge = `Tiết kiệm ${save}%`;
+    } else if (free) {
+      badge = "Dùng thử";
+    }
+
+    return {
+      id: p.planId,
+      key: p.planId,
+      name: p.name,
+      description: p.description,
+      price: p.priceVnd,
+      originalPrice: p.originalPriceVnd,
+      durationDays: p.durationDays,
+      period: free ? null : periodOf(p.durationDays),
+      badge,
+      featured: !!p.isMostPopular,
+      cta: free ? "Dùng thử miễn phí" : p.isMostPopular ? "Bắt đầu ngay" : "Chọn gói này",
+      icon: free ? Zap : p.durationDays >= 300 ? Gift : Crown,
+      isTrial: !!p.isTrial || free,
+      isEligible: p.isEligible !== false,
+      ineligibleReason: p.ineligibleReason || null,
+      allowedEmailDomains: p.allowedEmailDomains || [],
+      endsAt: p.endsAt,
+      // ≈ giá/tháng cho gói dài hạn
+      monthlyHint:
+        !free && p.durationDays >= 300 ? Math.round(perMonth(p) / 100) * 100 : null,
+      features: p.features || [],
+    };
+  });
+};
 
 // Danh sách "quyền lợi" trình bày dạng bảng thông tin rạp chiếu — mỗi dòng
 // một hàng, không dùng thẻ lưới đồng dạng.
@@ -147,7 +170,7 @@ const FAQS = [
   },
   {
     q: "Gói Năm có ưu điểm gì hơn Gói Tháng?",
-    a: "Gói Năm tiết kiệm 27,7% so với trả theo tháng và có thêm quyền ưu tiên hỗ trợ.",
+    a: "Gói dài hạn thường có giá theo tháng rẻ hơn. Mức tiết kiệm và quyền lợi của từng gói được hiển thị ngay trên thẻ gói.",
   },
   {
     q: "Tiền có được hoàn lại nếu không hài lòng?",
@@ -157,9 +180,10 @@ const FAQS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const fmt = (n) => new Intl.NumberFormat("vi-VN").format(n) + "đ";
+const fmt = (n) => (n === 0 ? "Miễn phí" : new Intl.NumberFormat("vi-VN").format(n) + "đ");
 
 // Cache cấp module: sống qua các lần mount lại của trang (điều hướng Back/Forward trong SPA).
+let plansCache = null; // danh sách gói gần nhất (đã qua buildPlans)
 let subStatusCache = null; // kết quả getSubscriptionStatus gần nhất
 let subStatusFetched = false; // đã từng gọi xong ít nhất một lần (kể cả lỗi / chưa đăng nhập)
 let introPlayed = false; // animation xuất hiện của thẻ gói chỉ chạy một lần
@@ -170,10 +194,8 @@ const STYLE_ID = "premium-page-style";
  */
 const mapSubTypeToKey = (subStatus) => {
   if (!subStatus?.isPremium) return "free";
-  // BE chưa trả planId: không đoán gói tháng/năm, tránh đánh dấu sai thẻ.
-  if (subStatus.planId === "yearly_premium") return "yearly";
-  if (subStatus.planId === "monthly_premium") return "monthly";
-  return "premium"; // không khớp thẻ nào
+  // planId của gói đã kích hoạt gần nhất; null khi admin cấp tay → không khớp thẻ nào.
+  return subStatus.planId || "premium";
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -258,11 +280,13 @@ const PlanCard = ({
   const PlanIcon = plan.icon;
   const isLoading = plan.id !== null && loading === plan.id;
   const isFree = plan.key === "free";
-  const isYearly = plan.key === "yearly";
+  const isYearly = plan.monthlyHint != null; // gói dài hạn: viền sáng hơn
+  const isTrialFree = !isFree && plan.price === 0;
 
-  // BE cộng dồn ngày từ ngày hết hạn → cho phép gia hạn khi còn Premium.
-  const isRenewal = !isFree && subStatus?.isPremium === true;
-  const isDisabled = isCurrent || isFree || subLoading;
+  // BE cộng dồn ngày từ ngày hết hạn → cho phép gia hạn khi còn Premium (không áp dụng gói dùng thử).
+  const isRenewal = !isFree && !isTrialFree && subStatus?.isPremium === true;
+  const notEligible = !isFree && !isCurrent && plan.isEligible === false;
+  const isDisabled = isCurrent || isFree || subLoading || notEligible;
 
   const borderColor = isCurrent
     ? "rgba(70,211,105,0.5)"
@@ -313,7 +337,7 @@ const PlanCard = ({
         flex: 1,
         height: "100%",
         boxShadow: plan.featured ? SHADOW.glow("rgba(229,9,20,0.16)") : SHADOW.card,
-        opacity: isFree && !isCurrent ? 0.72 : 1,
+        opacity: (isFree && !isCurrent) || notEligible ? 0.72 : 1,
       }}
     >
       {/* Ruy băng "phổ biến nhất" — pill mềm nổi phía trên card, không còn cờ góc cứng */}
@@ -425,6 +449,19 @@ const PlanCard = ({
             marginTop: 16,
           }}
         >
+          {plan.originalPrice > plan.price && (
+            <span
+              style={{
+                color: C.textDim,
+                fontSize: 14,
+                fontFamily: FONT_BODY,
+                textDecoration: "line-through",
+                marginRight: 6,
+              }}
+            >
+              {fmt(plan.originalPrice)}
+            </span>
+          )}
           {plan.price > 0 ? (
             <>
               <span
@@ -460,6 +497,12 @@ const PlanCard = ({
               }}
             >
               Miễn phí
+              {isTrialFree && plan.durationDays ? (
+                <span style={{ fontFamily: FONT_BODY, fontSize: 14, fontWeight: 500 }}>
+                  {" "}
+                  {plan.durationDays} ngày
+                </span>
+              ) : null}
             </span>
           )}
         </div>
@@ -473,7 +516,50 @@ const PlanCard = ({
               marginTop: 8,
             }}
           >
-            ≈ 49.900đ/tháng — tiết kiệm nhất
+            ≈ {fmt(plan.monthlyHint)}/tháng
+          </p>
+        )}
+
+        {plan.description && (
+          <p
+            style={{
+              fontFamily: FONT_BODY,
+              fontSize: 12.5,
+              color: C.textSub,
+              lineHeight: 1.6,
+              margin: "10px 0 0",
+            }}
+          >
+            {plan.description}
+          </p>
+        )}
+
+        {plan.endsAt && (
+          <p
+            style={{
+              fontFamily: FONT_BODY,
+              fontSize: 11.5,
+              color: C.gold || C.textSub,
+              margin: "8px 0 0",
+            }}
+          >
+            Ưu đãi đến{" "}
+            {new Date(
+              /(Z|[+-]\d{2}:?\d{2})$/i.test(plan.endsAt) ? plan.endsAt : `${plan.endsAt}Z`
+            ).toLocaleDateString("vi-VN")}
+          </p>
+        )}
+
+        {plan.allowedEmailDomains?.length > 0 && (
+          <p
+            style={{
+              fontFamily: FONT_BODY,
+              fontSize: 11.5,
+              color: C.textSub,
+              margin: "6px 0 0",
+            }}
+          >
+            Dành cho email {plan.allowedEmailDomains.join(", ")}
           </p>
         )}
       </div>
@@ -613,12 +699,29 @@ const PlanCard = ({
             )}
             {isCurrent
               ? "Gói hiện tại của bạn"
-              : isRenewal
-                ? "Gia hạn"
-                : plan.cta}
+              : notEligible
+                ? "Không khả dụng"
+                : isRenewal
+                  ? "Gia hạn"
+                  : plan.cta}
           </>
         )}
       </motion.button>
+
+      {notEligible && plan.ineligibleReason && (
+        <p
+          style={{
+            margin: "10px 4px 0",
+            fontFamily: FONT_BODY,
+            fontSize: 11.5,
+            lineHeight: 1.55,
+            color: C.textSub,
+            textAlign: "center",
+          }}
+        >
+          {plan.ineligibleReason}
+        </p>
+      )}
     </motion.div>
   );
 };
@@ -637,7 +740,8 @@ const CheckoutModal = ({
 }) => {
   const confirmRef = useRef(null);
   const PlanIcon = plan.icon;
-  const isRenewal = subStatus?.isPremium === true;
+  const isFreeOrder = plan.price === 0; // gói dùng thử: kích hoạt ngay, không qua cổng
+  const isRenewal = !isFreeOrder && subStatus?.isPremium === true;
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -752,7 +856,7 @@ const CheckoutModal = ({
                 color: C.textSub,
               }}
             >
-              {plan.period}
+              {isFreeOrder ? ` · ${plan.durationDays} ngày` : plan.period}
             </span>
           </span>
         </div>
@@ -775,22 +879,24 @@ const CheckoutModal = ({
           </p>
         )}
 
-        {/* Cổng thanh toán */}
-        <p
-          style={{
-            margin: "20px 0 8px",
-            fontFamily: FONT_BODY,
-            fontSize: 12,
-            fontWeight: 600,
-            color: C.textSub,
-          }}
-        >
-          Thanh toán qua
-        </p>
+        {/* Cổng thanh toán (gói 0đ không cần) */}
+        {!isFreeOrder && (
+          <p
+            style={{
+              margin: "20px 0 8px",
+              fontFamily: FONT_BODY,
+              fontSize: 12,
+              fontWeight: 600,
+              color: C.textSub,
+            }}
+          >
+            Thanh toán qua
+          </p>
+        )}
         <div
           role="radiogroup"
           aria-label="Chọn cổng thanh toán"
-          style={{ display: "flex", gap: 8 }}
+          style={{ display: isFreeOrder ? "none" : "flex", gap: 8 }}
         >
           {PAYMENT_PROVIDERS.map((p) => {
             const active = provider === p.id;
@@ -831,8 +937,9 @@ const CheckoutModal = ({
             fontFamily: FONT_BODY,
           }}
         >
-          Bạn sẽ được chuyển tới cổng thanh toán. Đơn chỉ được tạo khi bạn bấm
-          “Thanh toán” và có hiệu lực trong 15 phút.
+          {isFreeOrder
+            ? "Gói dùng thử được kích hoạt ngay, không cần thanh toán. Mỗi tài khoản chỉ dùng thử một lần, kể cả khi bạn hủy giữa chừng."
+            : "Bạn sẽ được chuyển tới cổng thanh toán. Đơn chỉ được tạo khi bạn bấm “Thanh toán” và có hiệu lực trong 15 phút."}
         </p>
 
         {/* Hành động */}
@@ -892,8 +999,10 @@ const CheckoutModal = ({
                     display: "inline-block",
                   }}
                 />
-                Đang chuyển hướng…
+                {isFreeOrder ? "Đang kích hoạt…" : "Đang chuyển hướng…"}
               </>
+            ) : isFreeOrder ? (
+              "Kích hoạt dùng thử"
             ) : (
               `Thanh toán ${fmt(plan.price)}`
             )}
@@ -911,9 +1020,14 @@ const PremiumPage = () => {
   const [provider, setProvider] = useState(PAYMENT_PROVIDERS[0].id);
   const [selectedPlan, setSelectedPlan] = useState(null); // gói đang mở hộp thoại xác nhận
   const toast = useToast();
+  const navigate = useNavigate();
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const [openFaq, setOpenFaq] = useState(null);
+  // Gói đang bán lấy từ BE (cache để quay lại trang không nháy)
+  const [plans, setPlans] = useState(plansCache);
+  const [plansLoading, setPlansLoading] = useState(!plansCache);
+  const [plansError, setPlansError] = useState(false);
   const [subStatus, setSubStatus] = useState(subStatusCache);
   // Chỉ hiện trạng thái "đang tải" ở lần đầu; các lần quay lại dùng cache và cập nhật ngầm.
   const [subLoading, setSubLoading] = useState(!subStatusFetched);
@@ -955,9 +1069,27 @@ const PremiumPage = () => {
     }
   }, []);
 
+  // Gửi kèm token nên BE trả isEligible / ineligibleReason cho từng gói.
+  const refreshPlans = useCallback(async () => {
+    try {
+      const res = await paymentService.getPlans();
+      const built = buildPlans(Array.isArray(res) ? res : []);
+      plansCache = built;
+      if (aliveRef.current) {
+        setPlans(built);
+        setPlansError(false);
+      }
+    } catch {
+      if (aliveRef.current && !plansCache) setPlansError(true);
+    } finally {
+      if (aliveRef.current) setPlansLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshStatus();
-  }, [refreshStatus]);
+    refreshPlans();
+  }, [refreshStatus, refreshPlans]);
 
   // Quay lại bằng nút Back từ cổng thanh toán: trình duyệt có thể khôi phục trang từ bfcache
   // với state cũ (spinner đang quay, nút bị khóa). Reset lại và làm mới trạng thái gói.
@@ -973,12 +1105,28 @@ const PremiumPage = () => {
         );
       }
       refreshStatus();
+      refreshPlans();
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
-  }, [refreshStatus]);
+  }, [refreshStatus, refreshPlans]);
 
   const currentPlanKey = subLoading ? null : mapSubTypeToKey(subStatus);
+
+  const salePlans = plans ?? [];
+  const displayPlans = [FREE_PLAN, ...salePlans];
+  const paidPlans = salePlans.filter((p) => p.price > 0);
+  const hasPaid = paidPlans.length > 0;
+  // "Chỉ từ": giá/tháng thấp nhất trong các gói trả phí (hiển thị theo đơn vị gói đó)
+  const cheapest = hasPaid
+    ? paidPlans.reduce((a, b) =>
+        (a.price * 30) / (a.durationDays || 30) <= (b.price * 30) / (b.durationDays || 30) ? a : b
+      )
+    : null;
+  // Nút CTA cuối trang: gói nổi bật (hoặc gói trả phí đầu tiên) + gói tiết kiệm nhất còn lại
+  const ctaPrimary = paidPlans.find((p) => p.featured) ?? paidPlans[0] ?? null;
+  const ctaSecondary =
+    paidPlans.find((p) => p.id !== ctaPrimary?.id && p.badge?.startsWith("Tiết kiệm")) ?? null;
 
   // Bước 1: chỉ MỞ hộp thoại xác nhận — chưa tạo đơn.
   const openCheckout = useCallback(
@@ -1004,6 +1152,23 @@ const PremiumPage = () => {
         planId: selectedPlan.id,
         paymentProvider: provider,
       });
+      // Gói 0đ / dùng thử: BE đã kích hoạt xong, không có URL thanh toán → làm mới trạng thái
+      // rồi chuyển thẳng tới trang kết quả.
+      if (result?.paymentMethod === "none") {
+        try {
+          await authService.refreshPremiumStatus();
+        } catch {
+          /* làm mới lỗi không làm việc kích hoạt bị coi là thất bại */
+        }
+        subStatusCache = null;
+        toast.success?.("Đã kích hoạt gói dùng thử!");
+        setSelectedPlan(null);
+        setLoading(null);
+        navigate(
+          `/payment/result?status=success&orderCode=${encodeURIComponent(result.orderCode ?? "")}`
+        );
+        return;
+      }
       if (!result?.paymentUrl) throw new Error("Không nhận được URL thanh toán.");
       redirectingRef.current = true;
       // VNPay: chuyển trang; SePay: POST form có chữ ký. Giữ `loading` để chặn bấm đúp
@@ -1014,6 +1179,7 @@ const PremiumPage = () => {
         err.message || "Không thể tạo đơn thanh toán. Vui lòng thử lại."
       );
       setLoading(null); // giữ hộp thoại mở để người dùng thử lại
+      refreshPlans(); // gói có thể vừa ngừng bán / hết lượt: cập nhật lại điều kiện
     }
   };
 
@@ -1116,6 +1282,7 @@ const PremiumPage = () => {
           </p>
 
           {/* Pill giá mềm mại, có quầng sáng nhẹ phía sau — thay cho con dấu đóng nghiêng góc cạnh */}
+          {cheapest && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1173,11 +1340,12 @@ const PremiumPage = () => {
                   letterSpacing: "0.02em",
                 }}
               >
-                69.000đ
-                <span style={{ fontSize: 14, fontWeight: 600 }}>/tháng</span>
+                {fmt(cheapest.price)}
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{cheapest.period}</span>
               </span>
             </div>
           </motion.div>
+          )}
 
           <div
             style={{
@@ -1215,6 +1383,7 @@ const PremiumPage = () => {
       <section
         style={{ padding: "0 24px 88px", maxWidth: 1040, margin: "0 auto" }}
       >
+        {hasPaid && (
         <div
           style={{
             display: "flex",
@@ -1282,28 +1451,70 @@ const PremiumPage = () => {
             })}
           </div>
         </div>
+        )}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))",
-            gap: 22,
-            alignItems: "stretch",
-          }}
-        >
-          {PLANS.map((plan) => (
-            <PlanCard
-              key={plan.key}
-              plan={plan}
-              loading={loading}
-              onSubscribe={openCheckout}
-              skipIntro={skipIntro}
-              isCurrent={currentPlanKey === plan.key}
-              subLoading={subLoading}
-              subStatus={subStatus}
-            />
-          ))}
-        </div>
+        {plansLoading && !plans ? (
+          <p
+            style={{
+              textAlign: "center",
+              color: C.textSub,
+              fontFamily: FONT_BODY,
+              fontSize: 14,
+              padding: "40px 0",
+            }}
+          >
+            Đang tải các gói…
+          </p>
+        ) : plansError && !plans ? (
+          <div style={{ textAlign: "center", padding: "40px 0" }}>
+            <p style={{ color: C.textSub, fontFamily: FONT_BODY, fontSize: 14, margin: "0 0 14px" }}>
+              Không tải được danh sách gói. Vui lòng thử lại.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setPlansLoading(true);
+                setPlansError(false);
+                refreshPlans();
+              }}
+              style={{
+                padding: "11px 26px",
+                borderRadius: RADIUS.btn,
+                border: `1px solid ${C.borderBright}`,
+                background: "transparent",
+                color: C.text,
+                fontFamily: FONT_BODY,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Thử lại
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))",
+              gap: 22,
+              alignItems: "stretch",
+            }}
+          >
+            {displayPlans.map((plan) => (
+              <PlanCard
+                key={plan.key}
+                plan={plan}
+                loading={loading}
+                onSubscribe={openCheckout}
+                skipIntro={skipIntro}
+                isCurrent={currentPlanKey === plan.key}
+                subLoading={subLoading}
+                subStatus={subStatus}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ══ BENEFITS — bảng thông tin kiểu rạp chiếu ═════════════════════════ */}
@@ -1511,9 +1722,10 @@ const PremiumPage = () => {
               flexWrap: "wrap",
             }}
           >
+            {ctaPrimary && (
             <motion.button
-              onClick={() => openCheckout(PLANS[1])}
-              disabled={!!loading}
+              onClick={() => openCheckout(ctaPrimary)}
+              disabled={!!loading || ctaPrimary.isEligible === false}
               whileHover={{ scale: 1.03, y: -1 }}
               whileTap={{ scale: 0.98 }}
               transition={SPRING}
@@ -1533,12 +1745,14 @@ const PremiumPage = () => {
               }}
             >
               <Crown size={15} />
-              Đăng ký Premium Tháng
+              Đăng ký {ctaPrimary.name}
             </motion.button>
+            )}
 
+            {ctaSecondary && (
             <motion.button
-              onClick={() => openCheckout(PLANS[2])}
-              disabled={!!loading}
+              onClick={() => openCheckout(ctaSecondary)}
+              disabled={!!loading || ctaSecondary.isEligible === false}
               whileHover={{ scale: 1.03, y: -1 }}
               whileTap={{ scale: 0.98 }}
               transition={SPRING}
@@ -1558,8 +1772,9 @@ const PremiumPage = () => {
               }}
             >
               <Gift size={15} />
-              Tiết kiệm 27,7% — Gói Năm
+              {ctaSecondary.badge} — {ctaSecondary.name}
             </motion.button>
+            )}
           </div>
         </div>
       </section>

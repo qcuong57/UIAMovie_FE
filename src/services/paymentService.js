@@ -2,6 +2,7 @@
 // ─────────────────────────────────────────────────────────────────
 // Payment & Subscription API Service
 // Kết nối với PaymentController.cs tại /api/payments/*
+// và AdminPlanController.cs tại /api/admin/plans
 //
 // LƯU Ý: axiosInstance trong axios.js đã có interceptor:
 //   (response) => response.data
@@ -17,8 +18,19 @@ const paymentService = {
   // ── Plans ────────────────────────────────────────────────────────────────────
 
   /**
-   * GET /api/payments/plans
-   * @returns {Promise<Array<{ planId, name, description, priceVnd, priceDisplay, durationDays, isMostPopular, features }>>}
+   * GET /api/payments/plans — các gói ĐANG BÁN (do admin cấu hình, không còn hardcode).
+   * Gửi kèm token (nếu đã đăng nhập) để BE tính isEligible / ineligibleReason cho từng gói.
+   * @returns {Promise<Array<{
+   *   planId, name, description,
+   *   priceVnd,            // 0 = gói miễn phí / dùng thử
+   *   originalPriceVnd,    // giá gốc để gạch ngang (có thể null)
+   *   priceDisplay, durationDays, isMostPopular, features,
+   *   isTrial,
+   *   allowedEmailDomains, // string[]; rỗng = ai cũng mua được (vd gói sinh viên: ['edu.vn'])
+   *   endsAt,              // hạn chót ưu đãi (UTC) hoặc null
+   *   isEligible,          // user hiện tại có mua được không (ẩn danh: luôn true)
+   *   ineligibleReason     // lý do nếu isEligible = false
+   * }>>}
    */
   getPlans: async () => {
     try {
@@ -38,9 +50,16 @@ const paymentService = {
    *
    *   - paymentMethod = "redirect"  (VNPay): chuyển trang tới paymentUrl
    *   - paymentMethod = "form_post" (SePay): POST form tới paymentUrl kèm formFields
-   * Dùng paymentService.redirectToPayment(order) để xử lý cả hai trường hợp.
+   *   - paymentMethod = "none"      (gói miễn phí / dùng thử): BE đã kích hoạt xong,
+   *                                 KHÔNG có paymentUrl, KHÔNG redirect. Caller làm mới trạng thái
+   *                                 gói rồi chuyển tới trang kết quả.
+   * Dùng paymentService.redirectToPayment(order) cho hai trường hợp đầu.
+   *
+   * BE trả 400 { message } khi gói không tồn tại / ngừng bán / user không đủ điều kiện
+   * (đã dùng thử, sai domain email, ...) — message được ném lại nguyên văn.
    *
    * @param {{ planId: string, paymentProvider?: 'vnpay'|'sepay' }} param
+   *   paymentProvider bị BE bỏ qua với gói miễn phí.
    */
   createOrder: async ({ planId, paymentProvider = 'vnpay' }) => {
     try {
@@ -48,6 +67,9 @@ const paymentService = {
         planId,
         paymentProvider,
       });
+
+      // Gói 0đ: đã kích hoạt ở server, không có URL thanh toán
+      if (response?.paymentMethod === 'none') return response;
 
       if (!response?.paymentUrl) {
         console.error('[paymentService] Unexpected response shape:', response);
@@ -75,11 +97,17 @@ const paymentService = {
    * Chuyển user sang cổng thanh toán theo đúng kiểu BE yêu cầu.
    *   - "form_post" (SePay): tạo form ẩn rồi POST (giữ ĐÚNG thứ tự formFields BE trả về)
    *   - còn lại (VNPay): chuyển trang tới paymentUrl
+   * KHÔNG gọi với paymentMethod = "none" (gói miễn phí không có URL).
    *
    * @param {{ paymentUrl: string, paymentMethod?: string, formFields?: Record<string,string> }} order
    */
   redirectToPayment: (order) => {
-    if (order?.paymentMethod === 'form_post') {
+    if (order?.paymentMethod === 'none' || !order?.paymentUrl) {
+      console.warn('[paymentService] redirectToPayment called without a payment URL:', order);
+      return;
+    }
+
+    if (order.paymentMethod === 'form_post') {
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = order.paymentUrl;
@@ -105,8 +133,9 @@ const paymentService = {
 
   /**
    * GET /api/payments/subscription-status
-   *   { subscriptionType: 'Free'|'Premium', isPremium, expiredAt, daysRemaining, isExpiringSoon }
-   * LƯU Ý: subscriptionType KHÔNG cho biết gói tháng hay năm (BE không lưu planId trên subscription).
+   *   { subscriptionType: 'Free'|'Premium', isPremium, expiredAt, daysRemaining, isExpiringSoon,
+   *     planId, planName }
+   * planId / planName: gói của đơn đã kích hoạt gần nhất; null khi admin cấp tay hoặc không còn Premium.
    */
   getSubscriptionStatus: async () => {
     try {
@@ -121,7 +150,8 @@ const paymentService = {
 
   /**
    * GET /api/payments/history
-   * status: 'pending' | 'success' | 'failed' | 'expired' | 'cancelled' (chữ thường); provider: 'vnpay' | 'sepay'
+   * status: 'pending' | 'success' | 'failed' | 'expired' | 'cancelled' (chữ thường);
+   * provider: 'vnpay' | 'sepay' | 'free' ('free' = gói miễn phí / dùng thử, amount = 0)
    * 'cancelled' = đơn bị thay bằng đơn mới (user chọn lại gói). Trang lịch sử thanh toán nên hiển thị "Đã thay thế".
    * @returns {Promise<Array<{ id, orderCode, planName, amount, provider, status, failureReason, createdAt, paidAt }>>}
    */
@@ -154,6 +184,7 @@ const paymentService = {
    * User tự hủy gói Premium của chính mình.
    * DELETE /api/payments/subscription/me
    * BE xóa luôn gói (mất quyền Premium ngay), không giữ đến hết kỳ.
+   * Hủy trong lúc dùng thử thì KHÔNG dùng thử lại được (lượt dùng thử đã được tính).
    *
    * @returns {Promise<{ message: string }>}
    */
@@ -189,10 +220,11 @@ const paymentService = {
    * [Admin] Cấp hoặc gia hạn Premium cho user bất kỳ.
    * POST /api/payments/admin/grant-subscription
    *
+   * `planId` là mã gói bất kỳ trong bảng gói (lấy danh sách từ adminGetPlans), kể cả gói đã tắt bán.
    * `expiredAt` là BẮT BUỘC và phải ở tương lai (ISO string). Thiếu thì BE hiểu là năm 0001
    * và trả 400 "Ngày hết hạn phải ở tương lai.".
    *
-   * @param {{ userId: string, planId: 'monthly_premium'|'yearly_premium', expiredAt: string }} dto
+   * @param {{ userId: string, planId: string, expiredAt: string }} dto
    */
   adminGrantSubscription: async (dto) => {
     try {
@@ -218,11 +250,74 @@ const paymentService = {
     }
   },
 
+  // ── Admin: Plans (CRUD động) ──────────────────────────────────────────────────
+
+  /**
+   * [Admin] GET /api/admin/plans — TẤT CẢ gói, kể cả đã tắt bán.
+   * @returns {Promise<Array<{
+   *   id, planId, name, description, priceVnd, originalPriceVnd, durationDays,
+   *   isMostPopular, isActive, sortOrder, features, isTrial, maxPerUser,
+   *   allowedEmailDomains, startsAt, endsAt
+   * }>>}
+   */
+  adminGetPlans: async () => {
+    try {
+      return await axiosInstance.get('/admin/plans');
+    } catch (error) {
+      console.error('[paymentService] Error fetching admin plans:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] POST /api/admin/plans — tạo gói mới.
+   * `planId` (a-z, 0-9, gạch dưới, 3–50 ký tự) không đổi được sau khi tạo.
+   * Giá 0 = gói dùng thử: BE tự đặt isTrial = true và maxPerUser mặc định 1.
+   * @param {object} dto - xem UpsertPlanDTO (planId, name, description, priceVnd, originalPriceVnd,
+   *   durationDays, isMostPopular, isActive, sortOrder, features[], isTrial, maxPerUser,
+   *   allowedEmailDomains, startsAt, endsAt)
+   */
+  adminCreatePlan: async (dto) => {
+    try {
+      return await axiosInstance.post('/admin/plans', dto);
+    } catch (error) {
+      console.error('[paymentService] Error creating plan:', error);
+      throw new Error(getApiErrorMessage(error, 'Không thể tạo gói. Vui lòng thử lại.'));
+    }
+  },
+
+  /**
+   * [Admin] PUT /api/admin/plans/{id} — cập nhật gói (id = Guid, không phải planId).
+   * Sửa gói không ảnh hưởng đơn cũ (đơn đã lưu sẵn tên, giá, số ngày lúc mua).
+   */
+  adminUpdatePlan: async (id, dto) => {
+    try {
+      return await axiosInstance.put(`/admin/plans/${id}`, dto);
+    } catch (error) {
+      console.error('[paymentService] Error updating plan:', error);
+      throw new Error(getApiErrorMessage(error, 'Không thể cập nhật gói. Vui lòng thử lại.'));
+    }
+  },
+
+  /**
+   * [Admin] PATCH /api/admin/plans/{id}/active — bật/tắt bán gói.
+   * Không có xóa cứng để giữ nguyên lịch sử đơn.
+   */
+  adminSetPlanActive: async (id, isActive) => {
+    try {
+      return await axiosInstance.patch(`/admin/plans/${id}/active`, { isActive });
+    } catch (error) {
+      console.error('[paymentService] Error toggling plan:', error);
+      throw new Error(getApiErrorMessage(error, 'Không thể đổi trạng thái gói. Vui lòng thử lại.'));
+    }
+  },
+
   // ── Admin: Revenue Summary ────────────────────────────────────────────────────
 
   /**
    * [Admin] GET /api/payments/admin/revenue/summary
    * Ngày/tháng tính theo giờ VN; tiền là VND thật.
+   * Đơn dùng thử (provider 'free', 0đ) KHÔNG được tính vào các chỉ số thanh toán dưới đây.
    * @returns {Promise<{
    *   totalRevenue,         // GỘP: số khách đã trả qua cổng, chưa trừ phí cổng / hoàn tiền
    *   totalOrders, successOrders, pendingOrders, failedOrders, expiredOrders, cancelledOrders,
@@ -295,8 +390,8 @@ const paymentService = {
    *
    * @param {{
    *   status?: string,       // 'pending' | 'success' | 'failed' | 'expired' | 'cancelled' (giá trị lạ → 400)
-   *   planId?: string,       // 'monthly_premium' | 'yearly_premium'
-   *   provider?: string,
+   *   planId?: string,       // mã gói bất kỳ (lấy danh sách từ adminGetPlans)
+   *   provider?: string,     // 'vnpay' | 'sepay' | 'free'
    *   search?: string,       // email hoặc orderCode
    *   from?: string,         // 'yyyy-MM-dd' (ngày VN), lọc theo ngày tạo đơn
    *   to?: string,           // 'yyyy-MM-dd' (ngày VN), gồm cả ngày này; phải >= from

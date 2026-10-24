@@ -13,6 +13,7 @@ import AdminReviews from "../../components/admin/AdminReviews";
 import AdminUsers from "../../components/admin/AdminUsers";
 import AdminPersons from "../../components/admin/AdminPersons";
 import AdminRevenue from "../../components/admin/AdminRevenue";
+import AdminPlans from "../../components/admin/AdminPlans";
 import AdminAds from "../../components/admin/AdminAds";
 
 export default function AdminPage() {
@@ -31,6 +32,8 @@ export default function AdminPage() {
         return <AdminDashboard />;
       case "revenue":
         return <AdminRevenue />;
+      case "plans":
+        return <AdminPlans />;
       case "ads":
         return <AdminAds />;
       case "movies":

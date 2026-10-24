@@ -18,6 +18,7 @@ import {
   DollarSign,
   MonitorPlay,
   Megaphone,
+  Crown,
 } from "lucide-react";
 import authService from "../../services/authService";
 
@@ -34,6 +35,7 @@ import AnnouncementModal from "../admin/announcement/AdminBroadcastModal";
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "revenue", label: "Doanh thu", icon: DollarSign },
+  { key: "plans", label: "Gói Premium", icon: Crown },
   { key: "ads", label: "Quảng cáo", icon: MonitorPlay },
   { key: "movies", label: "Phim", icon: Film },
   { key: "tvshows", label: "TV Shows", icon: Tv },
@@ -126,6 +128,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
     users: "Người dùng",
     persons: "Diễn viên & Đạo diễn",
     revenue: "Doanh thu & Thanh toán",
+    plans: "Quản lý Gói Premium",
     ads: "Quản lý Quảng cáo",
   };
   const initials =
