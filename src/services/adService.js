@@ -305,10 +305,14 @@ const adService = {
    *   - Nếu content có override ở position X → dùng override, bỏ global slots ở position đó.
    *   - Nếu không có override → dùng global slots (share cache theo contentType).
    *
-   * NOTE: parentShowId đã bị loại bỏ — BE không còn cần merge show-level ads thủ công.
+   * Tập phim (Episode): truyền `parentId` = id của bộ (TvShow). Nếu tập không có override riêng,
+   * BE dùng override của CẢ BỘ; slot phạm vi "TvShow" cũng áp cho mọi tập.
    *
    * @param {string} contentType - "Movie" | "TvShow" | "Episode"
    * @param {string} contentId   - UUID của content
+   * @param {number} [durationSeconds] - Tổng thời lượng video (giây). BẮT BUỘC để BE dựng
+   *                                     mid-roll theo % thời lượng ở chế độ Random.
+   * @param {string} [parentId]        - (Episode) UUID của bộ phim
    *
    * @returns {Promise<ContentAdsDTO>}
    *   {
@@ -324,14 +328,83 @@ const adService = {
    *   midRollOffsetSeconds, displayOrder
    * }
    */
-  getAdsForContent: async (contentType, contentId) => {
+  getAdsForContent: async (contentType, contentId, durationSeconds, parentId) => {
     try {
+      const params = {};
+      if (durationSeconds > 0) params.durationSeconds = Math.floor(durationSeconds);
+      if (parentId) params.parentId = parentId;
       const response = await axiosInstance.get(
-        `/ads/content/${contentType}/${contentId}`
+        `/ads/content/${contentType}/${contentId}`,
+        { params },
       );
       return response;
     } catch (error) {
       console.error('[adService] Error fetching ads for content:', error);
+      throw error;
+    }
+  },
+
+  // ── Schedule settings (Admin) ───────────────────────────────────────────────
+
+  /** [Admin] Lấy cấu hình lập lịch quảng cáo (Fixed | Random + tham số). */
+  getScheduleSettings: async () => {
+    try {
+      return await axiosInstance.get('/ads/schedule-settings');
+    } catch (error) {
+      console.error('[adService] Error fetching schedule settings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Lưu cấu hình lập lịch.
+   * @param {Object} s - { mode, preRollWeights[], midRollIntervalRatio, jitterRatio,
+   *   minMidRollGapSeconds, endGuardSeconds, minDurationForMidRollSeconds, maxMidRolls, postRollChance }
+   */
+  updateScheduleSettings: async (s) => {
+    try {
+      return await axiosInstance.put('/ads/schedule-settings', s, { headers: JSON_HEADERS });
+    } catch (error) {
+      console.error('[adService] Error updating schedule settings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * [Admin] Xem thử 1 lịch random mẫu bằng chính thuật toán của BE.
+   * @param {{ contentType: string, durationSeconds: number, options?: Object }} req
+   * @returns {Promise<ContentAdsDTO>}
+   */
+  /**
+   * [Admin] Thứ tự hiển thị tiếp theo (max + 1) cho cùng vị trí + phạm vi, tính trên mọi quảng cáo.
+   * @param {{ position: string, appliesTo?: string, contentType?: string, contentId?: string }} q
+   *   Global Slot: position (+ appliesTo, bỏ trống = tất cả). Override: position + contentType + contentId.
+   * @returns {Promise<{ next: number }>}
+   */
+  getNextDisplayOrder: async (q) => {
+    try {
+      return await axiosInstance.get('/ads/next-display-order', { params: q });
+    } catch (error) {
+      console.error('[adService] Error fetching next display order:', error);
+      throw error;
+    }
+  },
+
+  /** [Admin] Quay về cấu hình mặc định (appsettings). Trả cấu hình mặc định. */
+  resetScheduleSettings: async () => {
+    try {
+      return await axiosInstance.delete('/ads/schedule-settings');
+    } catch (error) {
+      console.error('[adService] Error resetting schedule settings:', error);
+      throw error;
+    }
+  },
+
+  previewSchedule: async (req) => {
+    try {
+      return await axiosInstance.post('/ads/schedule-preview', req, { headers: JSON_HEADERS });
+    } catch (error) {
+      console.error('[adService] Error previewing schedule:', error);
       throw error;
     }
   },
@@ -366,14 +439,14 @@ const adService = {
    *
    * NOTE: parentShowId đã bị loại bỏ theo thiết kế mới.
    *
-   * @param {Array<{ contentType: string, contentId: string }>} items
+   * @param {Array<{ contentType: string, contentId: string, durationSeconds?: number }>} items
    * @returns {Promise<ContentAdsDTO[]>}  - cùng thứ tự với mảng đầu vào
    */
   getBulkAdsForContents: async (items) => {
     try {
       return await Promise.all(
-        items.map(({ contentType, contentId }) =>
-          adService.getAdsForContent(contentType, contentId)
+        items.map(({ contentType, contentId, durationSeconds, parentId }) =>
+          adService.getAdsForContent(contentType, contentId, durationSeconds, parentId)
         )
       );
     } catch (error) {

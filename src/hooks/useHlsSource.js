@@ -150,7 +150,17 @@ export default function useHlsSource({
     return () => v.removeEventListener("timeupdate", onTime);
   }, [useMse, url, videoRef]);
 
-  // 3) Ad bắt đầu → tháo hls; ad kết thúc → gắn lại
+  // Tháo hls khỏi <video> ĐỒNG BỘ, để useAdManager gọi TRƯỚC khi đổi v.src sang ad
+  // (tránh MediaSource còn mở / đang append lúc src bị đổi). Idempotent nhờ wasAdRef.
+  const detachForAd = useCallback(() => {
+    const hls = hlsRef.current;
+    if (!hls || wasAdRef.current) return;
+    wasAdRef.current = true;
+    hls.stopLoad();
+    hls.detachMedia();
+  }, []);
+
+  // 3) Ad bắt đầu → tháo hls (dự phòng, thường đã tháo ở detachForAd); ad kết thúc → gắn lại
   useEffect(() => {
     if (!useMse) return;
     const hls = hlsRef.current;
@@ -158,9 +168,7 @@ export default function useHlsSource({
     if (!hls || !v) return;
 
     if (isAd) {
-      wasAdRef.current = true;
-      hls.stopLoad();
-      hls.detachMedia(); // chỉ xoá src nếu src là blob của chính nó → không đụng tới file ad
+      detachForAd();
       return;
     }
     if (!wasAdRef.current) return;
@@ -168,7 +176,7 @@ export default function useHlsSource({
 
     hls.attachMedia(v); // ghi đè src m3u8 mà resumeContent() vừa đặt
     hls.startLoad(lastTimeRef.current);
-  }, [isAd, useMse, videoRef]);
+  }, [isAd, useMse, videoRef, detachForAd]);
 
   // 4) Native HLS (iOS/Safari): hls.js không chạy → tự đọc master playlist để có menu chất lượng.
   //    Lỗi CORS/mạng/không phải master playlist → levels rỗng → menu chỉ còn "Tốc độ phát".
@@ -263,5 +271,5 @@ export default function useHlsSource({
     [videoRef],
   );
 
-  return { useMse, levels, level, setLevel, autoHeight };
+  return { useMse, levels, level, setLevel, autoHeight, detachForAd };
 }

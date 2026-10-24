@@ -96,6 +96,13 @@ export default function VideoPlayer({
   const { status, playback, error, reload, refresh } = usePlayback(playbackLoader, playbackKey);
   const videoUrl = status === "ready" ? (playback?.playbackUrl ?? null) : null;
 
+  const { show, setShow, resetTimer, hideNow } = useControlsVisibility(videoRef);
+
+  // Thời lượng THẬT do <video> báo, dùng để BE dựng mid-roll theo %. playback.durationSeconds và runtime TMDB
+  // đều có thể lấy từ DB (không phải file thực tế) nên chỉ là dự phòng: lệch thì mid-roll nằm sau cuối
+  // video và không bao giờ phát.
+  const [mediaDuration, setMediaDuration] = useState(0);
+
   const adManager = useAdManager({
     isFreeUser,
     contentType: adContent.type,
@@ -105,9 +112,14 @@ export default function VideoPlayer({
     contentUrl: videoUrl,
     useMse: shouldUseMse(videoUrl, playback?.isHls),
     resumeSeconds: effectiveResume,
+    durationSeconds: mediaDuration,
+    fallbackDurationSeconds: playback?.durationSeconds || fallbackDurationSec,
+    // Post-roll xong: làm đúng việc onEnded của phim (hiện controls, lưu 100%)
+    onPostRollEnd: () => {
+      setShow(true);
+      saveRef.current?.(100, true);
+    },
   });
-
-  const { show, setShow, resetTimer, hideNow } = useControlsVisibility(videoRef);
 
   const core = useVideoPlayerCore({
     videoRef,
@@ -124,6 +136,9 @@ export default function VideoPlayer({
     },
   });
   const { hasVideo, isAd, playing } = core;
+  useEffect(() => {
+    if (core.mediaDuration > 0) setMediaDuration(core.mediaDuration);
+  }, [core.mediaDuration]);
 
   // Popup chỉ hiện khi chưa phát gì (nếu user đã bấm play trước khi lịch sử tải xong thì thôi)
   const promptOpen =

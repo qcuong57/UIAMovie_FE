@@ -16,6 +16,7 @@ import {
   AlertCircle,
   MonitorPlay,
   CalendarRange,
+  Shuffle,
 } from "lucide-react";
 import adService from "../../services/adService";
 import { useToast } from "./common/Toast";
@@ -33,6 +34,7 @@ import AdEditModal from "./ads/AdEditModal";
 import AdDeleteModal from "./ads/AdDeleteModal";
 import AdDetailPanel from "./ads/AdDetailPanel";
 import AdScheduleModal from "./ads/AdScheduleModal";
+import AdScheduleSettingsModal from "./ads/AdScheduleSettingsModal";
 
 const PAGE_SIZE = 15;
 
@@ -173,6 +175,56 @@ const GhostBtn = ({ onClick, children, accent, icon: Icon }) => {
   );
 };
 
+// ── Banner chế độ lịch phát ───────────────────────────────────────────────────
+const ScheduleModeBanner = ({ settings, onConfigure }) => {
+  const isRandom = settings.mode === 1 || settings.mode === "Random";
+  const weights = settings.preRollWeights ?? [];
+  const wSum = weights.reduce((a, w) => a + w, 0);
+  const avgPre = wSum > 0 ? weights.reduce((a, w, i) => a + i * w, 0) / wSum : 0;
+  const summary = isRandom
+    ? `Pre-roll TB ~${avgPre.toFixed(1)} ad · mid-roll mỗi ~${Math.round(settings.midRollIntervalRatio * 100)}% thời lượng (tối đa ${settings.maxMidRolls}) · post-roll ${Math.round(settings.postRollChance * 100)}%`
+    : "Phát đúng Global Slot / Override đã gắn cho từng quảng cáo";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap",
+        padding: "12px 16px",
+        marginBottom: 18,
+        borderRadius: 12,
+        background: isRandom ? T.accentLight : T.surface,
+        border: `1px solid ${isRandom ? `${T.accent}44` : T.border}`,
+      }}
+    >
+      <div
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 9,
+          flexShrink: 0,
+          background: isRandom ? T.accent : T.surfaceAlt,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Shuffle size={16} color={isRandom ? "#fff" : T.textMuted} />
+      </div>
+      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+        <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: T.text, margin: 0 }}>
+          Chế độ lịch phát: {isRandom ? "Ngẫu nhiên (kiểu YouTube)" : "Cố định"}
+        </p>
+        <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, margin: "2px 0 0" }}>{summary}</p>
+      </div>
+      <GhostBtn onClick={onConfigure} accent={!isRandom} icon={Shuffle}>
+        Cấu hình lịch phát
+      </GhostBtn>
+    </div>
+  );
+};
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
@@ -190,6 +242,8 @@ export default function AdminAds() {
   const [detailAd, setDetailAd] = useState(null);
   const [scheduleAd, setScheduleAd] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [schedSettings, setSchedSettings] = useState(null); // cấu hình lịch phát (Fixed | Random)
   const toast = useToast();
 
   const fetchAds = useCallback(
@@ -223,6 +277,11 @@ export default function AdminAds() {
   useEffect(() => {
     fetchAds();
   }, [fetchAds]);
+
+  // Cấu hình lịch phát hiện tại → banner đầu trang
+  useEffect(() => {
+    adService.getScheduleSettings().then(setSchedSettings).catch(() => setSchedSettings(null));
+  }, []);
 
   const handleToggleActive = async (ad) => {
     setTogglingId(ad.id);
@@ -297,6 +356,11 @@ export default function AdminAds() {
           </GhostBtn>
         </div>
       </div>
+
+      {/* ── Chế độ lịch phát (Fixed / Random) ── */}
+      {schedSettings && (
+        <ScheduleModeBanner settings={schedSettings} onConfigure={() => setShowSettings(true)} />
+      )}
 
       {/* ── Toolbar ── */}
       <div
@@ -785,11 +849,12 @@ export default function AdminAds() {
       <AdEditModal
         ad={editAd}
         onClose={() => setEditAd(null)}
-        onSaved={(updated) => {
+        onSaved={(updated, opts) => {
           setAds((prev) =>
             prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)),
           );
           setEditAd(null);
+          if (opts?.reload) fetchAds(page); // upload file mới → lấy URL do server sinh
         }}
       />
 
@@ -807,10 +872,17 @@ export default function AdminAds() {
         ad={scheduleAd}
         open={!!scheduleAd}
         onClose={() => setScheduleAd(null)}
-        onScheduled={() => {
+        onScheduled={() => fetchAds(page)}
+        onOpenSettings={() => {
           setScheduleAd(null);
-          fetchAds(page);
+          setShowSettings(true);
         }}
+      />
+
+      <AdScheduleSettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSaved={setSchedSettings}
       />
 
       <AnimatePresence>

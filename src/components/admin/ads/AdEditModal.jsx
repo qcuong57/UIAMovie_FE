@@ -1,6 +1,6 @@
 // src/components/admin/ads/AdEditModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Link, Save, MonitorPlay, RotateCcw, Image as ImageIcon } from 'lucide-react';
+import { X, Upload, Link, Save, MonitorPlay, RotateCcw, Image as ImageIcon, CalendarRange, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import adService from '../../../services/adService';
 import { useToast } from '../common/Toast';
@@ -50,6 +50,7 @@ function ToggleSwitch({ value, onChange, label }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <button
+        type="button" role="switch" aria-checked={!!value}
         onClick={() => onChange(!value)}
         style={{
           width: 42, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', padding: 3,
@@ -199,7 +200,7 @@ function ProgressBar({ percent }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-export default function AdEditModal({ ad, onClose, onSaved }) {
+export default function AdEditModal({ ad, onClose, onSaved, onSchedule }) {
   const [form, setForm] = useState({
     title: '', durationSeconds: '', skipAfterSeconds: '', clickThroughUrl: '', isActive: true,
   });
@@ -213,6 +214,13 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
   const [progress,    setProgress]    = useState(0);
   const [errors,      setErrors]      = useState({});
   const toast = useToast();
+  const [settings, setSettings] = useState(null); // Fixed | Random
+
+  // Chế độ lịch phát hiện tại → giải thích tác động của việc bật / tắt quảng cáo
+  useEffect(() => {
+    if (!ad) return;
+    adService.getScheduleSettings().then(setSettings).catch(() => setSettings(null));
+  }, [ad?.id]);
 
   // Sync form khi ad thay đổi
   useEffect(() => {
@@ -243,6 +251,14 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
       e.durationSeconds = 'Thời lượng phải > 0';
     if (form.skipAfterSeconds && (isNaN(+form.skipAfterSeconds) || +form.skipAfterSeconds < 0))
       e.skipAfterSeconds = 'Giá trị không hợp lệ';
+    else if (form.skipAfterSeconds && +form.skipAfterSeconds > +form.durationSeconds)
+      e.skipAfterSeconds = 'Không được lớn hơn thời lượng';
+    if (form.clickThroughUrl.trim() && !/^https?:\/\//i.test(form.clickThroughUrl.trim()))
+      e.clickThroughUrl = 'URL phải bắt đầu bằng http:// hoặc https://';
+    if (videoSource === 'url' && videoUrl.trim() && !/^https?:\/\//i.test(videoUrl.trim()))
+      e.video = 'URL video phải bắt đầu bằng http:// hoặc https://';
+    if (brandImageSource === 'url' && brandImageUrl.trim() && !/^https?:\/\//i.test(brandImageUrl.trim()))
+      e.brandImage = 'URL ảnh phải bắt đầu bằng http:// hoặc https://';
     if (videoSource === 'upload' && !videoFile)
       e.video = 'Chọn file video để upload';
     if (videoSource === 'url' && !videoUrl.trim())
@@ -261,8 +277,8 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
     try {
       const dto = {
         title:           form.title.trim(),
-        durationSeconds: parseInt(form.durationSeconds),
-        skipAfterSeconds: form.skipAfterSeconds ? parseInt(form.skipAfterSeconds) : null,
+        durationSeconds: parseInt(form.durationSeconds, 10),
+        skipAfterSeconds: form.skipAfterSeconds ? parseInt(form.skipAfterSeconds, 10) : null,
         clickThroughUrl:  form.clickThroughUrl.trim() || null,
         isActive:         form.isActive,
       };
@@ -272,11 +288,13 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
       if (brandImageSource === 'url')    dto.brandImageUrl  = brandImageUrl.trim();
 
       await adService.updateAd(ad.id, dto, (pct) => setProgress(pct));
+      // Không đẩy File vào state của cha; upload file → URL mới do server sinh nên báo cha nạp lại
+      const { videoFile: _vf, brandImageFile: _bf, videoUrl: _vu, brandImageUrl: _bu, ...plain } = dto;
       onSaved?.({
-        ...ad, ...dto,
+        ...ad, ...plain,
         videoUrl: videoSource === 'url' ? videoUrl.trim() : ad.videoUrl,
         brandImageUrl: brandImageSource === 'url' ? brandImageUrl.trim() : ad.brandImageUrl,
-      });
+      }, { reload: videoSource === 'upload' || brandImageSource === 'upload' });
       toast.success(`Đã cập nhật quảng cáo "${form.title.trim()}"`);
     } catch (err) {
       toast.error(err?.response?.data?.message ?? err?.message ?? 'Có lỗi xảy ra');
@@ -290,6 +308,13 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
 
   const isOpen = !!ad;
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape' && !saving) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, saving, onClose]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -302,7 +327,7 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
           />
 
-          <motion.div key="modal"
+          <motion.div key="modal" role="dialog" aria-modal="true" aria-label="Chỉnh sửa quảng cáo"
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -341,6 +366,38 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
                 />
               </div>
 
+              {/* Tác động tới lịch phát (đồng bộ với chế độ Cố định / Ngẫu nhiên) */}
+              {(() => {
+                const random = settings?.mode === 1 || settings?.mode === 'Random';
+                const slotCount = ad?.globalSlotCount ?? ad?.globalSlots?.length;
+                const notes = [];
+                if (!form.isActive)
+                  notes.push(random
+                    ? 'Quảng cáo tạm dừng sẽ không nằm trong kho ngẫu nhiên và không được phát.'
+                    : 'Quảng cáo tạm dừng sẽ không được phát ở bất kỳ lịch cố định nào.');
+                else if (slotCount === 0)
+                  notes.push(random
+                    ? 'Quảng cáo chưa được gắn Global Slot nào nên chưa nằm trong kho ngẫu nhiên.'
+                    : 'Quảng cáo chưa được gắn lịch phát nào nên chưa được phát.');
+                if (!notes.length) return null;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 9, background: '#FFFBEB', border: '1px solid rgba(217,119,6,0.25)' }}>
+                    <AlertCircle size={14} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <div style={{ fontFamily: FONT, fontSize: 12.5, color: '#92400E', lineHeight: 1.5 }}>
+                      {notes.join(' ')}
+                      {onSchedule && form.isActive && (
+                        <>
+                          {' '}
+                          <button type="button" onClick={() => onSchedule(ad)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', fontWeight: 700, textDecoration: 'underline', fontFamily: FONT, fontSize: 12.5 }}>
+                            <CalendarRange size={11} style={{ verticalAlign: '-1px' }} /> Gắn lịch phát
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <Field label="Tên quảng cáo" error={errors.title}>
                 <LightInput value={form.title} onChange={setF('title')} placeholder="VD: Nike Summer 2025" error={errors.title} />
               </Field>
@@ -354,8 +411,8 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
                 </Field>
               </div>
 
-              <Field label="Click-through URL">
-                <LightInput value={form.clickThroughUrl} onChange={setF('clickThroughUrl')} placeholder="https://example.com" />
+              <Field label="Click-through URL" error={errors.clickThroughUrl}>
+                <LightInput value={form.clickThroughUrl} onChange={setF('clickThroughUrl')} placeholder="https://example.com" error={errors.clickThroughUrl} />
               </Field>
 
               {/* Video */}
@@ -419,7 +476,7 @@ export default function AdEditModal({ ad, onClose, onSaved }) {
               </div>
 
               {/* Progress */}
-              {saving && videoSource === 'upload' && (
+              {saving && (videoSource === 'upload' || brandImageSource === 'upload') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: FONT, fontSize: 12, color: T.textSub }}>Đang upload…</span>

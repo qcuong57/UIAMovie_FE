@@ -120,6 +120,16 @@ export default function useVideoPlayerCore({
   });
   const { useMse } = hls;
 
+  // Đăng ký cho useAdManager: tháo hls.js TRƯỚC khi nó đổi v.src sang ad
+  const { beforeAdRef } = adManager;
+  const { detachForAd } = hls;
+  useEffect(() => {
+    beforeAdRef.current = detachForAd;
+    return () => {
+      beforeAdRef.current = null;
+    };
+  }, [beforeAdRef, detachForAd]);
+
   const totalSec =
     (Number.isFinite(duration) && duration > 0 ? duration : 0) ||
     playback?.durationSeconds ||
@@ -395,6 +405,8 @@ export default function useVideoPlayerCore({
     progress,
     buffered,
     totalSec,
+    // Thời lượng THẬT do <video> báo (0 = chưa biết, KHÔNG gồm runtime dự phòng) → dựng lịch quảng cáo
+    mediaDuration: Number.isFinite(duration) && duration > 0 ? duration : 0,
     secondsLeft,
     centerIcon,
     skipFlash,

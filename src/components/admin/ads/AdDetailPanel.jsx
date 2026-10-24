@@ -9,6 +9,9 @@ import {
 import adService from '../../../services/adService';
 import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
+import { PositionBadge, fmtClock } from './AdTimeline';
+import AdSlotDeleteModal from './AdSlotDeleteModal';
+import { scopeLabel, scopeCovers, PLAYABLE_TYPES } from './adContentScopes';
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 const fmtDuration = (s) => {
@@ -22,14 +25,6 @@ const fmtDate = (iso) => {
   return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const POSITION_LABEL = {
-  PreRoll:  { label: 'Pre-Roll',  color: '#2563EB', bg: '#EFF6FF', border: 'rgba(37,99,235,0.2)'  },
-  MidRoll:  { label: 'Mid-Roll',  color: '#D97706', bg: '#FFFBEB', border: 'rgba(217,119,6,0.2)'  },
-  PostRoll: { label: 'Post-Roll', color: '#7C3AED', bg: '#F5F3FF', border: 'rgba(124,58,237,0.2)' },
-};
-
-const CONTENT_TYPE_LABEL = { Movie: 'Phim', TvShow: 'TV Show', Episode: 'Tập phim' };
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, children }) {
   return (
@@ -42,18 +37,6 @@ function InfoRow({ icon: Icon, label, children }) {
         <div style={{ fontFamily: FONT, fontSize: 13.5, color: T.text, fontWeight: 500 }}>{children}</div>
       </div>
     </div>
-  );
-}
-
-function PositionBadge({ position }) {
-  const cfg = POSITION_LABEL[position] ?? { label: position, color: T.textSub, bg: T.surfaceAlt, border: T.border };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '2px 8px', borderRadius: 6,
-      background: cfg.bg, border: `1px solid ${cfg.border}`,
-      fontFamily: FONT, fontSize: 11, fontWeight: 700, color: cfg.color,
-    }}>{cfg.label}</span>
   );
 }
 
@@ -74,13 +57,8 @@ function StatusBadge({ isActive }) {
 }
 
 // ── Schedule row ──────────────────────────────────────────────────────────────
-function ScheduleRow({ schedule, onToggle, onDelete, toggling, deleting }) {
-  const [confirmDel, setConfirmDel] = useState(false);
-
+function ScheduleRow({ schedule, onToggle, onRequestDelete, toggling }) {
   // GlobalSlotDTO: { slotId, appliesTo, position, midRollOffsetSeconds, displayOrder, isActive }
-  const scopeLabel = schedule.appliesTo
-    ? (CONTENT_TYPE_LABEL[schedule.appliesTo] ?? schedule.appliesTo)
-    : 'Tất cả nội dung';
 
   return (
     <div style={{
@@ -93,16 +71,14 @@ function ScheduleRow({ schedule, onToggle, onDelete, toggling, deleting }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: T.textSub }}>
-            {scopeLabel}
+            {scopeLabel(schedule.appliesTo)}
           </span>
           <ChevronRight size={11} color={T.textMuted} />
           <PositionBadge position={schedule.position} />
           {schedule.position === 'MidRoll' && schedule.midRollOffsetSeconds != null && (
-            <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>@ {fmtDuration(schedule.midRollOffsetSeconds)}</span>
+            <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}>tại {fmtClock(schedule.midRollOffsetSeconds)}</span>
           )}
-          {schedule.displayOrder > 0 && (
-            <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>#{schedule.displayOrder}</span>
-          )}
+          <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>thứ tự {schedule.displayOrder ?? 0}</span>
         </div>
 
         {/* Actions */}
@@ -120,25 +96,12 @@ function ScheduleRow({ schedule, onToggle, onDelete, toggling, deleting }) {
             }
           </button>
 
-          {/* Delete */}
-          {!confirmDel ? (
-            <button onClick={() => setConfirmDel(true)}
-              title="Gỡ slot này"
-              style={{ width: 27, height: 27, borderRadius: 6, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Trash2 size={12} color={T.red} />
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: 3 }}>
-              <button onClick={() => { onDelete(schedule); setConfirmDel(false); }} disabled={deleting}
-                style={{ padding: '3px 8px', borderRadius: 6, background: T.red, border: 'none', cursor: deleting ? 'wait' : 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#fff', opacity: deleting ? 0.6 : 1 }}>
-                {deleting ? '…' : 'Xóa'}
-              </button>
-              <button onClick={() => setConfirmDel(false)}
-                style={{ padding: '3px 8px', borderRadius: 6, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.textSub }}>
-                Hủy
-              </button>
-            </div>
-          )}
+          {/* Delete → mở modal xác nhận (giống AdScheduleModal) */}
+          <button onClick={() => onRequestDelete(schedule)}
+            title="Gỡ lịch phát này"
+            style={{ width: 27, height: 27, borderRadius: 6, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Trash2 size={12} color={T.red} />
+          </button>
         </div>
       </div>
 
@@ -151,11 +114,12 @@ function ScheduleRow({ schedule, onToggle, onDelete, toggling, deleting }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
+export default function AdDetailPanel({ ad: initialAd, onClose, onEdit, onSchedule, onScheduleChanged }) {
   const [ad,          setAd]          = useState(initialAd);
   const [loading,     setLoading]     = useState(false);
   const [togglingId,  setTogglingId]  = useState(null);
-  const [deletingId,  setDeletingId]  = useState(null);
+  const [slotToDelete, setSlotToDelete] = useState(null);
+  const [settings,     setSettings]     = useState(null); // Fixed | Random
   const toast = useToast();
 
   // Refresh chi tiết đầy đủ (kèm schedules)
@@ -175,6 +139,7 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
 
   useEffect(() => {
     loadDetail();
+    adService.getScheduleSettings().then(setSettings).catch(() => setSettings(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAd?.id]);
 
@@ -188,6 +153,7 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
           s.slotId === slot.slotId ? { ...s, isActive: !s.isActive } : s
         ),
       }));
+      onScheduleChanged?.();
     } catch (e) {
       console.error(e);
       toast.error('Không thể đổi trạng thái lịch phát');
@@ -195,23 +161,16 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
     finally { setTogglingId(null); }
   };
 
-  const handleDeleteSchedule = async (slot) => {
-    setDeletingId(slot.slotId);
-    try {
-      await adService.deleteGlobalSlot(slot.slotId);
-      setAd(prev => ({
-        ...prev,
-        globalSlots: prev.globalSlots.filter(s => s.slotId !== slot.slotId),
-      }));
-      toast.success('Đã gỡ lịch phát');
-    } catch (e) {
-      console.error(e);
-      toast.error('Không thể gỡ lịch phát');
-    }
-    finally { setDeletingId(null); }
+  // Modal xóa đã gọi API; ở đây chỉ cập nhật danh sách
+  const handleSlotDeleted = (slotId) => {
+    setAd(prev => ({ ...prev, globalSlots: (prev.globalSlots ?? []).filter(s => s.slotId !== slotId) }));
+    setSlotToDelete(null);
+    toast.success('Đã gỡ lịch phát');
+    onScheduleChanged?.();
   };
 
   const schedules = ad?.globalSlots ?? [];
+  const isRandom = settings?.mode === 1 || settings?.mode === 'Random';
 
   return (
     <>
@@ -245,6 +204,13 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
               style={{ width: 30, height: 30, borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.textSub, opacity: loading ? 0.5 : 1 }}>
               <RefreshCw size={13} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
             </button>
+            {onSchedule && (
+              <button onClick={() => onSchedule(ad)}
+                title="Lịch phát"
+                style={{ width: 30, height: 30, borderRadius: 8, background: T.accentLight, border: `1px solid ${T.accent}33`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.accent }}>
+                <CalendarRange size={13} />
+              </button>
+            )}
             <button onClick={() => onEdit?.(ad)}
               title="Chỉnh sửa"
               style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(37,99,235,0.07)', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.blue }}>
@@ -337,7 +303,7 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Layers size={14} color={T.textSub} />
               <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text }}>
-                Global Slots
+                Lịch phát (Global Slots)
               </span>
               {schedules.length > 0 && (
                 <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 99, padding: '1px 7px' }}>
@@ -347,6 +313,28 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
             </div>
           </div>
 
+          {isRandom && (
+            <div style={{ padding: '10px 12px', borderRadius: 9, background: '#EFF6FF', border: '1px solid rgba(37,99,235,0.2)', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontFamily: FONT, fontSize: 12, color: '#1D4ED8', margin: 0, lineHeight: 1.5 }}>
+                Đang ở chế độ <strong>Ngẫu nhiên</strong>: các slot chỉ cho biết quảng cáo này nằm trong kho; vị trí và thời điểm do thuật toán quyết định.
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {PLAYABLE_TYPES.map(pt => {
+                  const inPool = !!ad?.isActive && schedules.some(s => s.isActive && scopeCovers(s.appliesTo, pt));
+                  return (
+                    <span key={pt} style={{
+                      padding: '2px 9px', borderRadius: 14, fontFamily: FONT, fontSize: 11.5, fontWeight: 700,
+                      background: inPool ? '#F0FDF4' : T.surface, color: inPool ? '#16A34A' : T.textMuted,
+                      border: `1px solid ${inPool ? 'rgba(22,163,74,0.25)' : T.border}`,
+                    }}>
+                      {inPool ? '✓' : '✗'} {scopeLabel(pt)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {loading && schedules.length === 0 ? (
             <div style={{ padding: '32px 0', textAlign: 'center' }}>
               <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: 'spin 0.75s linear infinite', margin: '0 auto' }} />
@@ -355,7 +343,13 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
           ) : schedules.length === 0 ? (
             <div style={{ padding: '32px 0', textAlign: 'center' }}>
               <Layers size={24} color={T.textMuted} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.3 }} />
-              <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Chưa có global slot nào</p>
+              <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Chưa có lịch phát nào</p>
+              {onSchedule && (
+                <button onClick={() => onSchedule(ad)}
+                  style={{ marginTop: 10, padding: '7px 14px', borderRadius: 8, background: T.accent, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <CalendarRange size={13} /> Gắn lịch phát
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -364,15 +358,22 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit }) {
                   key={slot.slotId}
                   schedule={slot}
                   onToggle={handleToggleSchedule}
-                  onDelete={handleDeleteSchedule}
+                  onRequestDelete={setSlotToDelete}
                   toggling={togglingId === slot.slotId}
-                  deleting={deletingId === slot.slotId}
                 />
               ))}
             </div>
           )}
         </div>
       </motion.div>
+
+      <AdSlotDeleteModal
+        slot={slotToDelete}
+        adTitle={ad?.title}
+        isLastSlot={schedules.length === 1}
+        onClose={() => setSlotToDelete(null)}
+        onDeleted={handleSlotDeleted}
+      />
     </>
   );
 }

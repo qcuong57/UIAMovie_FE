@@ -93,6 +93,18 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - Subscription info on Profile is read from `GET /payments/subscription-status`, not from `User.SubscriptionType`, so it always matches what the paywall enforces
 - There is no money-back guarantee and no free trial; the UI no longer advertises either
 
+### 📺 Advertising (Free users)
+- Ads are shown to **Free** users only; Premium users skip them (the "no ads" benefit)
+- **Single-video architecture**: the ad plays on the *same* `<video>` element as the movie. `useAdManager` swaps `src` for the ad and puts the movie back afterwards (seeking to the saved position), and `tryStartPreRoll()` runs synchronously inside the first Play gesture so iOS autoplay rules are respected
+- **Pre-roll / mid-roll / post-roll**
+  - Mid-rolls fire from `timeupdate`. If a resume or seek jumps past an offset, that ad is treated as missed (5 s late tolerance) — old mid-rolls are never replayed in a burst
+  - Post-roll plays after the movie ends; the movie is then parked at the end (not restarted) and the normal "ended" logic runs (save 100 %, next-episode countdown)
+  - Several ads in one break play back-to-back; the next ad starts one tick later so the player's own `ended` handler never mistakes an ad ending for the movie ending
+- The schedule comes from `GET /ads/content/{type}/{id}?durationSeconds=…`. The player sends the real runtime (`movie.duration × 60` / `episode.runtime × 60`) and, for episodes, the show id as `parentId` so a show-wide override can apply. **Without a duration the server cannot place mid-rolls in Random mode**, so a movie whose runtime is empty gets pre-/post-roll only
+- **Overlay** (`AdOverlay`, flat Netflix-style): "Quảng cáo" label + seconds left, "Bỏ quảng cáo" link to `/premium`, brand card (logo, name, domain, click-through "Tìm hiểu thêm") and a skip button that unlocks after `skipAfterSeconds` (or "Không thể bỏ qua" when the ad is not skippable)
+- The Play button stays locked until the ad request finishes (success, error or a 5 s timeout), so the pre-roll can never be missed
+- **Debugging**: run `localStorage.setItem("debugAds","1")` in the console and reload — the player then prints `[ads]` logs (fetched schedule, pre/mid/post counts, due mid-rolls, post-roll trigger)
+
 ### 👤 User Profile & Account
 - Editable display name (same rules as registration)
 - Avatar: **preview only** for now. Local `blob:` URLs are neither sent to the API nor written to `localStorage`; real avatar upload needs a backend endpoint (see [Future Improvements](#-future-improvements))
@@ -113,6 +125,11 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
   - Revenue chart by month or by day, revenue by plan, and a filterable order table (status, plan, gateway, e-mail / order-code search, **created-date range**) paged with the shared `AdminPagination`
   - **Export Excel** (`GET /payments/admin/revenue/export`) uses the current status / plan / gateway / date filters (the search box is not applied). With no status selected only successful orders are exported; successful orders are filtered by **paid date**, all others by **created date**; the backend caps the file at 50,000 rows and returns a readable message when it is exceeded
   - **Time zone**: every date and month is Vietnam time (GMT+7). The UI sends plain `yyyy-MM-dd` dates (inclusive of the last day), computes the default year/month in GMT+7 instead of the browser zone, and renders the UTC timestamps the API returns as Vietnam time
+- **Ads management** (`AdminAds`): searchable / filterable ad list, create / edit / delete (video upload to Cloudinary or an external URL, brand image, skip-after seconds, click-through URL) and one-click active / paused toggle
+  - **Schedule mode banner** at the top shows whether playback is **Fixed** or **Random (YouTube-style)** with a one-line summary of the live parameters, and opens the settings dialog
+  - **Schedule settings** (`AdScheduleSettingsModal`): switch Fixed ↔ Random and edit every parameter — pre-roll weights (with probability bars), mid-roll interval (% of duration), jitter, minimum gap, end guard, minimum duration, max mid-rolls, post-roll chance. All values come from the server (no defaults hard-coded in the UI); inline validation, an "unsaved changes" guard and **Khôi phục mặc định** (back to `appsettings`). The right-hand **preview** updates automatically (debounced) from the unsaved form via `POST /ads/schedule-preview`: it shows the ad pool, a real sample schedule from the backend algorithm on a timeline (or the fixed schedule when Fixed is selected), and "Tạo lại" draws another random view. Pick **Tất cả hình thức**, **Phim lẻ** or **Tập phim** to preview
+  - **Per-ad schedule** (`AdScheduleModal`, two panes): create a Global Slot or a per-content Override on the left; on the right see the ad's existing slots on a timeline, toggle or delete them in place. Scopes come from `adContentScopes.js`: **Tất cả hình thức** (movies + episodes), **Phim lẻ**, **Tập phim** and **Cả bộ phim bộ** (TvShow = every episode of a show). In Random mode the form collapses to just the scope ("Thêm vào kho ngẫu nhiên") and the right pane shows which formats the ad can be drawn for
+  - `AdTimeline` is the shared timeline component used by both dialogs
 - Collapsible sidebar navigation
 
 ### 📱 Responsive Design
@@ -139,6 +156,7 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 | **Deployment** | Vercel (SPA rewrite configured) |
 | **External Data** | TMDB API (via backend proxy) |
 | **Media Storage** | Cloudinary (video upload) |
+| **Video playback** | HTML5 `<video>` + hls.js (MSE) with single-video ad insertion (`useAdManager`) |
 
 ---
 
@@ -200,6 +218,7 @@ Base URL: http://localhost:5000/api/
 | `reviewService.js` | Movie reviews — create, edit, delete, stats, check-if-reviewed |
 | `userService.js` | Own profile, change password, and admin user CRUD / role / ban / unban |
 | `paymentService.js` | Plans, create order, `redirectToPayment` (VNPay redirect / SePay form post), subscription status, history, order lookup by code, cancel own Premium, admin grant / revoke, revenue summary / chart / by-plan, orders, and `adminExportRevenue` (Blob download) |
+| `adService.js` | Ad CRUD, global slots / overrides, `getAdsForContent(type, id, durationSeconds)` for the player, admin `getScheduleSettings` / `updateScheduleSettings` / `previewSchedule` |
 
 ---
 
@@ -210,12 +229,16 @@ src/
 ├── components/
 │   ├── admin/          # Admin-only panels, modals, tables
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
-│   │   └── user/       # UserDetailPanel, UserEditModal
+│   │   ├── user/       # UserDetailPanel, UserEditModal
+│   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
+│   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
 │   ├── common/         # BackButton, Pagination, AdminPagination, SeeAllButton
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
 │   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
 │   ├── layout/         # Navbar, Footer
 │   ├── movie/          # MovieCard, MovieCarousel, PersonScrollRow
+│   ├── player/         # VideoPlayer (shared shell) + controls
+│   ├── shared/         # AdOverlay, PlaybackGate
 │   ├── search/         # SearchBar, SearchTabs, FilterPanel,
 │   │   │               # MovieCard (search), ActorCard, SearchUI
 │   └── ui/             # Button, Input, Modal, Badge, Spinner, RatingStars
@@ -231,6 +254,7 @@ src/
 │
 ├── hooks/
 │   ├── useIsMobile.js  # Responsive breakpoint hook
+│   ├── useAdManager.js # Pre/mid/post-roll playback on the single <video>
 │   ├── useStoredUser.js# Subscribes to sessionStore
 │   └── usePagination.js# Client & server-side pagination hook
 │
@@ -241,7 +265,7 @@ src/
 ├── pages/
 │   ├── admin/          # AdminPage, AdminDashboard, AdminMovies,
 │   │   │               # AdminGenres, AdminReviews, AdminUsers,
-│   │   │               # AdminPersons, AdminTmdbSearch, AdminRevenue
+│   │   │               # AdminPersons, AdminTmdbSearch, AdminRevenue, AdminAds
 │   └── user/           # HomePage, MovieDetailPage, MovieInfoPage,
 │                       # SearchPage, BrowsePage, ProfilePage,
 │                       # SecurityPage, FavoritesPage, WatchHistoryPage,
@@ -257,7 +281,7 @@ src/
 │
 └── services/           # authService, movieService, genreService,
                         # personService, reviewService,
-                        # userService, paymentService
+                        # userService, paymentService, adService
 ```
 
 ---
@@ -322,6 +346,7 @@ VITE_API_URL=http://localhost:5000/api
 6. Update your profile or toggle 2FA under **Profile** / **Security Settings**
 7. Open **/premium**, pick a plan, confirm it in the dialog and pay through VNPay or SePay (nothing is created until you press "Thanh toán"); you return to `/payment/result`, where the order is verified against your payment history
 8. Manage the subscription under **Profile → Gói đăng ký** (renew from `/premium`, or cancel — access ends immediately, no refund)
+9. On a Free account, ads play before / during / after the video (skip when the countdown ends, or go Premium to remove them)
 
 ### As an Admin
 1. Log in with an Admin-role account — you will see an **Admin** link in the navbar
@@ -329,7 +354,8 @@ VITE_API_URL=http://localhost:5000/api
 3. Go to **Movies → TMDB Search** to search and import new films
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
-6. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
+6. Open **Ads** to manage ad videos. Use the schedule banner → **Cấu hình lịch phát** to pick Fixed or Random mode, tune the parameters and check them with the preview. Attach ads to **Global Slots** (calendar icon on each row) — in Random mode these slots are the pool the scheduler draws from
+7. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
 
 ---
 
@@ -355,6 +381,8 @@ VITE_API_URL=http://localhost:5000/api
 - [ ] **Move the subscription-status cache into `paymentService`** and invalidate it on cancel / create-order, so `/premium` never shows a stale state for the first few hundred milliseconds
 - [ ] **Remove the hidden SePay form** from the DOM after submitting it
 - [ ] **Align Free-plan copy** (720p, 1 device) with what the backend actually enforces
+- [ ] **Ads: list Content Overrides** — the per-ad dialog only lists Global Slots; the API has no endpoint to read Overrides back
+- [ ] **Ads: real runtime for the schedule** — the duration sent to the ad API is the TMDB runtime; re-requesting once the video's real duration is known would also cover titles with an empty runtime
 - [ ] **Video Player** — integrate a full-featured HLS player with quality switching
 - [ ] **Watchlist / Continue Watching** — resume from last position with progress bar
 - [ ] **Notifications** — real-time alerts for new releases or admin actions
