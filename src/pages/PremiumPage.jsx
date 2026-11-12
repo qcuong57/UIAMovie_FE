@@ -43,6 +43,8 @@ import { useNavigate } from "react-router-dom";
 import paymentService from "../services/paymentService";
 import authService from "../services/authService";
 import { useToast } from "../components/common/Toast";
+import { useIsLoggedIn } from "../hooks/useStoredUser";
+import { PENDING_PLAN_KEY } from "../utils/authRedirect";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1013,6 +1015,154 @@ const CheckoutModal = ({
   );
 };
 
+// ─── Login required modal ─────────────────────────────────────────────────────
+// Hiện khi khách (chưa đăng nhập) bấm chọn gói.
+
+const LoginRequiredModal = ({ onLogin, onClose }) => {
+  const loginRef = useRef(null);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    loginRef.current?.focus();
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.66)",
+        backdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="login-required-title"
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={SPRING}
+        style={{
+          width: "100%",
+          maxWidth: 400,
+          background: C.surfaceHigh,
+          border: `1px solid ${C.borderMid}`,
+          borderRadius: RADIUS.panel,
+          padding: "32px 28px 24px",
+          boxShadow: SHADOW.cardLift,
+          textAlign: "center",
+        }}
+      >
+        <span
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "rgba(229,9,20,0.1)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
+          <Lock size={24} color={C.accent} />
+        </span>
+
+        <h2
+          id="login-required-title"
+          style={{
+            fontFamily: FONT_DISPLAY,
+            fontSize: 20,
+            fontWeight: 800,
+            color: "#fff",
+            margin: "0 0 10px",
+          }}
+        >
+          Vui lòng đăng nhập
+        </h2>
+
+        <p
+          style={{
+            margin: 0,
+            fontFamily: FONT_BODY,
+            fontSize: 14,
+            lineHeight: 1.7,
+            color: C.textSub,
+          }}
+        >
+          Bạn cần đăng nhập để đăng ký gói Premium và kích hoạt quyền lợi cho
+          tài khoản của mình.
+        </p>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 26 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              flex: 1,
+              padding: "14px 0",
+              borderRadius: RADIUS.btn,
+              border: `1px solid ${C.borderBright}`,
+              background: "transparent",
+              color: C.text,
+              fontFamily: FONT_BODY,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Để sau
+          </button>
+          <button
+            ref={loginRef}
+            type="button"
+            onClick={onLogin}
+            style={{
+              flex: 1.4,
+              padding: "14px 0",
+              borderRadius: RADIUS.btn,
+              border: "none",
+              background: C.accent,
+              color: "#fff",
+              fontFamily: FONT_BODY,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Đăng nhập
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const PremiumPage = () => {
@@ -1021,6 +1171,8 @@ const PremiumPage = () => {
   const [selectedPlan, setSelectedPlan] = useState(null); // gói đang mở hộp thoại xác nhận
   const toast = useToast();
   const navigate = useNavigate();
+  const loggedIn = useIsLoggedIn();
+  const [showLoginModal, setShowLoginModal] = useState(false); // modal yêu cầu đăng nhập
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const [openFaq, setOpenFaq] = useState(null);
@@ -1028,6 +1180,8 @@ const PremiumPage = () => {
   const [plans, setPlans] = useState(plansCache);
   const [plansLoading, setPlansLoading] = useState(!plansCache);
   const [plansError, setPlansError] = useState(false);
+  // Đã lấy xong danh sách gói (kèm token) ở lần mount này — cache cũ của khách chưa có isEligible đúng
+  const [plansFetched, setPlansFetched] = useState(false);
   const [subStatus, setSubStatus] = useState(subStatusCache);
   // Chỉ hiện trạng thái "đang tải" ở lần đầu; các lần quay lại dùng cache và cập nhật ngầm.
   const [subLoading, setSubLoading] = useState(!subStatusFetched);
@@ -1082,7 +1236,10 @@ const PremiumPage = () => {
     } catch {
       if (aliveRef.current && !plansCache) setPlansError(true);
     } finally {
-      if (aliveRef.current) setPlansLoading(false);
+      if (aliveRef.current) {
+        setPlansLoading(false);
+        setPlansFetched(true);
+      }
     }
   }, []);
 
@@ -1132,10 +1289,56 @@ const PremiumPage = () => {
   const openCheckout = useCallback(
     (plan) => {
       if (loading || plan.id === null) return;
+
+      // Chưa đăng nhập: hiện modal yêu cầu đăng nhập
+      if (!loggedIn) {
+        // Nhớ gói khách vừa chọn để mở lại hộp thoại xác nhận sau khi đăng nhập
+        try {
+          sessionStorage.setItem(PENDING_PLAN_KEY, String(plan.id));
+        } catch {
+          /* sessionStorage bị chặn: bỏ qua, khách chọn lại gói sau khi đăng nhập */
+        }
+        setShowLoginModal(true);
+        return;
+      }
+
       setSelectedPlan(plan);
     },
-    [loading]
+    [loading, loggedIn]
   );
+
+  const closeLoginModal = useCallback(() => {
+    setShowLoginModal(false);
+    try {
+      sessionStorage.removeItem(PENDING_PLAN_KEY); // khách từ chối đăng nhập: bỏ gói đã nhớ
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const goToLogin = useCallback(() => {
+    setShowLoginModal(false);
+    navigate("/welcome", { state: { from: "/premium" } });
+  }, [navigate]);
+
+  // Vừa đăng nhập xong và quay lại: mở sẵn hộp thoại xác nhận cho gói đã chọn, rồi xóa bản lưu.
+  useEffect(() => {
+    if (!loggedIn || !plansFetched || !plans) return;
+    let pendingId = null;
+    try {
+      pendingId = sessionStorage.getItem(PENDING_PLAN_KEY);
+      if (pendingId === null) return;
+      sessionStorage.removeItem(PENDING_PLAN_KEY);
+    } catch {
+      return;
+    }
+    const plan = plans.find((p) => String(p.id) === pendingId);
+    if (!plan || plan.id === null) return;
+    if (!plan.isEligible) {
+      toastRef.current?.info?.(plan.ineligibleReason || "Gói này hiện chưa áp dụng cho tài khoản của bạn.");
+      return;
+    }
+    setSelectedPlan(plan);
+  }, [loggedIn, plansFetched, plans]);
 
   const closeCheckout = useCallback(() => {
     if (loading) return; // đang tạo đơn / chuyển hướng thì không cho đóng
@@ -1791,6 +1994,17 @@ const PremiumPage = () => {
             onClose={closeCheckout}
             submitting={!!loading}
             subStatus={subStatus}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ══ YÊU CẦU ĐĂNG NHẬP ═════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <LoginRequiredModal
+            key="login-required"
+            onLogin={goToLogin}
+            onClose={closeLoginModal}
           />
         )}
       </AnimatePresence>

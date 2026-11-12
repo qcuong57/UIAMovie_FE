@@ -11,6 +11,7 @@
 ![TailwindCSS](https://img.shields.io/badge/Tailwind-3.4-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)
 ![Framer Motion](https://img.shields.io/badge/Framer_Motion-12-FF0055?style=for-the-badge&logo=framer&logoColor=white)
 ![React Router](https://img.shields.io/badge/React_Router-7-CA4245?style=for-the-badge&logo=reactrouter&logoColor=white)
+![TanStack Query](https://img.shields.io/badge/TanStack_Query-5-FF4154?style=for-the-badge&logo=reactquery&logoColor=white)
 ![Axios](https://img.shields.io/badge/Axios-1.x-5A29E4?style=for-the-badge&logo=axios&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)
 
@@ -66,13 +67,20 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **Country-based rows** — KR 🇰🇷 / CN 🇨🇳 / US 🇺🇸 / JP 🇯🇵 with per-country accent colors
 - **"For You" recommendations** — genre-frequency engine based on personal watch history
 - **Newly Released** & **Highly Rated** movie rows with smooth carousel navigation
+- **Fast, staged loading**: only the trending list blocks the first paint (it feeds the Hero). Everything else streams in as it arrives; the two 100-item lists used below the fold load after the Hero, and each country row loads only when it is about to scroll into view
+- **Instant return visits**: every section is cached (see [State Management](#-state-management--data-fetching)), so coming back to `/` renders immediately and refreshes in the background
 
-### 🔍 Search & Filtering
-- Real-time search for movies and actors in a unified interface
-- Tab switching between **Movies** and **Actors** results
-- Multi-filter panel: genre, release year, country, sort order, minimum rating slider
-- Active filter chips with individual removal
-- Actor cards with profile photos navigating to full person pages
+### 🔍 Search, Browse & Filtering
+- **Instant navbar search** (desktop dropdown / mobile full-screen overlay): movies, TV shows and actors in one panel
+  - Three independent queries (movies, TV, actors) → the fast ones render first, the heavy actor lookup never blocks them
+  - Debounced (220 ms, min. 2 characters); every new keystroke **aborts** the previous requests (`AbortSignal`), so a slow old response can never overwrite a newer one
+  - **Stale-while-searching**: while a new term loads, the previous results stay on screen (dimmed) instead of flashing a skeleton; the shimmer only appears for the very first lookup
+  - Results are cached per term for 5 min → deleting a character and typing it again is instant
+  - Result rows use pure-CSS hover/entrance animations and `React.memo`, so hovering or typing re-renders almost nothing
+- **Search page** (`/search`): Movies / TV Show tabs, URL-driven filters (genre, year, country, sort, min. rating), active filter chips, server-side pagination
+- **Browse page** (`/browse`): same grid and animation pattern with a filter sidebar (desktop) / bottom sheet (mobile)
+- Next-page **prefetch** + poster preloading on Search and Browse (same query key as the visible query, so the next click is instant)
+- **Mobile**: floating pill bottom navigation (`MobileBottomNav`) with a sliding active indicator; the middle tab opens the search overlay
 
 ### 🎬 Movie Detail
 - Full detail page with backdrop hero, cast scroll row, genre badges, and runtime
@@ -170,7 +178,9 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 | **Animations** | Framer Motion 12 |
 | **Styling** | Tailwind CSS 3 + Inline design tokens |
 | **HTTP Client** | Axios 1.x with request/response interceptors, `withCredentials` for the refresh cookie |
+| **Server state** | TanStack Query 5: caching, request de-duplication, optimistic updates, retry policy |
 | **Session state** | `useSyncExternalStore` over `sessionStore` (profile) + `tokenStore` (access token) |
+| **Local UI state** | `useState` / `useReducer` inside the component (no global store; Redux is intentionally not used, see below) |
 | **Payments** | VNPay + SePay (via backend) |
 | **Icons** | Lucide React |
 | **Deployment** | Vercel (SPA rewrite configured) |
@@ -195,6 +205,8 @@ UIA Movie is built around a **dark cinema aesthetic** — deep blacks, subtle gr
 - Page elements: staggered `opacity + y` entrance animations
 - HeroBanner: crossfade backdrop + slide content with directional awareness
 - Modals: spring-based scale-in from center
+- **List pages share one pattern** (Favorites, Browse, Search): `LoadingScreen` with a minimum duration on entry → `AnimatePresence mode="wait"` between skeleton / empty / grid → cards enter with a capped stagger (`min(i × 0.02, 0.25)s`) and leave with a short fade + scale
+- Hover, focus and entrance effects of dense lists (search results) are plain CSS (`transform` / `opacity` only) and respect `prefers-reduced-motion`
 - Sidebar: animated width collapse (220px ↔ 64px)
 
 ### Scroll & Navigation UX
@@ -202,6 +214,70 @@ UIA Movie is built around a **dark cinema aesthetic** — deep blacks, subtle gr
 - Scroll-snap on mobile for card rows
 - `ScrollToTop` component resets position on every route change
 - Sticky filter bar with `backdrop-filter: blur`
+
+---
+
+## 🧠 State Management & Data Fetching
+
+The rule of thumb: **who owns the data decides where it lives.**
+
+| Kind of state | Owner | Examples |
+|---|---|---|
+| **Server state** (comes from the API, can go stale, shared by many screens) | **TanStack Query** | trending / latest lists, genres, country rows, home reviews, AI recommendations, favorites, watch history, plans |
+| **Auth session** (needed *outside* React, by the Axios interceptor) | `tokenStore` + `sessionStore`, read in components with `useSyncExternalStore` | access token (memory), display profile, cross-tab sign-out |
+| **Local UI state** (one component or a small subtree) | `useState` / `useReducer` | hover, carousel page, open dialog, form fields |
+| **Shared UI state** (a few distant components, changes rarely) | React Context | design tokens, toast |
+| **Redux** | **not used** | see "Why no Redux" |
+
+### Why no Redux
+Almost everything that looked "global" in this app is really *server state*, and Query already caches, shares and syncs it. Copying it into a Redux store would create a second source of truth that has to be kept in sync by hand. The auth session already has a tiny, framework-free store because the interceptor needs synchronous access outside React.
+
+Add Redux Toolkit **only** when there is genuine *client* state that many distant components read and write with non-trivial transitions, for example a persistent player queue, a multi-step checkout wizard, or the AI chat history shared across pages (today it lives inside `AiChatWidget`). Even then, **never put API data in a slice**: keep it in Query and let slices hold only UI/client state.
+
+### Query layer (`src/config`, `src/hooks`, `src/utils`)
+
+| File | Responsibility |
+|---|---|
+| `config/queryClient.js` | The single `QueryClient`: defaults (`staleTime` 1 min, `gcTime` 10 min, no retry on 4xx, one retry on network/5xx, mutations never retry), global error hook (`QueryCache` / `MutationCache` `onError`, a place to plug Sentry), and the **session ↔ cache sync** |
+| `config/queryKeys.js` | The only place query keys are defined (`queryKeys.*`), the `STALE` presets and `PUBLIC_QUERY_ROOTS` |
+| `hooks/useHomeQueries.js` | Home data hooks: trending, top / latest TV, latest movies, genres, watch history (+ optimistic delete) |
+| `hooks/useCountryRows.js` | One query per country row, enabled only when the row is near the viewport |
+| `hooks/useFavorites.js` | Favorites: read (`useIsFavorite`, `useFavorites`) and write (`useFavoriteToggle`, `useFavoriteActions`, optimistic) |
+| `utils/normalizeMedia.js` | The only `normalizeMovie` / `normalizeTvShow` (components must not define their own) |
+| `utils/queryHelpers.js` | `unwrapList` (unwraps every response shape the backend uses) and `ignoreMissingEndpoint` |
+| `hooks/useMediaDetail.js` | `useMovie` / `useTvShow`: the Info page and the Watch page of the same title share one cache entry (`queryKeys.movies.detail` / `tvShows.detail`) |
+| `hooks/useMinimumLoading.js` | Keeps the entry `LoadingScreen` visible for a minimum time so it never flashes |
+| `utils/normalizeDetail.js` | DTO → view-model for Movie / TV Info and Watch pages (one place instead of one block per page) |
+| Persisted cache | AI recommendations are persisted through `PersistQueryClientProvider` (`localStorage` key `uiamovie-query-cache`, 24 h, `buster: "v1"`); nothing else is persisted. The old hand-written `recommendationCache` was removed |
+
+### Cache policy (`STALE`)
+
+| Preset | Time | Used for |
+|---|---|---|
+| `static` | 60 min | genres, rarely changing lookups |
+| `medium` | 5 min | country rows, home reviews |
+| `list` | 2 min | home movie / TV lists, Browse and Search pages, movie / TV detail |
+| `user` | 1 min | favorites, watch history (also refetched on window focus, so another tab's changes show up) |
+| `Infinity` (per day) | 24 h | AI recommendations (key includes user id + day), persisted to `localStorage` |
+| Navbar search | 5 min | `["nav-search", type, term]` — per-term cache so retyping is instant |
+
+### Session ↔ cache
+When the signed-in user changes (sign in, sign out, switch account, also from another tab), `queryClient` **resets every non-public query** and wipes the recommendation cache, so favorites, history, plan eligibility and recommendations of the previous account can never leak. Public groups (`home`, `genres`, `browse`, `search`) are kept, so signing in does not blank the home page. A profile update for the *same* user does not reset anything.
+
+### Favorites flow
+1. The set of favorite ids is one query (`queryKeys.me.favoriteIds`, entries are `mv:<id>` / `tv:<id>` so a movie and a show with the same id never collide).
+2. Every `MovieCard` reads its own heart through `useIsFavorite` (a `select` that returns a boolean, so only the card whose state changed re-renders). There are **no `isFavorited` / `favIds` props to drill any more**.
+3. Clicking the heart runs `useToggleFavorite`: the cache is updated **immediately**, the API call follows, and on failure only that item is rolled back and a toast is shown. When the last pending toggle settles, `["me","favorites"]` is invalidated to re-sync with the server.
+4. Result: the same movie shown in five rows flips in all five at once, with no loading spinner on the happy path.
+
+### Conventions
+- A new endpoint = a new hook in `src/hooks` + a key in `queryKeys.js`. Components never call a service inside `useEffect` and never `useState` the result.
+- Put normalisation in `select` (module-level function, so the reference is stable) or in the `queryFn`; never repeat it in a component.
+- `queryFn` must **throw** on failure. Do not `.catch(() => [])`: that caches an empty list as if it were valid for the whole `staleTime`. Use `ignoreMissingEndpoint` only for optional sources, and it swallows 404 / 501 only.
+- Anything below the fold or not needed for first paint takes an `enabled` flag (`useInView` or "after the Hero").
+- Writes are mutations with `onMutate` (optimistic), per-item rollback in `onError`, and `invalidateQueries` in `onSettled` only when no other mutation of the same key is running.
+- Navigate with `useNavigate()`, never `window.location.href`: a full reload throws away the Query cache and the in-memory access token.
+- Personal data lives under the `me` root so it is reset automatically on account change.
 
 ---
 
@@ -233,6 +309,7 @@ Base URL: http://localhost:5000/api/
 |---|---|
 | `authService.js` | Login, register, OTP, forgot/reset password, session management, `refreshPremiumStatus` |
 | `movieService.js` | Trending, search, by-genre, by-country, favorites, watch history, video progress |
+| `tvShowService.js` | TV show lists / search / detail, watch history |
 | `genreService.js` | Genre CRUD |
 | `personService.js` | Cast, person detail & images via TMDB proxy |
 | `reviewService.js` | Movie reviews — create, edit, delete, stats, check-if-reviewed |
@@ -253,21 +330,25 @@ src/
 │   │   ├── user/       # UserDetailPanel, UserEditModal
 │   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
 │   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
-│   ├── common/         # BackButton, Pagination, AdminPagination, SeeAllButton, Toast
+│   ├── common/         # BackButton, Pagination, PageError, AdminPagination, SeeAllButton, Toast
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
 │   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
-│   ├── layout/         # Navbar, Footer
+│   ├── layout/         # Navbar, MobileBottomNav, Footer
 │   ├── movie/          # MovieCard, MovieCarousel, PersonScrollRow
 │   ├── player/         # VideoPlayer (shared shell) + controls
 │   ├── shared/         # AdOverlay, PlaybackGate
 │   ├── search/         # SearchBar, SearchTabs, FilterPanel,
 │   │   │               # MovieCard (search), ActorCard, SearchUI
-│   └── ui/             # Button, Input, Modal, Badge, Spinner, RatingStars
+│   └── ui/             # Button, Input, Modal, Badge, Spinner, RatingStars, LoadingScreen,
+│                       # SearchResultsPanel, SearchResultItem, SearchShimmer,
+│                       # MobileSearchOverlay, NavbarFilterModal, NotificationBell
 │
 ├── config/
 │   ├── axios.js        # Axios instance, single-flight refresh, bootstrap
 │   ├── tokenStore.js   # In-memory access token
-│   └── sessionStore.js # Stored profile (localStorage) + cross-tab sync
+│   ├── sessionStore.js # Stored profile (localStorage) + cross-tab sync
+│   ├── queryClient.js  # Shared QueryClient, retry policy, session ↔ cache sync
+│   └── queryKeys.js    # Query keys, STALE presets, PUBLIC_QUERY_ROOTS
 │
 ├── context/
 │   ├── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
@@ -277,6 +358,11 @@ src/
 │   ├── useIsMobile.js  # Responsive breakpoint hook
 │   ├── useAdManager.js # Pre/mid/post-roll playback on the single <video>
 │   ├── useStoredUser.js# Subscribes to sessionStore
+│   ├── useHomeQueries.js # Home queries + watch-history mutation (TanStack Query)
+│   ├── useCountryRows.js # Per-country rows, loaded when near the viewport
+│   ├── useFavorites.js # Favorites: read + optimistic toggle
+│   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
+│   ├── useMinimumLoading.js # Minimum LoadingScreen time
 │   └── usePagination.js# Client & server-side pagination hook
 │
 ├── motion-configs/
@@ -291,19 +377,24 @@ src/
 │                       # SearchPage, BrowsePage, ProfilePage,
 │                       # SecurityPage, FavoritesPage, WatchHistoryPage,
 │                       # PersonPage, LandingPage,
-│                       # PremiumPage, PaymentResultPage
+│                       # PremiumPage, PaymentResultPage,
+│                       # TvShowInfoPage, TvShowDetailPage
 │
 ├── router/
 │   └── AppRouter.jsx   # BrowserRouter + protected/guest routes
 │
 ├── utils/
 │   ├── apiError.js     # getApiErrorMessage
-│   └── validators.js   # validateUsername (shared by register + profile)
+│   ├── validators.js   # validateUsername (shared by register + profile)
+│   ├── normalizeMedia.js # normalizeMovie / normalizeTvShow / mediaKey
+│   ├── normalizeDetail.js # Detail DTO → view-model (Info + Watch pages)
+│   ├── authRedirect.js # postLoginPath
+│   └── queryHelpers.js # unwrapList, unwrapOne, parsePaged, ignoreMissingEndpoint
 │
 ├── helper/
 │   └── format.js       # fmtVnd and other formatters
 │
-└── services/           # authService, movieService, genreService,
+└── services/           # authService, movieService, tvShowService, genreService,
                         # personService, reviewService,
                         # userService, paymentService, adService
 ```
@@ -387,29 +478,73 @@ VITE_API_URL=http://localhost:5000/api
 
 ## 🤝 Git Workflow
 
-Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): short summary`, with a body for the details when needed.
+### Branches
+`main` is always deployable (Vercel builds from it). Work happens on short-lived branches and is merged through a pull request.
 
-| Type | When to use |
-|---|---|
-| `feat` | A new feature (`feat(premium): dynamic plans from API`) |
-| `fix` | A bug fix (`fix(premium): reset spinner on bfcache restore`) |
-| `docs` | README / comments only |
-| `refactor` | Code change without behaviour change |
-| `style` | Formatting or visual-only changes |
-| `perf` | Performance improvement |
-| `chore` | Tooling, dependencies, config |
+| Prefix | Use for | Example |
+|---|---|---|
+| `feat/` | New feature | `feat/navbar-instant-search` |
+| `fix/` | Bug fix | `fix/favorites-rollback` |
+| `refactor/` | Restructure, same behaviour | `refactor/query-layer` |
+| `perf/` | Performance | `perf/search-dropdown` |
+| `docs/` · `chore/` | README, tooling, dependencies | `chore/bump-tanstack-query` |
 
-```bash
-git checkout -b feat/premium-plans     # work on a branch
-git status
-git add <files>                        # or: git add -A
-git commit -m "feat(premium): render plans from GET /payments/plans" \
-  -m "- eligibility reasons per plan
-- free trial activates without a gateway"
-git push -u origin feat/premium-plans  # then open a pull request into main
+### Commit message
+[Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+type(scope): short summary          ← imperative, ≤ 72 chars, lowercase, no trailing period
+
+Why this change exists and what it does (wrap at ~72 chars).
+Mention trade-offs or anything a reviewer would otherwise miss.
+
+BREAKING CHANGE: only when an API / contract changes
+Refs: #123
 ```
 
-Commit the frontend and the backend separately: they live in different repositories.
+| Type | When |
+|---|---|
+| `feat` | A user-visible feature |
+| `fix` | A bug fix |
+| `refactor` | Code change with no behaviour change |
+| `perf` | Faster / lighter, same result |
+| `style` | Formatting or purely visual tweaks (no logic) |
+| `docs` | README / comments |
+| `test` | Add or fix tests |
+| `build` · `ci` | Build system, pipelines |
+| `chore` | Dependencies, config, housekeeping |
+| `revert` | Reverts an earlier commit |
+
+**Scopes used in this repo:** `query`, `search`, `browse`, `favorites`, `home`, `detail`, `navbar`, `mobile-nav`, `player`, `ads`, `premium`, `auth`, `admin`, `ui`, `router`, `deps`.
+
+### Rules of thumb
+- **One logical change per commit** (atomic). If the summary needs "and", split it. The app should build after every commit.
+- **Foundation first**: commit the shared layer (`queryKeys`, hooks, utils) *before* the pages that use it, so every commit compiles and `git bisect` stays useful.
+- **Never mix** refactor + feature + formatting in one commit.
+- Stage **selectively** with `git add -p` (or VS Code "Stage Selected Ranges") instead of `git add -A`.
+- Never commit `.env`, `node_modules`, `dist`, or editor files. Commit `package.json` **together with** `package-lock.json`.
+- Run `npm run lint && npm run build` before pushing.
+- Fix a mistake in the last commit with `git commit --amend`; tidy a branch before the PR with `git rebase -i main` (only on commits you have not shared).
+- Frontend and backend live in separate repositories: commit them separately.
+
+### Typical flow
+
+```bash
+git switch -c feat/navbar-instant-search
+git status
+git add -p                                   # review every hunk
+git commit -m "feat(search): abortable, cached navbar search" \
+  -m "Three independent queries so movies render before the slow actor lookup.
+Previous results stay visible (dimmed) while a new term loads."
+git push -u origin feat/navbar-instant-search   # then open a PR into main
+```
+
+### Pull request checklist
+- [ ] Builds locally (`npm run build`), no new console errors
+- [ ] Mobile (< 768 px) and desktop checked
+- [ ] No API data copied into `useState` (use a query hook + a key in `queryKeys.js`)
+- [ ] README updated if a convention or a file's responsibility changed
+- Merge with **squash** for small PRs, or **rebase** when the commits are already atomic
 
 ---
 
@@ -432,7 +567,12 @@ Commit the frontend and the backend separately: they live in different repositor
 - [ ] **Avatar upload** — needs a backend upload endpoint; today the avatar is preview-only
 - [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
-- [ ] **Move the subscription-status cache into `paymentService`** and invalidate it on cancel / create-order, so `/premium` never shows a stale state for the first few hundred milliseconds
+- [x] ~~Migrate Home, Browse, Search, Favorites and Movie / TV detail to TanStack Query~~ (done)
+- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the admin tables
+- [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
+- [ ] **Smaller home payloads** — the home page still downloads two 100-item lists only to find trailers and artwork. Add backend filters (for example `hasTrailer=true&pageSize=15`) and put the movie / show title and poster inside the review DTO, which removes the per-review `getMovieById` calls
+- [ ] **Prefetch on intent** — Search / Browse already prefetch the next page; still missing: `prefetchQuery(queryKeys.movies.detail(id))` when a card or search result is hovered / focused (`useMovie` / `useTvShow` share the key)
+- [ ] **Hook tests** — Vitest + `QueryClientProvider` for the optimistic favorite toggle (rollback) and the session reset
 - [ ] **Remove the hidden SePay form** from the DOM after submitting it
 - [ ] **Free-plan card copy** (720p, 1 device) is static; align it with what the backend actually enforces
 - [ ] **Admin plans** — show how many users bought each plan; confirm before switching off a plan that is on sale

@@ -20,6 +20,7 @@ import { getApiErrorMessage } from "../utils/apiError";
 import { validateUsername } from "../utils/validators";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useStoredUser } from "../hooks/useStoredUser";
+import { postLoginPath, safeReturnPath } from "../utils/authRedirect";
 
 const C = {
   bg: "#070707",
@@ -46,9 +47,6 @@ const extractErrorMessage = (e, defaultMsg = "Đã có lỗi xảy ra") => {
   }
   return getApiErrorMessage(e, defaultMsg);
 };
-
-const homePathFor = (user) =>
-  user?.role?.toLowerCase() === "admin" ? "/admin" : "/";
 
 // ─── Banned account banner ───────────────────────────────────────────────────
 function BannedMsg({ reason }) {
@@ -384,7 +382,7 @@ function Divider({ text }) {
 // ─── VIEWS ──────────────────────────────────────────────────────────────────
 
 // ── Login ────────────────────────────────────────────────────────────────────
-function LoginView({ onSwitch, onOtp, navigate }) {
+function LoginView({ onSwitch, onOtp, navigate, from }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -423,7 +421,7 @@ function LoginView({ onSwitch, onOtp, navigate }) {
       }
 
       authService.saveSession(data);
-      navigate(homePathFor(data.user), { replace: true });
+      navigate(postLoginPath(data.user, from), { replace: true });
     } catch (e) {
       const data = e.response?.data;
       const msg = extractErrorMessage(e, "Email hoặc mật khẩu không đúng");
@@ -689,7 +687,7 @@ function RegisterView({ onSwitch, onRegisterOtp }) {
 // ── OTP View ─────────────────────────────────────────────────────────────────
 const OTP_LENGTH = 6;
 
-function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSuccess }) {
+function OtpView({ userId, email, navigate, from, onBack, mode = "login", onRegisterSuccess }) {
   // Mảng cố định 6 ô: xóa ô giữa không làm các số dồn lại.
   const [digits, setDigits] = useState(() => Array(OTP_LENGTH).fill(""));
   const [loading, setLoading] = useState(false);
@@ -757,7 +755,7 @@ function OtpView({ userId, email, navigate, onBack, mode = "login", onRegisterSu
       } else {
         const data = await authService.verifyOtp({ userId, code });
         authService.saveSession(data);
-        navigate(homePathFor(data.user), { replace: true });
+        navigate(postLoginPath(data.user, from), { replace: true });
       }
     } catch (e) {
       setError(extractErrorMessage(e, "Mã OTP không đúng hoặc đã hết hạn"));
@@ -1186,6 +1184,8 @@ export default function LandingPage() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const storedUser = useStoredUser();
+  // Nơi cần quay lại sau đăng nhập (vd. "/premium"), do trang gọi truyền qua location.state.from
+  const from = safeReturnPath(location.state?.from);
   const [view, setView] = useState(
     location.state?.view === "register" ? "register" : "login"
   );
@@ -1197,9 +1197,9 @@ export default function LandingPage() {
   // (Khi hết phiên thật, axios đã xóa hồ sơ trước khi chuyển về đây nên không bị lặp.)
   useEffect(() => {
     if (storedUser) {
-      navigate(homePathFor(storedUser), { replace: true });
+      navigate(postLoginPath(storedUser, from), { replace: true });
     }
-  }, [storedUser, navigate]);
+  }, [storedUser, navigate, from]);
 
   const handleSwitch = useCallback((next, data) => {
     if (next === "reset") setResetEmail(data || "");
@@ -1413,7 +1413,7 @@ export default function LandingPage() {
               transition={{ duration: 0.18 }}
             >
               {view === "login" && (
-                <LoginView onSwitch={handleSwitch} onOtp={handleOtp} navigate={navigate} />
+                <LoginView onSwitch={handleSwitch} onOtp={handleOtp} navigate={navigate} from={from} />
               )}
               {view === "register" && (
                 <RegisterView onSwitch={handleSwitch} onRegisterOtp={handleRegisterOtp} />
@@ -1423,6 +1423,7 @@ export default function LandingPage() {
                   userId={otpData?.userId}
                   email={otpData?.email}
                   navigate={navigate}
+                  from={from}
                   onBack={() => setView("login")}
                   mode="login"
                 />
@@ -1431,6 +1432,7 @@ export default function LandingPage() {
                 <OtpView
                   email={registerOtpData?.email}
                   navigate={navigate}
+                  from={from}
                   onBack={() => setView("register")}
                   mode="register"
                   onRegisterSuccess={handleRegisterSuccess}

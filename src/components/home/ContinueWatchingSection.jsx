@@ -381,13 +381,8 @@ export default function ContinueWatchingSection({
 }) {
   const isMobile = useIsMobile();
   const carouselRef = useRef(null);
-  const [data, setData] = useState(items);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-
-  useEffect(() => {
-    setData(items);
-  }, [items]);
 
   const checkScroll = useCallback(() => {
     const el = carouselRef.current;
@@ -405,14 +400,12 @@ export default function ContinueWatchingSection({
       el?.removeEventListener("scroll", checkScroll);
       window.removeEventListener("resize", checkScroll);
     };
-  }, [data, checkScroll]);
+  }, [items, checkScroll]);
 
-  if (!data || data.length === 0) return null;
+  if (!items || items.length === 0) return null;
 
-  const handleRemove = (item) => {
-    setData((prev) => prev.filter((d) => d.id !== item.id));
-    onRemoveItem?.(item);
-  };
+  // Không cần setState: useRemoveWatchHistory đã cập nhật cache lạc quan
+  const handleRemove = (item) => onRemoveItem?.(item);
 
   const scroll = (direction) => {
     if (carouselRef.current) {
@@ -597,7 +590,7 @@ export default function ContinueWatchingSection({
           scrollSnapType: isMobile ? "x mandatory" : "none",
         }}
       >
-        {data.map((item) => (
+        {items.map((item) => (
           <div
             key={`${item.isTvShow ? "tv" : "mv"}-${item.id}`}
             style={{

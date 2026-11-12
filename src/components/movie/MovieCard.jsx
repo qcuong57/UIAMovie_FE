@@ -1,46 +1,18 @@
 // src/components/movie/MovieCard.jsx
-import React, { useState, useEffect, useSyncExternalStore } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import movieService  from '../../services/movieService';
-import tvShowService from '../../services/tvShowService';
 import PremiumGateModal from './ui/PremiumGateModal';
-import { useToast } from '../common/Toast';
+import { useFavoriteToggle } from '../../hooks/useFavorites';
+import { userHasPremium } from '../../utils/premium';
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from '../../config/sessionStore';
 
 // ── Route helpers ────────────────────────────────────────────────
 const infoPath   = (item) => item.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`;
 const playerPath = (item) => item.isTvShow ? `/tvshow/${item.id}`      : `/movie/${item.id}`;
-
-// ── Premium helpers ──────────────────────────────────────────────
-function userHasPremium(user) {
-  if (!user) return false;
-  return (
-    user.isPremium === true ||
-    user.plan === 'premium' ||
-    user.subscription?.active === true
-  );
-}
-
-// ── Lỗi xác thực (chưa đăng nhập / hết phiên) ─────────────────────
-function isUnauthorizedError(err) {
-  const status = err?.response?.status ?? err?.status;
-  return status === 401 || status === 403;
-}
-
-// Lấy message lỗi thật từ server trả về (nếu có), fallback nếu không có
-function getErrorMessage(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.error ||
-    err?.data?.message ||
-    (typeof err?.message === 'string' && err.message) ||
-    fallback
-  );
-}
 
 // ── Portal wrapper — render modal ra ngoài stacking context của card ──
 // Đây là fix chính: motion.div của card tạo ra một stacking context mới
@@ -51,52 +23,14 @@ function ModalPortal({ children }) {
 }
 
 // ── MobileCard ───────────────────────────────────────────────────
-const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)', variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
+const MobileCard = ({ movie, onFavoriteToggle, cardWidth = 'calc(50vw - 20px)', variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
   const [imgError, setImgError] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
-  const [localFav, setLocalFav] = useState(isFavorited);
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
-  const toast = useToast();
   const isComingSoon = variant === 'comingSoon';
 
-  useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
-
-  const handleFav = async (e) => {
-    e.stopPropagation();
-    if (favLoading) return;
-
-    // Chưa đăng nhập → chặn ngay, không gọi API
-    if (!getCurrentUser()) {
-      toast.warning('Bạn cần đăng nhập để thêm vào Yêu thích');
-      return;
-    }
-
-    setFavLoading(true);
-    const svc = movie.isTvShow ? tvShowService : movieService;
-    try {
-      if (localFav) {
-        await svc.removeFavorite(movie.id);
-        setLocalFav(false);
-        onFavoriteToggle?.(movie, false);
-        toast.info(`"${movie.title}" đã được bỏ khỏi Yêu thích`);
-      } else {
-        await svc.addFavorite(movie.id);
-        setLocalFav(true);
-        onFavoriteToggle?.(movie, true);
-        toast.success(`Đã thêm "${movie.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      console.error(err);
-      if (isUnauthorizedError(err)) {
-        toast.warning('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
-      } else {
-        toast.error(getErrorMessage(err, 'Không thể cập nhật Yêu thích, vui lòng thử lại'));
-      }
-    } finally {
-      setFavLoading(false);
-    }
-  };
+  // Trạng thái yêu thích đọc từ cache React Query (một nguồn sự thật) — mọi thẻ tự đồng bộ
+  const { isFav: localFav, pending: favLoading, toggle: handleFav } = useFavoriteToggle(movie, onFavoriteToggle);
 
   const handleCardClick = () => {
     if (movie.isPremium && !userHasPremium(getCurrentUser())) {
@@ -197,20 +131,16 @@ const MobileCard = ({ movie, isFavorited, onFavoriteToggle, cardWidth = 'calc(50
 };
 
 // ── Desktop MovieCard ─────────────────────────────────────────────
-const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, cardWidth, variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
+const MovieCard = ({ movie, onFavoriteToggle, onPlay, onClick, cardWidth, variant = 'movie', accentColor = '#f5c518', releaseLabel }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
-  const [localFav, setLocalFav] = useState(isFavorited);
   const [showGate, setShowGate] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const toast = useToast();
   const isComingSoon = variant === 'comingSoon';
 
-  useEffect(() => {
-    setLocalFav(isFavorited);
-  }, [isFavorited]);
+  // Trạng thái yêu thích đọc từ cache React Query (một nguồn sự thật) — mọi thẻ tự đồng bộ
+  const { isFav: localFav, pending: favLoading, toggle: handleFavoriteClick } = useFavoriteToggle(movie, onFavoriteToggle);
 
   // ── Premium guard ────────────────────────────────────────────────
   const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
@@ -229,42 +159,6 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
     navigate(playerPath(movie));
   };
 
-  const handleFavoriteClick = async (e) => {
-    e.stopPropagation();
-    if (favLoading) return;
-
-    // Chưa đăng nhập → chặn ngay, không gọi API
-    if (!getCurrentUser()) {
-      toast.warning('Bạn cần đăng nhập để thêm vào Yêu thích');
-      return;
-    }
-
-    setFavLoading(true);
-    const svc = movie.isTvShow ? tvShowService : movieService;
-    try {
-      if (localFav) {
-        await svc.removeFavorite(movie.id);
-        setLocalFav(false);
-        onFavoriteToggle?.(movie, false);
-        toast.info(`"${movie.title}" đã được bỏ khỏi Yêu thích`);
-      } else {
-        await svc.addFavorite(movie.id);
-        setLocalFav(true);
-        onFavoriteToggle?.(movie, true);
-        toast.success(`Đã thêm "${movie.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      console.error('Favorite toggle error:', err);
-      if (isUnauthorizedError(err)) {
-        toast.warning('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
-      } else {
-        toast.error(getErrorMessage(err, 'Không thể cập nhật Yêu thích, vui lòng thử lại'));
-      }
-    } finally {
-      setFavLoading(false);
-    }
-  };
-
   if (!movie) return null;
 
   // Mobile: dùng card đơn giản
@@ -272,7 +166,6 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
     return (
       <MobileCard
         movie={movie}
-        isFavorited={localFav}
         onFavoriteToggle={onFavoriteToggle}
         cardWidth={cardWidth || 'calc(50vw - 20px)'}
         variant={variant}
@@ -337,7 +230,7 @@ const MovieCard = ({ movie, isFavorited, onFavoriteToggle, onPlay, onClick, card
             Sắp Chiếu
           </div>
         ) : (
-          movie.rating && (
+          movie.rating > 0 && (
             <div
               className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full"
               style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}

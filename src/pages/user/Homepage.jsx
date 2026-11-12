@@ -3,7 +3,6 @@ import React, {
   useState,
   useEffect,
   useMemo,
-  useRef,
   useCallback,
 } from "react";
 import { useNavigate } from "react-router-dom";
@@ -11,10 +10,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, CalendarDays, Tv } from "lucide-react";
 import HeroBanner from "../../components/layout/HeroBanner";
 import Footer from "../../components/layout/Footer";
-import movieService from "../../services/movieService";
-import tvShowService from "../../services/tvShowService";
-import genreService from "../../services/genreService";
 import authService from "../../services/authService";
+import {
+  useTrendingMovies,
+  useTopTvShows,
+  useLatestMovies,
+  useLatestTvShows,
+  useGenres,
+  useWatchHistory,
+  useRemoveWatchHistory,
+} from "../../hooks/useHomeQueries";
 import AiChatWidget from "../../components/ai/AiChatWidget";
 import ContinueWatchingSection from "../../components/home/ContinueWatchingSection";
 import SeoMeta from "../../components/common/SeoMeta";
@@ -34,6 +39,7 @@ import {
   GOOGLE_FONTS,
 } from "../../context/homeTokens";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { mediaKey } from "../../utils/normalizeMedia";
 import GenreSection from "../../components/home/GenreSection";
 import TopRankedRow from "../../components/home/TopRankedRow";
 import MovieRow from "../../components/home/MovieRow";
@@ -44,35 +50,10 @@ import RecommendSection from "../../components/home/RecommendSection";
 import HomeReveal, { HOME_EASE } from "../../motion-configs/HomeReveal";
 import { LoadingScreen } from "../../components/ui";
 
-// ─── Normalize movie ──────────────────────────────────────────────────────────
-const normalizeMovie = (m) => ({
-  id: m.id,
-  title: m.title,
-  year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
-  rating: m.rating ?? m.imdbRating ?? 0,
-  posterUrl: m.posterUrl || null,
-  backdropUrl: m.backdropUrl || null,
-  genres: m.genres || [],
-  description: m.description || "",
-  duration: m.duration || null,
-  isPremium: m.isPremium ?? false,
-  trailerVideoUrl: m.trailerVideoUrl || null,
-  isTvShow: false,
-});
+const EMPTY = [];
 
-const normalizeTvShow = (s) => ({
-  id: s.id,
-  title: s.title ?? s.name,
-  year: s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : null,
-  rating: s.rating ?? s.voteAverage ?? 0,
-  posterUrl: s.posterUrl || null,
-  backdropUrl: s.backdropUrl || null,
-  genres: s.genres || [],
-  description: s.description || s.overview || "",
-  isPremium: s.isPremium ?? false,
-  trailerVideoUrl: s.trailerVideoUrl || null,
-  isTvShow: true,
-});
+// Thời gian tối thiểu hiện loading screen (ms): "UIAMOVIE" 8 ký tự × 90ms ≈ 720ms + nhịp dừng ngắn
+const MIN_LOADING_MS = 1100;
 
 const byRating = (arr) =>
   [...arr].sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -83,18 +64,23 @@ const byNewest = (arr) =>
 const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
   if (!allItems.length) return [];
 
-  const watchedIds = new Set(watchHistory.map((h) => String(h.movieId)));
-  const top10Ids = new Set(highlyRated.slice(0, 10).map((m) => String(m.id)));
+  // Khoá gồm cả loại (phim / TV show) để id trùng nhau giữa hai loại không bị nhầm
+  const watchedIds = new Set(
+    watchHistory.map((h) =>
+      mediaKey({ isTvShow: Boolean(h.isTvShow), id: h.isTvShow ? h.tvShowId : h.movieId }),
+    ),
+  );
+  const top10Ids = new Set(highlyRated.slice(0, 10).map(mediaKey));
 
   if (!watchedIds.size) {
     return byRating(allItems)
-      .filter((m) => !top10Ids.has(String(m.id)))
+      .filter((m) => !top10Ids.has(mediaKey(m)))
       .slice(0, 20);
   }
 
   const genreFreq = {};
   allItems
-    .filter((m) => watchedIds.has(String(m.id)))
+    .filter((m) => watchedIds.has(mediaKey(m)))
     .forEach((m) => {
       (m.genres || []).forEach((g) => {
         const key =
@@ -106,7 +92,7 @@ const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
     });
 
   const hasGenreData = Object.keys(genreFreq).length > 0;
-  const candidates = allItems.filter((m) => !watchedIds.has(String(m.id)));
+  const candidates = allItems.filter((m) => !watchedIds.has(mediaKey(m)));
   const scored = candidates.map((m) => ({
     ...m,
     _score: hasGenreData
@@ -128,9 +114,9 @@ const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
 
   const meaningful = scored.filter((m) => m._score > 0);
   if (meaningful.length < 8) {
-    const usedIds = new Set(meaningful.map((m) => String(m.id)));
+    const usedIds = new Set(meaningful.map(mediaKey));
     const filler = byRating(candidates)
-      .filter((m) => !usedIds.has(String(m.id)))
+      .filter((m) => !usedIds.has(mediaKey(m)))
       .slice(0, 20 - meaningful.length);
     return [...meaningful, ...filler].slice(0, 20);
   }
@@ -196,26 +182,54 @@ const ErrorScreen = ({ message, onRetry }) => (
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function HomePage() {
   const navigate = useNavigate();
-  const [movies, setMovies] = useState([]);
-  const [tvShows, setTvShows] = useState([]);
-  const [genres, setGenres] = useState([]);
-  const [watchHistory, setWatchHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [favorites, setFavorites] = useState(new Set());
-
-  const [trailerSourceMovies, setTrailerSourceMovies] = useState([]);
-  const [trailerSourceTvShows, setTrailerSourceTvShows] = useState([]);
-
-  const [forYou, setForYou] = useState([]);
-  const [forYouLabel, setForYouLabel] = useState("Khám phá thêm");
-  const [forYouLoading, setForYouLoading] = useState(false);
-
   const isMobile = useIsMobile();
-  const [retryCount, setRetryCount] = useState(0);
-  const hasFetched = useRef(false);
-
   const [pastBanner, setPastBanner] = useState(false);
+
+  // ── Dữ liệu (TanStack Query): mỗi nguồn tải độc lập, có cache, quay lại trang là hiện ngay ──
+  const trendingQ = useTrendingMovies();
+  const tvTopQ = useTopTvShows();
+  const genresQ = useGenres();
+  // Hai danh sách 100 phần tử chỉ phục vụ phần dưới màn hình (trailer, tra ảnh cho gợi ý):
+  // chờ Hero tải xong rồi mới tải để không tranh băng thông với nội dung đầu trang.
+  const lowPriority = { enabled: trendingQ.isSuccess || trendingQ.isError };
+  const latestMoviesQ = useLatestMovies(lowPriority);
+  const latestTvQ = useLatestTvShows(lowPriority);
+  const historyQ = useWatchHistory();
+  const { mutate: removeHistory } = useRemoveWatchHistory();
+
+  const movies = trendingQ.data ?? EMPTY;
+  const tvShows = tvTopQ.data ?? EMPTY;
+  const genres = genresQ.data ?? EMPTY;
+  const trailerSourceMovies = latestMoviesQ.data ?? EMPTY;
+  const trailerSourceTvShows = latestTvQ.data ?? EMPTY;
+  const watchHistory = historyQ.data;
+
+  // Loading screen hiện MỖI LẦN vào trang chủ: giữ tối thiểu MIN_LOADING_MS để chữ UIAMOVIE
+  // gõ xong rồi mới "kéo rèm", kể cả khi dữ liệu đã có sẵn trong cache.
+  // HomePage unmount khi rời trang nên state này tự reset ở lần vào kế tiếp.
+  const [minLoadingDone, setMinLoadingDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMinLoadingDone(true), MIN_LOADING_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Chỉ phim thịnh hành là bắt buộc (HeroBanner); các phần còn lại tải xong tới đâu hiện tới đó
+  const loading = trendingQ.isLoading || !minLoadingDone;
+  const error =
+    trendingQ.isError && !trendingQ.data
+      ? trendingQ.error?.message || "Không thể tải dữ liệu"
+      : null;
+
+  // Chỉ trending là bắt buộc → chỉ refetch đúng query đó, các query khác tự lo
+  const { refetch: refetchTrending } = trendingQ;
+  const handleRetry = useCallback(() => {
+    refetchTrending();
+  }, [refetchTrending]);
+
+  // Làm mới trạng thái Premium một lần khi vào trang (không chặn việc tải dữ liệu)
+  useEffect(() => {
+    if (authService.isLoggedIn()) authService.refreshPremiumStatus();
+  }, []);
 
   useEffect(() => {
     let ticking = false;
@@ -234,173 +248,16 @@ export default function HomePage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCount]);
-
-  const handleRetry = useCallback(() => {
-    hasFetched.current = false;
-    setError(null);
-    setRetryCount((c) => c + 1);
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      await authService.refreshPremiumStatus();
-
-      const [
-        moviesData,
-        tvShowsData,
-        genresData,
-        favsData,
-        tvFavsData,
-        historyData,
-        tvHistoryData,
-        trailerMoviesData,
-        trailerTvShowsData,
-      ] = await Promise.all([
-        movieService.getTrendingMovies(),
-        tvShowService
-          .getTvShows({ pageSize: 60, sortBy: "rating", sortDesc: true })
-          .catch(() => []),
-        genreService.getAllGenres(),
-        movieService.getFavorites().catch(() => []),
-        tvShowService.getFavorites?.().catch(() => []) ?? Promise.resolve([]),
-        movieService.getWatchHistory().catch(() => []),
-        tvShowService.getWatchHistory?.().catch(() => []) ??
-          Promise.resolve([]),
-        movieService
-          .getMovies({
-            page: 1,
-            pageSize: 100,
-            sortBy: "releaseDate",
-            sortDesc: true,
-          })
-          .catch(() => []),
-        tvShowService
-          .getTvShows({
-            page: 1,
-            pageSize: 100,
-            sortBy: "firstAirDate",
-            sortDesc: true,
-          })
-          .catch(() => []),
-      ]);
-
-      const rawMovies = Array.isArray(moviesData)
-        ? moviesData
-        : moviesData?.movies || [];
-      const normalized = rawMovies.map(normalizeMovie);
-      setMovies(normalized);
-
-      const rawTvShows = Array.isArray(tvShowsData)
-        ? tvShowsData
-        : (tvShowsData?.items ??
-          tvShowsData?.tvShows ??
-          tvShowsData?.data?.items ??
-          tvShowsData?.data ??
-          []);
-      const normalizedTv = rawTvShows.map(normalizeTvShow);
-      setTvShows(normalizedTv);
-
-      const rawGenres = Array.isArray(genresData)
-        ? genresData
-        : genresData?.genres || [];
-      setGenres(rawGenres);
-
-      const rawFavs = Array.isArray(favsData)
-        ? favsData
-        : favsData?.data || favsData?.favorites || [];
-      const rawTvFavs = Array.isArray(tvFavsData)
-        ? tvFavsData
-        : tvFavsData?.data || tvFavsData?.favorites || [];
-      setFavorites(
-        new Set([
-          ...rawFavs.map((f) => String(f.movieId ?? f.id)),
-          ...rawTvFavs.map((f) => String(f.tvShowId ?? f.movieId ?? f.id)),
-        ]),
-      );
-
-      const rawMovieHistory = Array.isArray(historyData)
-        ? historyData
-        : historyData?.data || historyData?.history || [];
-      const rawTvHistory = Array.isArray(tvHistoryData)
-        ? tvHistoryData
-        : tvHistoryData?.data || tvHistoryData?.history || [];
-
-      const combinedHistory = [
-        ...rawMovieHistory.map((h) => ({ ...h, isTvShow: false })),
-        ...rawTvHistory.map((h) => ({ ...h, isTvShow: true })),
-      ].sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt));
-
-      setWatchHistory(combinedHistory);
-
-      const rawTrailerMovies = Array.isArray(trailerMoviesData)
-        ? trailerMoviesData
-        : trailerMoviesData?.items || trailerMoviesData?.movies || [];
-      const rawTrailerTvShows = Array.isArray(trailerTvShowsData)
-        ? trailerTvShowsData
-        : (trailerTvShowsData?.items ??
-          trailerTvShowsData?.tvShows ??
-          trailerTvShowsData?.data?.items ??
-          trailerTvShowsData?.data ??
-          []);
-      setTrailerSourceMovies(rawTrailerMovies.map(normalizeMovie));
-      setTrailerSourceTvShows(rawTrailerTvShows.map(normalizeTvShow));
-
-      fetchForYou(normalized, normalizedTv, combinedHistory);
-    } catch (err) {
-      setError(err.message || "Không thể tải dữ liệu");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Gợi ý AI do chính RecommendSection gọi (/recommendation/personalized).
   // Ở đây chỉ dựng danh sách fallback phía client, dùng khi AI chưa có dữ liệu.
-  const fetchForYou = useCallback(
-    (normalizedMovies, normalizedTvShows, rawHistory) => {
-      setForYouLoading(true);
-      const allItems = [...normalizedMovies, ...normalizedTvShows];
-      const highlyRated = byRating(allItems).slice(0, 20);
-      const fallback = buildForYouFallback(allItems, rawHistory, highlyRated);
-      setForYou(fallback);
-      setForYouLabel(
-        rawHistory.length > 0
-          ? "Dựa trên lịch sử xem của bạn"
-          : "Khám phá thêm",
-      );
-      setForYouLoading(false);
-    },
-    [],
-  );
+  const forYou = useMemo(() => {
+    const allItems = [...movies, ...tvShows];
+    const topRated = byRating(allItems).slice(0, 20);
+    return buildForYouFallback(allItems, watchHistory, topRated);
+  }, [movies, tvShows, watchHistory]);
 
-  const toggleFavorite = useCallback((item, isNowFav) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (isNowFav === true) {
-        next.add(String(item.id));
-      } else if (isNowFav === false) {
-        next.delete(String(item.id));
-      } else {
-        next.has(String(item.id))
-          ? next.delete(String(item.id))
-          : next.add(String(item.id));
-      }
-      return next;
-    });
-  }, []);
-
-  const isFavorited = useCallback(
-    (id) => favorites.has(String(id)),
-    [favorites],
-  );
+  const forYouLabel =
+    watchHistory.length > 0 ? "Dựa trên lịch sử xem của bạn" : "Khám phá thêm";
 
   const continueWatchingList = useMemo(() => {
     const movieMap = new Map(movies.map((m) => [String(m.id), m]));
@@ -449,50 +306,21 @@ export default function HomePage() {
 
     const seenKeys = new Set();
     return mapped.filter((item) => {
-      const dedupeKey = `${item.isTvShow ? "tv" : "mv"}-${item.id}`;
+      const dedupeKey = mediaKey(item);
       if (seenKeys.has(dedupeKey)) return false;
       seenKeys.add(dedupeKey);
       return true;
     });
   }, [watchHistory, movies, tvShows]);
 
-  const handleRemoveHistory = useCallback(async (item) => {
-    setWatchHistory((prev) =>
-      prev.filter((h) => String(h.id) !== String(item.historyId))
-    );
-
-    try {
-      if (item.isTvShow) {
-        await tvShowService.deleteWatchHistory(item.historyId);
-      } else {
-        await movieService.deleteWatchHistory(item.historyId);
-      }
-    } catch (err) {
-      console.error("Error deleting watch history:", err);
-      const [historyData, tvHistoryData] = await Promise.all([
-        movieService.getWatchHistory().catch(() => []),
-        tvShowService.getWatchHistory?.().catch(() => []) ??
-          Promise.resolve([]),
-      ]);
-      const rawMovieHistory = Array.isArray(historyData)
-        ? historyData
-        : historyData?.data || historyData?.history || [];
-      const rawTvHistory = Array.isArray(tvHistoryData)
-        ? tvHistoryData
-        : tvHistoryData?.data || tvHistoryData?.history || [];
-      setWatchHistory(
-        [
-          ...rawMovieHistory.map((h) => ({ ...h, isTvShow: false })),
-          ...rawTvHistory.map((h) => ({ ...h, isTvShow: true })),
-        ].sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt))
-      );
-    }
-  }, []);
+  const handleRemoveHistory = useCallback(
+    (item) => removeHistory(item),
+    [removeHistory],
+  );
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const highlyRated = useMemo(() => byRating(movies).slice(0, 20), [movies]);
   const newest = useMemo(() => byNewest(movies).slice(0, 20), [movies]);
-  const reviewMovies = useMemo(() => byRating(movies).slice(0, 6), [movies]);
 
   const tvTopRated = useMemo(() => byRating(tvShows).slice(0, 20), [tvShows]);
   const tvNewest = useMemo(() => byNewest(tvShows).slice(0, 20), [tvShows]);
@@ -657,8 +485,6 @@ export default function HomePage() {
                     title="Top 10 Hôm Nay"
                     movies={highlyRated}
                     tvShows={tvTopRated}
-                    onFavoriteToggle={toggleFavorite}
-                    isFavorited={isFavorited}
                   />
                 </HomeReveal>
 
@@ -669,26 +495,13 @@ export default function HomePage() {
                   </HomeReveal>
                 )}
 
-                <CountryMovieRows
-                  favIds={favorites}
-                  onFavToggle={(item, isNowFav) => {
-                    setFavorites((prev) => {
-                      const next = new Set(prev);
-                      isNowFav
-                        ? next.add(String(item.id))
-                        : next.delete(String(item.id));
-                      return next;
-                    });
-                  }}
-                />
+                <CountryMovieRows />
 
                 {/* ── Được Đánh Giá Cao ── */}
                 <HomeReveal variant="row" divider>
                   <MovieRow
                     title="Phim Được Đánh Giá Cao"
                     movies={highlyRated}
-                    onFavoriteToggle={toggleFavorite}
-                    isFavorited={isFavorited}
                     accentColor="#f5c518"
                     seeAllSort="rating"
                     badge={{ icon: Star, text: "Đánh giá cao" }}
@@ -701,8 +514,6 @@ export default function HomePage() {
                     <MovieRow
                       title="TV Series Nổi Bật"
                       items={tvTopRated}
-                      onFavoriteToggle={toggleFavorite}
-                      isFavorited={isFavorited}
                       accentColor="#818cf8"
                       seeAllPath="/browse/tvshows?sort=rating"
                       badge={{ icon: Tv, text: "TV Show" }}
@@ -715,8 +526,6 @@ export default function HomePage() {
                   <MovieRow
                     title="Phim Mới Ra Mắt"
                     movies={newest}
-                    onFavoriteToggle={toggleFavorite}
-                    isFavorited={isFavorited}
                     accentColor="#38bdf8"
                     seeAllSort="releaseDate"
                     badge={{ icon: CalendarDays, text: "Mới nhất" }}
@@ -729,8 +538,6 @@ export default function HomePage() {
                     <MovieRow
                       title="Series Mới Nhất"
                       items={tvNewest}
-                      onFavoriteToggle={toggleFavorite}
-                      isFavorited={isFavorited}
                       accentColor="#34d399"
                       seeAllPath="/browse/tvshows?sort=firstAirDate"
                       badge={{ icon: CalendarDays, text: "Mới nhất" }}
@@ -739,249 +546,19 @@ export default function HomePage() {
                 )}
 
                 {/* ── Dành Cho Bạn ── */}
-                {forYouLoading && forYou.length === 0 ? (
-                  <div style={{ marginBottom: 56 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        marginBottom: 20,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: "50%",
-                          background: "rgba(255,255,255,0.06)",
-                        }}
-                      />
-                      <div
-                        style={{
-                          height: 24,
-                          width: 220,
-                          borderRadius: 6,
-                          background: "rgba(255,255,255,0.06)",
-                        }}
-                      />
-                    </div>
-
-                    {!isMobile ? (
-                      <div
-                        style={{
-                          borderRadius: 24,
-                          background: "rgba(255,255,255,0.02)",
-                          padding: "36px 36px 30px 36px",
-                          display: "grid",
-                          gridTemplateColumns: "300px 1fr",
-                          gap: 40,
-                          animation: "pulse 1.6s ease-in-out infinite",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "100%",
-                            aspectRatio: "2 / 3",
-                            borderRadius: 20,
-                            background: "rgba(255,255,255,0.04)",
-                          }}
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                              <div
-                                style={{
-                                  height: 22,
-                                  width: 150,
-                                  borderRadius: 999,
-                                  background: "rgba(255,255,255,0.05)",
-                                }}
-                              />
-                              <div
-                                style={{
-                                  height: 22,
-                                  width: 170,
-                                  borderRadius: 999,
-                                  background: "rgba(255,255,255,0.05)",
-                                }}
-                              />
-                            </div>
-                            <div
-                              style={{
-                                height: 36,
-                                width: "65%",
-                                borderRadius: 8,
-                                background: "rgba(255,255,255,0.06)",
-                                marginBottom: 16,
-                              }}
-                            />
-                            <div
-                              style={{
-                                height: 18,
-                                width: "35%",
-                                borderRadius: 6,
-                                background: "rgba(255,255,255,0.04)",
-                                marginBottom: 16,
-                              }}
-                            />
-                            <div
-                              style={{
-                                height: 14,
-                                width: "85%",
-                                borderRadius: 4,
-                                background: "rgba(255,255,255,0.03)",
-                                marginBottom: 8,
-                              }}
-                            />
-                            <div
-                              style={{
-                                height: 14,
-                                width: "70%",
-                                borderRadius: 4,
-                                background: "rgba(255,255,255,0.03)",
-                                marginBottom: 24,
-                              }}
-                            />
-                            <div style={{ display: "flex", gap: 12 }}>
-                              <div
-                                style={{
-                                  height: 42,
-                                  width: 130,
-                                  borderRadius: 999,
-                                  background: "rgba(255,255,255,0.08)",
-                                }}
-                              />
-                              <div
-                                style={{
-                                  width: 42,
-                                  height: 42,
-                                  borderRadius: "50%",
-                                  background: "rgba(255,255,255,0.05)",
-                                }}
-                              />
-                              <div
-                                style={{
-                                  width: 42,
-                                  height: 42,
-                                  borderRadius: "50%",
-                                  background: "rgba(255,255,255,0.05)",
-                                }}
-                              />
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(5, 1fr)",
-                              gap: 12,
-                              marginTop: 24,
-                            }}
-                          >
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  height: 104,
-                                  borderRadius: 14,
-                                  background: "rgba(255,255,255,0.04)",
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          borderRadius: 16,
-                          background: "rgba(255,255,255,0.03)",
-                          padding: 12,
-                          display: "flex",
-                          gap: 12,
-                          animation: "pulse 1.6s ease-in-out infinite",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 90,
-                            aspectRatio: "2 / 3",
-                            borderRadius: 10,
-                            background: "rgba(255,255,255,0.05)",
-                          }}
-                        />
-                        <div
-                          style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 10,
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: 16,
-                              width: "45%",
-                              borderRadius: 4,
-                              background: "rgba(255,255,255,0.05)",
-                            }}
-                          />
-                          <div
-                            style={{
-                              height: 20,
-                              width: "80%",
-                              borderRadius: 6,
-                              background: "rgba(255,255,255,0.06)",
-                            }}
-                          />
-                          <div
-                            style={{
-                              height: 14,
-                              width: "60%",
-                              borderRadius: 4,
-                              background: "rgba(255,255,255,0.04)",
-                            }}
-                          />
-                          <div
-                            style={{
-                              height: 32,
-                              width: "100%",
-                              borderRadius: 8,
-                              background: "rgba(255,255,255,0.06)",
-                              marginTop: "auto",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <HomeReveal variant="spotlight" divider>
-                    <RecommendSection
-                      subtitle={forYouLabel}
-                      items={forYou}
-                      movies={recommendLookupMovies}
-                      tvShows={recommendLookupTvShows}
-                      onFavoriteToggle={toggleFavorite}
-                      isFavorited={isFavorited}
-                      favoritedIds={Array.from(favorites)}
-                    />
-                  </HomeReveal>
-                )}
+                <HomeReveal variant="spotlight" divider>
+                  <RecommendSection
+                    subtitle={forYouLabel}
+                    items={forYou}
+                    movies={recommendLookupMovies}
+                    tvShows={recommendLookupTvShows}
+                  />
+                </HomeReveal>
 
                 {/* ── User Reviews ── */}
                 <HomeReveal variant="fade">
                   <UserReviewsSection
-                    movies={reviewMovies}
-                    onMovieClick={(movie) => {
-                      window.location.href = `/movie/${movie.id}`;
-                    }}
+                    onMovieClick={(id) => navigate(`/movie/${id}`)}
                   />
                 </HomeReveal>
               </div>
@@ -994,13 +571,6 @@ export default function HomePage() {
               <Footer />
             </>
           </div>
-
-          <style>{`
-            @keyframes pulse {
-              0%, 100% { opacity: 0.4; }
-              50%       { opacity: 0.8; }
-            }
-          `}</style>
         </div>
       )}
     </>

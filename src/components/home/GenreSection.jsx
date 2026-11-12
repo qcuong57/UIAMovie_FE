@@ -1,6 +1,6 @@
 // src/components/home/GenreSection.jsx
 // ─── Genre cards: refined, elegant — không in hoa, tinh tế hơn ───────────────
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -14,12 +14,24 @@ import {
 } from "../../context/homeTokens";
 
 // ── GenreCard ─────────────────────────────────────────────────────────────────
+// Ảnh nền cho từng thể loại — tính MỘT lần cho cả hàng (thay vì mỗi thẻ tự .find trên 100+ phần tử)
+const firstByGenre = (items) => {
+  const map = new Map();
+  for (const item of items) {
+    if (!(item.backdropUrl || item.posterUrl)) continue;
+    for (const g of item.genres || []) {
+      const k = String(g?.name ?? g).toLowerCase();
+      if (!map.has(k)) map.set(k, item);
+    }
+  }
+  return map;
+};
+
 const GenreCard = ({
   genre,
   onClick,
   index,
-  movies = [],
-  tvShows = [],
+  bgImg = null,
   isMobile = false,
 }) => {
   const [hovered, setHovered] = useState(false);
@@ -33,21 +45,6 @@ const GenreCard = ({
     .join(" ");
 
   const color = GENRE_COLOR[genre.name] || C.accent;
-
-  // Tìm backdrop: ưu tiên movie có backdrop, fallback sang tvShow
-  const matchGenre = (item) =>
-    item.genres?.some((g) => g.toLowerCase() === genre.name.toLowerCase());
-
-  const bgMovie  = movies.find((m) => matchGenre(m) && (m.backdropUrl || m.posterUrl));
-  const bgTvShow = tvShows.find((s) => matchGenre(s) && (s.backdropUrl || s.posterUrl));
-
-  // Ưu tiên backdrop > poster, và movie > tvShow (có thể đổi tuỳ ý)
-  const bgImg =
-    bgMovie?.backdropUrl  ||
-    bgTvShow?.backdropUrl ||
-    bgMovie?.posterUrl    ||
-    bgTvShow?.posterUrl   ||
-    null;
 
   return (
     <motion.div
@@ -373,6 +370,24 @@ export default function GenreSection({
 }) {
   const scrollRef = useRef(null);
   const isMobile = useIsMobile();
+
+  // Ưu tiên backdrop > poster, và movie > tvShow
+  const bgByGenre = useMemo(() => {
+    const mv = firstByGenre(movies);
+    const tv = firstByGenre(tvShows);
+    const out = new Map();
+    genres.forEach((genre) => {
+      const k = String(genre.name).toLowerCase();
+      const m = mv.get(k);
+      const s = tv.get(k);
+      out.set(
+        genre.id,
+        m?.backdropUrl || s?.backdropUrl || m?.posterUrl || s?.posterUrl || null,
+      );
+    });
+    return out;
+  }, [genres, movies, tvShows]);
+
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
@@ -435,8 +450,7 @@ export default function GenreSection({
               key={genre.id}
               genre={genre}
               index={i}
-              movies={movies}
-              tvShows={tvShows}
+              bgImg={bgByGenre.get(genre.id)}
               isMobile={isMobile}
               onClick={() =>
                 onGenreSelect?.(selectedGenre === genre.id ? null : genre.id)

@@ -32,6 +32,7 @@ import AnnouncementsPage from "../pages/user/AnnouncementsPage";
 import SeoMeta from "../components/common/SeoMeta";
 import { useToast } from "../components/common/Toast";
 import { useIsLoggedIn, useStoredUser } from "../hooks/useStoredUser";
+import { postLoginPath } from "../utils/authRedirect";
 
 /** Scroll lên đầu trang mỗi khi route thay đổi */
 const ScrollToTop = () => {
@@ -74,15 +75,14 @@ const ProtectedRoute = ({ children }) => {
 
 /**
  * Chỉ cho vào khi CHƯA đăng nhập.
- * Đã đăng nhập → admin về /admin, người dùng thường về Trang chủ
- * (khớp với điều hướng sau đăng nhập trong LandingPage).
+ * Đã đăng nhập → quay lại nơi đang làm dở (location.state.from), nếu không có thì
+ * admin về /admin, người dùng thường về Trang chủ (khớp với LandingPage).
  */
 const GuestRoute = ({ children }) => {
   const user = useStoredUser();
+  const location = useLocation();
   if (!user) return children;
-  return (
-    <Navigate to={user.role?.toLowerCase() === "admin" ? "/admin" : "/"} replace />
-  );
+  return <Navigate to={postLoginPath(user, location.state?.from)} replace />;
 };
 
 /** Route không tồn tại: đã đăng nhập → Trang chủ, khách → Về chúng tôi */

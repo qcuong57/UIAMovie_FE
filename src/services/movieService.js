@@ -10,7 +10,7 @@ const movieService = {
    *
    * @param {Object} filter
    * @param {number}   [filter.page=1]
-   * @param {number}   [filter.pageSize=20]
+   * @param {number}   [filter.pageSize=24]
    * @param {string}   [filter.search]          - Tìm theo tên phim
    * @param {string[]} [filter.genreIds]         - Mảng genre UUID
    * @param {number}   [filter.minRating]        - IMDb tối thiểu
@@ -23,7 +23,7 @@ const movieService = {
    */
   getMovies: async ({
     page = 1,
-    pageSize = 20,
+    pageSize = 24,
     search = "",
     genreIds = [],
     minRating,

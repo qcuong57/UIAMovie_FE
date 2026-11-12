@@ -1,68 +1,74 @@
 // src/pages/BrowsePage.jsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// Trạng thái duyệt (tab, thể loại, năm, điểm, sắp xếp, trạng thái TV, trang) nằm HẾT trên URL:
+//   Back / reload / chia sẻ link đều giữ đúng bộ lọc. Dữ liệu qua React Query, yêu thích qua MovieCard (useFavoriteToggle).
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, SlidersHorizontal, X, Heart, Film, Tv } from 'lucide-react';
+import { ArrowLeft, SlidersHorizontal, X, Film, Tv } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import movieService from '../../services/movieService';
 import tvShowService from '../../services/tvShowService';
-import genreService from '../../services/genreService';
 import MovieCard from '../../components/movie/MovieCard';
 import { SkeletonCard, GRID_STYLE } from '../../components/search/SearchUI';
 import Pagination from '../../components/common/Pagination';
-import { usePagination } from '../../hooks/usePagination';
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { useToast } from '../../components/common/Toast';
-import { getStoredUser as getCurrentUser } from '../../config/sessionStore';
+import { useGenres } from '../../hooks/useHomeQueries';
+import { useMinimumLoading } from '../../hooks/useMinimumLoading';
+import LoadingScreen from '../../components/ui/LoadingScreen';
+import PageError from '../../components/common/PageError';
+import { queryKeys, STALE } from '../../config/queryKeys';
+import { normalizeMovie, normalizeTvShow, mediaKey } from '../../utils/normalizeMedia';
+import { parsePaged } from '../../utils/queryHelpers';
 
 const ACCENT = '#e5181e';
+const PAGE_SIZE = 24; // 24 chia hết cho 2/3/4/6 cột → hàng cuối luôn đầy
+const DEFAULT_SORT = 'rating';
+const EMPTY = [];
 
-const parseItemsResponse = (res) => {
-  if (!res) return { items: [], total: 0 };
-  if (Array.isArray(res)) return { items: res, total: res.length };
+// ── Gọi API: hàm thuần ở mức module (không phụ thuộc component) → dùng chung cho query và prefetch ──
+// filter = { tab, genreId, country, minRating, year, sort, status, page }
+const fetchBrowsePage = async (f) => {
+  // Năm → khoảng ngày (BE lọc theo ReleaseDate / FirstAirDate)
+  const fromDate = f.year ? `${f.year}-01-01` : undefined;
+  const toDate = f.year ? `${f.year}-12-31` : undefined;
+  const common = {
+    page: f.page,
+    pageSize: PAGE_SIZE,
+    genreIds: f.genreId ? [f.genreId] : undefined,
+    originCountry: f.country || undefined,
+    minRating: f.minRating > 0 ? f.minRating : undefined,
+    sortDesc: f.sort !== 'title', // "Tên A–Z" sắp tăng dần, còn lại giảm dần
+  };
 
-  if (res?.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
-    const inner = res.data;
-    if (Array.isArray(inner)) return { items: inner, total: inner.length };
-    const items = inner.movies ?? inner.tvShows ?? inner.items ?? inner.results ?? [];
-    const total = inner.total ?? inner.totalCount ?? inner.count ?? items.length;
-    if (Array.isArray(items)) return { items, total };
+  if (f.tab === 'movie') {
+    const res = await movieService.getMovies({
+      ...common,
+      fromReleaseDate: fromDate,
+      toReleaseDate: toDate,
+      sortBy: f.sort === 'firstairdate' ? 'releaseDate' : f.sort,
+    });
+    const { items, total } = parsePaged(res, ['movies', 'results']);
+    return { items: items.map(normalizeMovie), total };
   }
 
-  const items = res.movies ?? res.tvShows ?? res.items ?? res.results ?? res.data ?? [];
-  const total = res.total ?? res.totalCount ?? res.count ?? (Array.isArray(items) ? items.length : 0);
-  if (Array.isArray(items)) return { items, total };
-
-  return { items: [], total: 0 };
+  const res = await tvShowService.getTvShows({
+    ...common,
+    fromFirstAirDate: fromDate,
+    toFirstAirDate: toDate,
+    status: f.status || undefined,
+    sortBy: f.sort === 'releaseDate' ? 'firstairdate' : f.sort,
+  });
+  const { items, total } = parsePaged(res, ['tvShows', 'results']);
+  return { items: items.map(normalizeTvShow), total };
 };
 
-const normalizeMovie = (m) => ({
-  id: m.id,
-  title: m.title,
-  year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : m.year ?? null,
-  rating: m.rating ?? m.imdbRating ?? 0,
-  posterUrl: m.posterUrl ?? m.poster ?? null,
-  backdropUrl: m.backdropUrl ?? m.backdrop ?? null,
-  genres: m.genres ?? [],
-  description: m.description ?? '',
-  duration: m.duration ?? null,
-  releaseDate: m.releaseDate ?? null,
-  isTvShow: false,
-});
-
-const normalizeTvShow = (s) => ({
-  id: s.id,
-  title: s.title ?? s.name,
-  year: s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : s.year ?? null,
-  rating: s.rating ?? s.imdbRating ?? 0,
-  posterUrl: s.posterUrl ?? s.poster ?? null,
-  backdropUrl: s.backdropUrl ?? s.backdrop ?? null,
-  genres: s.genres ?? [],
-  description: s.description ?? '',
-  releaseDate: s.firstAirDate ?? null,
-  isTvShow: true,
+const browseQuery = (filter) => ({
+  queryKey: queryKeys.browse.list(filter),
+  queryFn: () => fetchBrowsePage(filter),
+  staleTime: STALE.list,
 });
 
 const ContentTypeTabs = ({ activeTab, onTabChange, isMobile }) => (
@@ -193,7 +199,7 @@ const FilterContent = ({ genres, selGenre, onGenreChange, selYear, onYearChange,
         <>
           <FilterGroup label="Thể loại" scrollable>
             <FilterBtn active={!selGenre} onClick={() => onGenreChange(null)}>Tất cả</FilterBtn>
-            {genres.map(g => <FilterBtn key={g.id} active={selGenre === g.id} onClick={() => onGenreChange(g.id)}>{g.name}</FilterBtn>)}
+            {genres.map(g => <FilterBtn key={g.id} active={String(selGenre) === String(g.id)} onClick={() => onGenreChange(g.id)}>{g.name}</FilterBtn>)}
           </FilterGroup>
           <Divider />
         </>
@@ -237,58 +243,67 @@ const FilterSidebar = ({ show, isMobile, onClose, ...props }) => {
     return () => { document.body.style.overflow = ''; };
   }, [show, isMobile]);
 
-  if (!show) return null;
-
+  // AnimatePresence luôn được mount → khi `show` về false, phần tử mới có thời gian chạy exit
   if (isMobile) {
     return createPortal(
       <AnimatePresence>
-        <motion.div
-          key="backdrop"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={onClose}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', zIndex: 99998 }}
-        />
-        <motion.div
-          key="sheet"
-          initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 99999,
-            background: '#121212',
-            borderTop: '1px solid rgba(255,255,255,0.15)',
-            borderRadius: '20px 20px 0 0',
-            padding: '16px 18px 36px',
-            maxHeight: '85vh',
-            overflowY: 'auto',
-            boxShadow: '0 -10px 40px rgba(0,0,0,0.8)',
-          }}
-        >
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)', margin: '0 auto 16px' }} />
-          <FilterContent {...props} onClose={onClose} />
-        </motion.div>
+        {show && (
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', zIndex: 99998 }}
+          />
+        )}
+        {show && (
+          <motion.div
+            key="sheet"
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 99999,
+              background: '#121212',
+              borderTop: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '20px 20px 0 0',
+              padding: '16px 18px 36px',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.8)',
+            }}
+          >
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)', margin: '0 auto 16px' }} />
+            <FilterContent {...props} onClose={onClose} />
+          </motion.div>
+        )}
       </AnimatePresence>,
       document.body
     );
   }
 
   return (
-    <motion.aside
-      key="sidebar"
-      initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
-      transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
-      style={{ width: 256, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px 18px', alignSelf: 'flex-start', position: 'sticky', top: 88 }}
-    >
-      <FilterContent {...props} />
-    </motion.aside>
+    <AnimatePresence>
+      {show && (
+        <motion.aside
+          key="sidebar"
+          initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+          style={{ width: 256, flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px 18px', alignSelf: 'flex-start', position: 'sticky', top: 88 }}
+        >
+          <FilterContent {...props} />
+        </motion.aside>
+      )}
+    </AnimatePresence>
   );
 };
 
 const EmptyState = ({ error, onAction, isTvShow }) => (
-  <div style={{ textAlign: 'center', padding: '80px 0' }}>
+  <motion.div
+    initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    style={{ textAlign: 'center', padding: '80px 0' }}>
     <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>{error ? '⚠️' : (isTvShow ? '📺' : '🎬')}</div>
     <p style={{ fontFamily: FONT_BODY, fontSize: 15, color: 'rgba(255,255,255,0.3)', marginBottom: 20 }}>
       {error || `Không tìm thấy ${isTvShow ? 'TV show' : 'phim'} nào`}
@@ -296,291 +311,139 @@ const EmptyState = ({ error, onAction, isTvShow }) => (
     <button onClick={onAction} style={{ padding: '9px 24px', borderRadius: 9, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontFamily: FONT_BODY, fontSize: 13, fontWeight: 600 }}>
       {error ? 'Thử lại' : 'Xóa bộ lọc'}
     </button>
-  </div>
+  </motion.div>
 );
 
-// MobileCard: Fix triệt để không bấm được tim trên mobile
-const BrowseMobileCard = ({ movie, isFavorited, onFavoriteToggle, navigate }) => {
-  const [imgErr, setImgErr] = React.useState(false);
-  const [favLoading, setFavLoading] = React.useState(false);
-  const [localFav, setLocalFav] = React.useState(isFavorited);
-  const toast = useToast();
-
-  React.useEffect(() => { setLocalFav(isFavorited); }, [isFavorited]);
-
-  const handleFav = async (e) => {
-    e.stopPropagation();
-    if (favLoading) return;
-
-    if (!getCurrentUser()) {
-      toast?.warning?.('Bạn cần đăng nhập để thêm vào Yêu thích');
-      return;
-    }
-
-    setFavLoading(true);
-    const nextState = !localFav;
-    setLocalFav(nextState);
-    onFavoriteToggle?.(movie, nextState);
-
-    try {
-      if (!nextState) {
-        if (movie.isTvShow) {
-          await (tvShowService.removeFavorite ? tvShowService.removeFavorite(movie.id) : movieService.removeFavorite(movie.id));
-        } else {
-          await movieService.removeFavorite(movie.id);
-        }
-        toast?.info?.(`"${movie.title}" đã được bỏ khỏi Yêu thích`);
-      } else {
-        if (movie.isTvShow) {
-          await (tvShowService.addFavorite ? tvShowService.addFavorite(movie.id) : movieService.addFavorite(movie.id));
-        } else {
-          await movieService.addFavorite(movie.id);
-        }
-        toast?.success?.(`Đã thêm "${movie.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      console.error('[Favorite Error]:', err);
-      setLocalFav(!nextState);
-      onFavoriteToggle?.(movie, !nextState);
-      toast?.error?.('Không thể cập nhật Yêu thích, vui lòng thử lại');
-    } finally {
-      setFavLoading(false);
-    }
-  };
-
-  const handleClick = () => {
-    if (movie.isTvShow) navigate(`/tvshow/${movie.id}/info`);
-    else navigate(`/movie/${movie.id}/info`);
-  };
-
-  return (
-    <div onClick={handleClick} style={{ cursor: 'pointer', position: 'relative' }}>
-      <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '2/3', background: '#181818' }}>
-        {movie.posterUrl && !imgErr
-          ? <img src={movie.posterUrl} alt={movie.title} onError={() => setImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>{movie.isTvShow ? '📺' : '🎬'}</div>
-        }
-
-        {movie.isTvShow && (
-          <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 6px', borderRadius: 3, background: 'rgba(229,24,30,0.85)', backdropFilter: 'blur(4px)' }}>
-            <span style={{ fontFamily: FONT_BODY, fontSize: 8, fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>TV</span>
-          </div>
-        )}
-
-        {movie.rating > 0 && (
-          <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 99, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="#f5c518"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            <span style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 700, color: '#f5c518' }}>{movie.rating.toFixed(1)}</span>
-          </div>
-        )}
-
-        {/* Nút tim */}
-        <button
-          type="button"
-          onClick={handleFav}
-          disabled={favLoading}
-          aria-label="Yêu thích"
-          style={{
-            position: 'absolute',
-            bottom: 6,
-            right: 6,
-            zIndex: 10,
-            width: 30,
-            height: 30,
-            borderRadius: '50%',
-            background: localFav ? '#e5181e' : 'rgba(0,0,0,0.6)',
-            border: `1.5px solid ${localFav ? '#e5181e' : 'rgba(255,255,255,0.3)'}`,
-            backdropFilter: 'blur(6px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: favLoading ? 'not-allowed' : 'pointer',
-            opacity: favLoading ? 0.7 : 1,
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          {favLoading ? (
-            <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'block' }} />
-          ) : (
-            <Heart size={14} fill={localFav ? 'white' : 'none'} color="white" strokeWidth={2} />
-          )}
-        </button>
-      </div>
-
-      <div style={{ paddingTop: 7, paddingBottom: 4 }}>
-        <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 12, fontWeight: 700, color: '#f0f2f8', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginBottom: 2 }}>{movie.title}</p>
-        {movie.year && <p style={{ fontFamily: "'Nunito',sans-serif", fontSize: 10, color: '#888' }}>{movie.year}</p>}
-      </div>
-    </div>
-  );
+const COUNTRY_LABELS = {
+  KR: '🇰🇷 Hàn Quốc', CN: '🇨🇳 Trung Quốc', US: '🇺🇸 Hollywood',
+  JP: '🇯🇵 Nhật Bản', VN: '🇻🇳 Việt Nam', FR: '🇫🇷 Pháp',
+  GB: '🇬🇧 Anh', IN: '🇮🇳 Ấn Độ', TH: '🇹🇭 Thái Lan',
 };
 
 export default function BrowsePage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const genreId = searchParams.get('genre') || null;
-  const genreName = searchParams.get('name') || '';
-  const urlSort = searchParams.get('sort') || 'rating';
-  const urlCountry = searchParams.get('country') || null;
-  const tabParam = searchParams.get('tab') || 'movie';
-
-  const [activeTab, setActiveTab] = useState(tabParam);
-  const [genres, setGenres] = useState([]);
-  const [allItems, setAllItems] = useState([]);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(null);
-  const [total, setTotal] = useState(0);
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showFilter, setShowFilter] = useState(false);
 
-  const [selGenre, setSelGenre] = useState(null);
-  const [selYear, setSelYear] = useState(null);
-  const [sortBy, setSortBy] = useState(urlSort);
-  const [minRating, setMinRating] = useState(0);
-  const [selCountry, setSelCountry] = useState(null);
-  const [tvStatus, setTvStatus] = useState('');
-  const [favIds, setFavIds] = useState(new Set());
+  // ── Trạng thái đọc từ URL (nguồn sự thật duy nhất) ──
+  const lockedGenreId = searchParams.get('genre') || null; // thể loại cố định (đi từ link thể loại, kèm ?name=)
+  const genreName = searchParams.get('name') || '';
+  const country = searchParams.get('country') || null;
+  const activeTab = searchParams.get('tab') === 'tvshow' ? 'tvshow' : 'movie';
+  const selGenre = searchParams.get('g') || null; // thể loại người dùng chọn trong bộ lọc
+  const yearParam = searchParams.get('year');
+  const selYear = /^\d{4}$/.test(yearParam || '') ? yearParam : null;
+  const minRating = Math.max(Number(searchParams.get('rating')) || 0, 0);
+  const sortBy = searchParams.get('sort') || DEFAULT_SORT;
+  const tvStatus = searchParams.get('status') || '';
+  const page = Math.max(parseInt(searchParams.get('page'), 10) || 1, 1);
 
-  const fetchIdRef = useRef(0);
-  const pagination = usePagination({ total });
+  // Thể loại: dùng chung cache với trang chủ (không tốn thêm request nếu đã vào trang chủ)
+  const { data: genres = EMPTY } = useGenres();
 
-  const activeGenreId = genreId || selGenre;
-  const activeCountry = urlCountry || selCountry;
+  // Cập nhật URL: giá trị rỗng/mặc định thì xoá khỏi URL; mọi thay đổi (trừ khi đang đổi chính page) đều về trang 1.
+  // replace=true cho thay đổi bộ lọc nhỏ để nút Back không phải lùi từng bước.
+  const update = useCallback((patch, { replace = true } = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null || v === '' || v === 0) next.delete(k);
+        else next.set(k, String(v));
+      }
+      if (!('page' in patch)) next.delete('page');
+      return next;
+    }, { replace });
+  }, [setSearchParams]);
 
-  useEffect(() => {
-    genreService.getAllGenres()
-      .then(res => {
-        const list = Array.isArray(res) ? res : res?.genres ?? res?.data ?? parseItemsResponse(res).items ?? [];
-        setGenres(list);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const extractIds = (res, idField) => {
-      const raw = Array.isArray(res) ? res : res?.data ? (Array.isArray(res.data) ? res.data : res.data?.items ?? res.data?.movies ?? res.data?.tvShows ?? []) : res?.items ?? res?.movies ?? res?.tvShows ?? [];
-      return raw.map(f => String(f[idField] ?? f.movie?.id ?? f.tvShow?.id ?? f.id ?? '')).filter(Boolean);
-    };
-
-    Promise.allSettled([
-      movieService.getFavorites(),
-      tvShowService.getFavorites?.() ?? Promise.resolve([]),
-    ]).then(([movieRes, tvRes]) => {
-      const ids = new Set();
-      if (movieRes.status === 'fulfilled') extractIds(movieRes.value, 'movieId').forEach(id => ids.add(id));
-      if (tvRes.status === 'fulfilled') extractIds(tvRes.value, 'tvShowId').forEach(id => ids.add(id));
-      setFavIds(ids);
-    }).catch(() => {});
-  }, []);
+  const setPage = useCallback((p, replace = true) => update({ page: p <= 1 ? null : p }, { replace }), [update]);
 
   const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setSelGenre(null);
-    setSelYear(null);
-    setMinRating(0);
-    setTvStatus('');
-    setSortBy('rating');
-    setFetchError(null);
-    pagination.setPage?.(1);
+    if (tab === activeTab) return;
+    // Đổi tab là điều hướng thật → push history để Back quay lại tab trước
+    update({ tab: tab === 'movie' ? null : tab, g: null, year: null, rating: null, sort: null, status: null }, { replace: false });
   };
+  const clearFilters = () => update({ g: null, year: null, rating: null, sort: null, status: null });
 
-  const doFetch = useCallback(async () => {
-    const id = ++fetchIdRef.current;
-    setLoading(true);
-    setFetchError(null);
+  // ── Dữ liệu ──
+  const filter = useMemo(() => ({
+    tab: activeTab,
+    genreId: lockedGenreId || selGenre,
+    country,
+    minRating,
+    year: selYear,
+    sort: sortBy,
+    status: activeTab === 'tvshow' ? tvStatus : '',
+    page,
+  }), [activeTab, lockedGenreId, selGenre, country, minRating, selYear, sortBy, tvStatus, page]);
 
-    try {
-      let raw = [];
-      if (activeTab === 'movie') {
-        if (activeGenreId) {
-          const res = await movieService.getMoviesByGenre(activeGenreId);
-          raw = parseItemsResponse(res).items;
-        } else if (activeCountry) {
-          const res = await movieService.getMoviesByCountry(activeCountry);
-          raw = parseItemsResponse(res).items;
-        } else {
-          const res = await movieService.getMovies(1, 200);
-          raw = parseItemsResponse(res).items;
-        }
-        if (id !== fetchIdRef.current) return;
-        raw = raw.map(normalizeMovie);
-      } else {
-        if (activeGenreId) {
-          const res = await tvShowService.getTvShowsByGenre(activeGenreId);
-          raw = parseItemsResponse(res).items;
-        } else {
-          const res = await tvShowService.getTvShows({
-            page: 1,
-            pageSize: 200,
-            originCountry: activeCountry || undefined,
-            status: tvStatus || undefined,
-            sortBy: sortBy === 'releaseDate' ? 'firstairdate' : sortBy,
-            sortDesc: true,
-          });
-          raw = parseItemsResponse(res).items;
-        }
-        if (id !== fetchIdRef.current) return;
-        raw = raw.map(normalizeTvShow);
-      }
+  const { data, isLoading, isPlaceholderData, isError, refetch } = useQuery({
+    ...browseQuery(filter),
+    // Đổi trang/bộ lọc: giữ kết quả cũ (làm mờ) thay vì xoá trắng; đổi tab phim ↔ TV show thì bỏ
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[2]?.tab === activeTab ? prev : undefined),
+  });
 
-      if (minRating > 0) raw = raw.filter(m => (m.rating || 0) >= minRating);
-      if (selYear) raw = raw.filter(m => String(m.year) === String(selYear));
-      if (selCountry && !urlCountry) raw = raw.filter(m => m.originCountry === selCountry);
+  const items = data?.items ?? EMPTY;
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const loading = isLoading; // chưa có dữ liệu nào để hiển thị
 
-      raw = [...raw].sort((a, b) => {
-        const sortKey = activeTab === 'tvshow' && sortBy === 'firstairdate' ? 'releaseDate' : sortBy;
-        return sortKey === 'rating' ? (b.rating || 0) - (a.rating || 0)
-             : sortKey === 'releaseDate' ? new Date(b.releaseDate || 0) - new Date(a.releaseDate || 0)
-             : sortKey === 'title' ? (a.title || '').localeCompare(b.title || '', 'vi')
-             : 0;
-      });
+  // Giống FavoritesPage: vào trang luôn hiện LoadingScreen (tối thiểu ~1.1s), xong thì trượt lên.
+  // Chỉ áp dụng cho lần vào trang đầu; đổi tab / bộ lọc SAU ĐÓ dùng skeleton + làm mờ như cũ.
+  const minLoading = useMinimumLoading(isLoading);
+  const [entered, setEntered] = useState(false);
+  useEffect(() => { if (!minLoading) setEntered(true); }, [minLoading]);
+  const showLoading = minLoading && !entered;
+  const loadFailed = isError && !data;
+  const fetchError = isError
+    ? `Không thể tải danh sách ${activeTab === 'tvshow' ? 'TV show' : 'phim'}. Vui lòng thử lại.`
+    : null;
 
-      setAllItems(raw);
-      setTotal(raw.length);
-    } catch (err) {
-      console.error('[BrowsePage] fetch error:', err);
-      if (id === fetchIdRef.current) {
-        setFetchError(`Không thể tải danh sách ${activeTab === 'tvshow' ? 'TV show' : 'phim'}. Vui lòng thử lại.`);
-        setAllItems([]);
-        setTotal(0);
-      }
-    } finally {
-      if (id === fetchIdRef.current) setLoading(false);
-    }
-  }, [activeTab, activeGenreId, activeCountry, minRating, selYear, selCountry, sortBy, tvStatus]);
-
-  useEffect(() => { doFetch(); }, [doFetch]);
-
+  // Prefetch trang kế tiếp + preload poster → bấm sang là hiện ngay
   useEffect(() => {
-    const start = (pagination.page - 1) * pagination.props.pageSize;
-    setItems(allItems.slice(start, start + pagination.props.pageSize));
-  }, [allItems, pagination.page, pagination.props.pageSize]);
+    if (!data || isPlaceholderData || page >= totalPages) return;
+    const nextFilter = { ...filter, page: page + 1 };
+    queryClient.prefetchQuery({
+      ...browseQuery(nextFilter),
+      queryFn: async () => {
+        const r = await fetchBrowsePage(nextFilter);
+        r.items.forEach((m) => { if (m.posterUrl) { const img = new Image(); img.src = m.posterUrl; } });
+        return r;
+      },
+    });
+  }, [data, isPlaceholderData, page, totalPages, filter, queryClient]);
 
+  // Đang ở trang vượt quá số trang hiện có (vd dữ liệu vừa bị xóa) → kéo về trang cuối hợp lệ
   useEffect(() => {
-    if (pagination.page > 1) window.scrollTo({ top: 120, behavior: 'smooth' });
-  }, [pagination.page]);
+    if (!isLoading && !isPlaceholderData && total > 0 && page > totalPages) setPage(totalPages);
+  }, [isLoading, isPlaceholderData, total, page, totalPages, setPage]);
 
-  const COUNTRY_LABELS = {
-    KR: '🇰🇷 Hàn Quốc', CN: '🇨🇳 Trung Quốc', US: '🇺🇸 Hollywood',
-    JP: '🇯🇵 Nhật Bản', VN: '🇻🇳 Việt Nam', FR: '🇫🇷 Pháp',
-    GB: '🇬🇧 Anh', IN: '🇮🇳 Ấn Độ', TH: '🇹🇭 Thái Lan',
-  };
+  const handlePageChange = useCallback((p) => {
+    setPage(p, false); // push history: Back quay lại trang trước
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  }, [setPage]);
 
-  const filterCount = [selGenre && !genreId, selYear, minRating > 0, selCountry && !urlCountry, tvStatus && activeTab === 'tvshow'].filter(Boolean).length;
+  const filterCount = [selGenre && !lockedGenreId, selYear, minRating > 0, tvStatus && activeTab === 'tvshow'].filter(Boolean).length;
 
-  const title = genreId ? (genreName || 'Thể Loại')
-              : activeCountry ? (COUNTRY_LABELS[activeCountry] || `${activeCountry}`)
+  const title = lockedGenreId ? (genreName || 'Thể Loại')
+              : country ? (COUNTRY_LABELS[country] || `${country}`)
               : activeTab === 'tvshow' ? 'Tất Cả TV Show'
               : 'Tất Cả Phim';
 
-  const clearFilters = () => {
-    setSelGenre(null); setSelYear(null); setMinRating(0); setSortBy('rating');
-    setSelCountry(null); setFetchError(null); setTvStatus('');
-  };
-
   return (
+    <>
+    <AnimatePresence>{showLoading && <LoadingScreen key="loading" />}</AnimatePresence>
+
+    {!showLoading && loadFailed && (
+      <PageError
+        message={`Không thể tải danh sách ${activeTab === 'tvshow' ? 'TV show' : 'phim'}.`}
+        onRetry={() => refetch()}
+        retrying={false}
+      />
+    )}
+
+    {!showLoading && !loadFailed && (
     <div style={{ minHeight: '100vh', background: '#000', color: C.text, paddingTop: 68 }}>
       <style>{GOOGLE_FONTS}</style>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -598,7 +461,7 @@ export default function BrowsePage() {
               <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: isMobile ? 22 : 30, fontWeight: 800, color: C.text, lineHeight: 1.1 }}>{title}</h1>
               {!loading && total > 0 && (
                 <p style={{ fontFamily: FONT_BODY, fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                  {total.toLocaleString()} {activeTab === 'tvshow' ? 'TV show' : 'phim'}
+                  {total.toLocaleString('vi-VN')} {activeTab === 'tvshow' ? 'TV show' : 'phim'}
                 </p>
               )}
             </div>
@@ -620,67 +483,64 @@ export default function BrowsePage() {
 
         {filterCount > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-            {selGenre && !genreId && <Chip label={genres.find(g => g.id === selGenre)?.name || 'Thể loại'} onRemove={() => setSelGenre(null)} />}
-            {selYear && <Chip label={selYear} onRemove={() => setSelYear(null)} />}
-            {minRating > 0 && <Chip label={`⭐ ${minRating}+`} onRemove={() => setMinRating(0)} />}
-            {tvStatus && activeTab === 'tvshow' && <Chip label={TV_STATUS_OPTIONS.find(o => o.value === tvStatus)?.label || tvStatus} onRemove={() => setTvStatus('')} />}
+            <AnimatePresence>
+              {selGenre && !lockedGenreId && <Chip key="g" label={genres.find(g => String(g.id) === selGenre)?.name || 'Thể loại'} onRemove={() => update({ g: null })} />}
+              {selYear && <Chip key="year" label={selYear} onRemove={() => update({ year: null })} />}
+              {minRating > 0 && <Chip key="rating" label={`⭐ ${minRating}+`} onRemove={() => update({ rating: null })} />}
+              {tvStatus && activeTab === 'tvshow' && <Chip key="status" label={TV_STATUS_OPTIONS.find(o => o.value === tvStatus)?.label || tvStatus} onRemove={() => update({ status: null })} />}
+            </AnimatePresence>
           </div>
         )}
 
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
-            {loading && (
-              <div style={isMobile ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : GRID_STYLE}>
-                {Array.from({ length: pagination.props.pageSize }).map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            )}
+            {/* Content — giống FavoritesPage: mode="wait" + stagger từng card */}
+            <AnimatePresence mode="wait">
+              {loading && items.length === 0 && (
+                <motion.div
+                  key="skeleton"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  style={isMobile ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : GRID_STYLE}
+                >
+                  {Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)}
+                </motion.div>
+              )}
 
-            {!loading && (items.length === 0 || fetchError) && (
-              <EmptyState error={fetchError} onAction={fetchError ? doFetch : clearFilters} isTvShow={activeTab === 'tvshow'} />
-            )}
+              {!loading && (items.length === 0 || fetchError) && (
+                <EmptyState key={`empty-${activeTab}`} error={fetchError} onAction={fetchError ? refetch : clearFilters} isTvShow={activeTab === 'tvshow'} />
+              )}
 
-            {!loading && items.length > 0 && (
-              <>
-                <div style={isMobile ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : GRID_STYLE}>
-                  {items.map((m, i) => (
-                    <div key={m.id || i}>
-                      {isMobile ? (
-                        <BrowseMobileCard
-                          movie={m}
-                          isFavorited={favIds.has(String(m.id))}
-                          onFavoriteToggle={(movie, isNowFav) => {
-                            setFavIds(prev => {
-                              const next = new Set(prev);
-                              isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
-                              return next;
-                            });
-                          }}
-                          navigate={navigate}
-                        />
-                      ) : (
-                        <MovieCard
-                          movie={m}
-                          isFavorited={favIds.has(String(m.id))}
-                          onFavoriteToggle={(movie, isNowFav) => {
-                            setFavIds(prev => {
-                              const next = new Set(prev);
-                              isNowFav ? next.add(String(movie.id)) : next.delete(String(movie.id));
-                              return next;
-                            });
-                          }}
-                          onClick={(movie) => {
-                            if (movie.isTvShow) navigate(`/tvshow/${movie.id}/info`);
-                            else navigate(`/movie/${movie.id}/info`);
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
+              {items.length > 0 && !fetchError && (
+                <motion.div
+                  key={`grid-${activeTab}`}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                >
+                  <div style={{ ...(isMobile ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : GRID_STYLE), position: 'relative', opacity: isPlaceholderData ? 0.45 : 1, pointerEvents: isPlaceholderData ? 'none' : 'auto', transition: 'opacity 0.2s ease' }}>
+                    <AnimatePresence mode="popLayout">
+                      {items.map((m, i) => (
+                        <motion.div
+                          key={mediaKey(m)}
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ delay: Math.min(i * 0.02, 0.25), duration: 0.25 }}
+                        >
+                          {/* MovieCard tự chọn bản mobile/desktop, tự đọc & ghi yêu thích qua cache */}
+                          <MovieCard movie={m} cardWidth={isMobile ? '100%' : undefined} />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
 
-                <Pagination {...pagination.props} />
-              </>
-            )}
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    total={total}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={handlePageChange}
+                    itemLabel={activeTab === 'tvshow' ? 'TV show' : 'phim'}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <FilterSidebar
@@ -688,17 +548,19 @@ export default function BrowsePage() {
             genres={genres}
             isMobile={isMobile}
             onClose={() => setShowFilter(false)}
-            selGenre={selGenre} onGenreChange={setSelGenre}
-            selYear={selYear} onYearChange={setSelYear}
-            sortBy={sortBy} onSortChange={setSortBy}
-            minRating={minRating} onRatingChange={setMinRating}
+            selGenre={selGenre} onGenreChange={(id) => update({ g: id })}
+            selYear={selYear} onYearChange={(y) => update({ year: y })}
+            sortBy={sortBy} onSortChange={(v) => update({ sort: v === DEFAULT_SORT ? null : v })}
+            minRating={minRating} onRatingChange={(r) => update({ rating: r })}
             filterCount={filterCount} onClearAll={clearFilters}
-            lockedGenreId={genreId}
+            lockedGenreId={lockedGenreId}
             activeTab={activeTab}
-            tvStatus={tvStatus} onTvStatusChange={setTvStatus}
+            tvStatus={tvStatus} onTvStatusChange={(v) => update({ status: v })}
           />
         </div>
       </div>
     </div>
+    )}
+    </>
   );
 }

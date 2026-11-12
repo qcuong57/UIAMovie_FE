@@ -1,6 +1,16 @@
 /* src/components/shared/AdOverlay.css
    Style cho AdOverlay. Phẳng, đen/trắng/xám (xem ghi chú thiết kế trong AdOverlay.jsx).
-   Responsive qua modifier `--compact` (mobile/cảm ứng) và `--lifted` (thanh điều khiển đang hiện). */
+
+   Responsive:
+   - `--compact`  : mobile/cảm ứng (prop compact, theo bề rộng < 768px).
+   - `@media (max-height: 500px)` : điện thoại XOAY NGANG. Bề rộng lúc này thường ≥ 768px
+     nên prop compact = false → trước đây overlay dùng cỡ desktop trên màn thấp → quá to.
+   - `--lifted`   : thanh điều khiển đang hiện.
+
+   Mọi kích thước nằm trong biến --ad-* ở đầu file; modifier chỉ đổi biến, không viết lại rule.
+
+   Cần trong index.html: <meta name="viewport" content="..., viewport-fit=cover" />
+   để env(safe-area-inset-*) có giá trị (notch / home indicator). */
 
 .ad-overlay {
   --ad-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -15,46 +25,92 @@
   --ad-top: 20px;
   --ad-bottom: 24px;
   --ad-bottom-lifted: 80px;
+  --ad-gap: 12px;
+
+  /* Cỡ chữ / thành phần (compact + landscape ghi đè ở dưới) */
+  --ad-fs: 12.5px;            /* nhãn hàng trên */
+  --ad-brand-w: 340px;
+  --ad-brand-pad: 8px 12px;
+  --ad-brand-gap: 10px;
+  --ad-logo: 28px;
+  --ad-name-fs: 14px;
+  --ad-cta-fs: 11.5px;
+  --ad-cta-lh: 1.5;
+  --ad-domain-display: block;
+  --ad-btn-h: 34px;
+  --ad-btn-px: 16px;
+  --ad-btn-gap: 7px;
+  --ad-btn-fs: 13px;
+  --ad-chip-fs: 12.5px;
+
+  /* Vùng an toàn: trái/phải luôn áp dụng (xoay ngang có tai thỏ).
+     Trên/dưới chỉ áp dụng khi fullscreen (xem bên dưới) — nếu áp dụng luôn thì player
+     nằm giữa trang cũng bị đẩy xuống một đoạn bằng chiều cao tai thỏ. */
+  --ad-safe-top: 0px;
+  --ad-safe-bottom: 0px;
+  --ad-left: max(var(--ad-edge), env(safe-area-inset-left, 0px));
+  --ad-right: max(var(--ad-edge), env(safe-area-inset-right, 0px));
+  --ad-top-eff: max(var(--ad-top), var(--ad-safe-top));
+  --ad-bottom-eff: max(var(--ad-bottom), var(--ad-safe-bottom));
 
   position: absolute;
   inset: 0;
   z-index: 20;
+  box-sizing: border-box;
+  overflow: hidden;            /* lưới an toàn: không bao giờ lòi ra ngoài player */
   pointer-events: none;
   font-family: var(--ad-font);
+  -webkit-text-size-adjust: 100%; /* iOS tự phóng chữ khi xoay ngang → nhìn "quá to" */
+  text-size-adjust: 100%;
 }
 
-.ad-overlay--compact {
-  --ad-edge: 12px;
-  --ad-top: 12px;
-  --ad-bottom: 12px;
-  --ad-bottom-lifted: 72px;
+.ad-overlay *,
+.ad-overlay *::before,
+.ad-overlay *::after {
+  box-sizing: border-box;
+}
+
+:fullscreen .ad-overlay {
+  --ad-safe-top: env(safe-area-inset-top, 0px);
+  --ad-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+:-webkit-full-screen .ad-overlay {
+  --ad-safe-top: env(safe-area-inset-top, 0px);
+  --ad-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── Hàng trên ── */
 .ad-overlay__label {
   position: absolute;
-  top: var(--ad-top);
-  left: var(--ad-edge);
+  top: var(--ad-top-eff);
+  left: var(--ad-left);
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--ad-fs);
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); /* đọc được trên video sáng */
 }
 .ad-overlay__label-title { font-weight: 600; color: var(--ad-text); letter-spacing: 0.01em; }
 .ad-overlay__label-time { color: var(--ad-text-faint); font-variant-numeric: tabular-nums; }
 
+/* Padding mở rộng vùng chạm; top/offset bù lại nên vị trí chữ không đổi so với trước. */
 .ad-overlay__premium {
   position: absolute;
-  top: calc(var(--ad-top) - 2px);
-  right: var(--ad-edge);
+  top: calc(var(--ad-top-eff) - 8px);
+  right: var(--ad-right);
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  padding: 6px 0 6px 10px;
+  font-size: var(--ad-fs);
   font-weight: 600;
   color: var(--ad-text-dim);
   text-decoration: none;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   pointer-events: all;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── Hàng dưới: thẻ thương hiệu (trái) + nút skip/đếm ngược (phải) ──
@@ -62,13 +118,14 @@
    thẻ thương hiệu tự co + cắt chữ (ellipsis) khi hết chỗ. */
 .ad-overlay__bottom {
   position: absolute;
-  left: var(--ad-edge);
-  right: var(--ad-edge);
-  bottom: var(--ad-bottom);
+  left: var(--ad-left);
+  right: var(--ad-right);
+  bottom: var(--ad-bottom-eff);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--ad-gap);
+  min-width: 0;
   transition: bottom 0.25s ease;
 }
 .ad-overlay--lifted .ad-overlay__bottom { bottom: var(--ad-bottom-lifted); }
@@ -83,18 +140,20 @@
 .ad-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--ad-brand-gap);
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 340px;
-  padding: 8px 12px;
+  max-width: min(var(--ad-brand-w), 100%);
+  padding: var(--ad-brand-pad);
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.45);
   text-decoration: none;
   pointer-events: all;
+  -webkit-tap-highlight-color: transparent;
 }
 .ad-brand__logo {
-  width: 28px;
-  height: 28px;
+  width: var(--ad-logo);
+  height: var(--ad-logo);
   flex-shrink: 0;
   border-radius: 3px;
   object-fit: cover;
@@ -108,22 +167,31 @@
   border: var(--ad-hairline);
 }
 .ad-brand__text { display: flex; flex-direction: column; min-width: 0; }
+/* Chữ dài thì xuống hàng (không cắt "…"). overflow-wrap: anywhere bẻ cả chuỗi không có dấu cách
+   (tên miền, URL dài). Tên giới hạn 3 dòng để thẻ không phình quá cao. */
 .ad-brand__name,
 .ad-brand__domain,
-.ad-brand__cta { white-space: nowrap; }
-.ad-brand__name,
-.ad-brand__domain { overflow: hidden; text-overflow: ellipsis; }
-.ad-brand__name { font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ad-text); }
-.ad-brand__domain { font-size: 11.5px; line-height: 1.3; color: var(--ad-text-faint); }
-.ad-brand__cta { font-size: 11.5px; font-weight: 600; line-height: 1.5; color: var(--ad-text-dim); }
+.ad-brand__cta { white-space: normal; overflow-wrap: anywhere; }
+.ad-brand__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.ad-brand__name { font-size: var(--ad-name-fs); font-weight: 600; line-height: 1.3; color: var(--ad-text); }
+.ad-brand__domain { display: var(--ad-domain-display); font-size: 11.5px; line-height: 1.3; color: var(--ad-text-faint); }
+.ad-brand__cta { font-size: var(--ad-cta-fs); font-weight: 600; line-height: var(--ad-cta-lh); color: var(--ad-text-dim); }
 
 /* ── Nút skip / chip đếm ngược ── */
 .ad-skip,
 .ad-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 16px;
+  justify-content: center;
+  gap: var(--ad-btn-gap);
+  min-height: var(--ad-btn-h);
+  padding: 0 var(--ad-btn-px);
   border-radius: 2px;
   white-space: nowrap;
   font-family: var(--ad-font);
@@ -132,26 +200,58 @@
   border: none;
   background: #fff;
   color: #000;
-  font-size: 13px;
+  font-size: var(--ad-btn-fs);
   font-weight: 600;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
+.ad-skip svg { flex-shrink: 0; }
 .ad-chip { background: var(--ad-scrim); border: var(--ad-hairline); }
-.ad-chip__text { font-size: 12.5px; color: var(--ad-text-dim); }
+.ad-chip__text { font-size: var(--ad-chip-fs); color: var(--ad-text-dim); }
 .ad-chip__text--faint { color: var(--ad-text-faint); }
 
-/* ── Compact (mobile / cảm ứng) ── */
-.ad-overlay--compact .ad-overlay__label,
-.ad-overlay--compact .ad-overlay__premium { font-size: 12px; }
+/* ── Compact (mobile / cảm ứng, prop compact) ── */
+.ad-overlay--compact {
+  --ad-edge: 12px;
+  --ad-top: 12px;
+  --ad-bottom: 12px;
+  --ad-bottom-lifted: 72px;
+  --ad-gap: 8px;
+  --ad-fs: 12px;
+  --ad-brand-pad: 6px 8px;
+  --ad-brand-gap: 8px;
+  --ad-logo: 24px;
+  --ad-name-fs: 12.5px;
+  --ad-cta-fs: 11px;
+  --ad-cta-lh: 1.4;
+  --ad-domain-display: none; /* giữ thẻ gọn: tên + "Tìm hiểu thêm" */
+  --ad-btn-px: 12px;
+  --ad-btn-gap: 6px;
+  --ad-btn-fs: 12px;
+  --ad-chip-fs: 11.5px;
+}
 
-.ad-overlay--compact .ad-overlay__bottom { gap: 8px; }
-.ad-overlay--compact .ad-brand { gap: 8px; padding: 6px 8px; }
-.ad-overlay--compact .ad-brand__logo { width: 24px; height: 24px; }
-.ad-overlay--compact .ad-brand__name { font-size: 12.5px; }
-.ad-overlay--compact .ad-brand__domain { display: none; } /* giữ thẻ gọn: tên + "Tìm hiểu thêm" */
-.ad-overlay--compact .ad-brand__cta { font-size: 11px; line-height: 1.4; }
-
-.ad-overlay--compact .ad-skip,
-.ad-overlay--compact .ad-chip { padding: 8px 12px; gap: 6px; }
-.ad-overlay--compact .ad-skip { font-size: 12px; }
-.ad-overlay--compact .ad-chip__text { font-size: 11.5px; }
+/* ── Điện thoại xoay ngang / màn thấp: dùng cỡ compact dù bề rộng ≥ 768px ──
+   (giá trị phải trùng khối .ad-overlay--compact ở trên; đặt SAU rule gốc) */
+@media (max-height: 500px) {
+  .ad-overlay {
+    --ad-edge: 12px;
+    --ad-top: 12px;
+    --ad-bottom: 12px;
+    --ad-bottom-lifted: 72px;
+    --ad-gap: 8px;
+    --ad-fs: 12px;
+    --ad-brand-pad: 6px 8px;
+    --ad-brand-gap: 8px;
+    --ad-logo: 24px;
+    --ad-name-fs: 12.5px;
+    --ad-cta-fs: 11px;
+    --ad-cta-lh: 1.4;
+    --ad-domain-display: none;
+    --ad-btn-px: 12px;
+    --ad-btn-gap: 6px;
+    --ad-btn-fs: 12px;
+    --ad-chip-fs: 11.5px;
+  }
+}

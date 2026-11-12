@@ -14,7 +14,7 @@ const tvShowService = {
    *
    * @param {Object}   filter
    * @param {number}   [filter.page=1]
-   * @param {number}   [filter.pageSize=20]
+   * @param {number}   [filter.pageSize=24]
    * @param {string}   [filter.search]
    * @param {string[]} [filter.genreIds]
    * @param {number}   [filter.minRating]
@@ -29,7 +29,7 @@ const tvShowService = {
    */
   getTvShows: async ({
     page             = 1,
-    pageSize         = 20,
+    pageSize         = 24,
     search           = '',
     genreIds         = [],
     minRating,

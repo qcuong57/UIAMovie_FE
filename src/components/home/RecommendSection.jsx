@@ -1,5 +1,7 @@
 // src/components/home/RecommendSection.jsx
-import React, { useState, useMemo, useCallback, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useMemo, useEffect, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../config/queryKeys";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -19,10 +21,8 @@ import {
 
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
-import { useToast } from "../common/Toast";
-import movieService from "../../services/movieService";
-import tvShowService from "../../services/tvShowService";
 import recommendationService from "../../services/recommendationService";
+import { useFavoriteActions } from "../../hooks/useFavorites";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
@@ -33,21 +33,6 @@ function userHasPremium(user) {
     user.isPremium === true ||
     user.plan === "premium" ||
     user.subscription?.active === true
-  );
-}
-
-function isUnauthorizedError(err) {
-  const status = err?.response?.status ?? err?.status;
-  return status === 401 || status === 403;
-}
-
-function getErrorMessage(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.error ||
-    err?.data?.message ||
-    (typeof err?.message === "string" && err.message) ||
-    fallback
   );
 }
 
@@ -125,61 +110,49 @@ const getPlayerRoute = (item) => (item?.isTvShow ? `/tvshow/${item.id}` : `/movi
 const getInfoRoute   = (item) => (item?.isTvShow ? `/tvshow/${item.id}/info` : `/movie/${item.id}/info`);
 
 const ACCENT_COLOR = "#a78bfa";
+const EMPTY_AI = [];
+const EMPTY_RECOMMENDATIONS = "EMPTY_RECOMMENDATIONS";
 
 export default function RecommendSection({
   movies = [],
   tvShows = [],
   items,
   subtitle = "",
-  onFavoriteToggle,
-  isFavorited,
-  favoritedIds = [],
 }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const toast = useToast();
   const user = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
 
-  const [aiItems, setAiItems] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselPage, setCarouselPage] = useState(0); // 0 (phim 1-5) hoặc 1 (phim 6-10)
   const [showGate, setShowGate] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
   const [gateTitle, setGateTitle] = useState("");
 
-  // Gọi API lấy dữ liệu gợi ý và lưu cache 24h
-  useEffect(() => {
-    let isMounted = true;
-    const cacheKey = `rec_cache_${user?.id || "guest"}_${getTodaySeed()}`;
+  // Yêu thích: đọc + ghi qua cache React Query (cập nhật lạc quan, lỗi tự hoàn tác, mọi thẻ đồng bộ)
+  const { isFavorited, toggle: toggleFav, pending: favLoading } = useFavoriteActions();
 
-    const loadRecommendations = async () => {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAiItems(parsed);
-            return;
-          }
-        } catch {
-          localStorage.removeItem(cacheKey);
-        }
-      }
-
-      try {
-        const data = await recommendationService.getPersonalizedRecommendations(20);
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setAiItems(data);
-          localStorage.setItem(cacheKey, JSON.stringify(data));
-        }
-      } catch (err) {
-        console.warn("[RecommendSection] Dùng fallback từ props:", err?.message || err);
-      }
-    };
-
-    loadRecommendations();
-    return () => { isMounted = false; };
-  }, [user?.id]);
+  // Gợi ý AI: cache theo người dùng + ngày (React Query + persist plugin lưu localStorage qua lần tải lại)
+  // → tránh gọi lại API AI tốn kém. Lỗi hoặc rỗng KHÔNG được cache như dữ liệu hợp lệ:
+  // query rơi vào trạng thái lỗi → UI dùng fallback từ props, lần mở sau sẽ thử lại.
+  const daySeed = getTodaySeed();
+  const userId = user?.id;
+  const { data: aiData } = useQuery({
+    queryKey: queryKeys.recommendations.personalized(userId, daySeed),
+    // staleTime / gcTime + lưu localStorage: xem queryClient.js (setQueryDefaults + persistOptions)
+    meta: { silent: true }, // đã có fallback, không cần báo lỗi toàn cục
+    retry: (count, err) => {
+      if (err?.message === EMPTY_RECOMMENDATIONS) return false; // endpoint AI tốn kém: không gọi lặp
+      const status = err?.response?.status;
+      if (status && status >= 400 && status < 500) return false;
+      return count < 1;
+    },
+    queryFn: async () => {
+      const data = await recommendationService.getPersonalizedRecommendations(20);
+      if (!Array.isArray(data) || data.length === 0) throw new Error(EMPTY_RECOMMENDATIONS);
+      return data;
+    },
+  });
+  const aiItems = aiData ?? EMPTY_AI;
 
   // Tra cứu nhanh item đầy đủ (có ảnh) từ props theo id
   const knownById = useMemo(() => {
@@ -210,51 +183,13 @@ export default function RecommendSection({
 
   const activeItem = list[activeIndex] || list[0] || null;
 
-  const checkFav = useCallback(
-    (id) => {
-      if (typeof isFavorited === "function") return isFavorited(id);
-      return favoritedIds?.includes(id) ?? false;
-    },
-    [isFavorited, favoritedIds]
-  );
+  const checkFav = (item) => isFavorited(item?.id, item?.isTvShow);
 
   const handleTogglePage = () => {
     setCarouselPage((prev) => (prev === 0 ? 1 : 0));
   };
 
-  const handleFavoriteClick = async (e, item) => {
-    e.stopPropagation();
-    if (!item || favLoading) return;
-
-    if (!getCurrentUser()) {
-      toast.warning("Bạn cần đăng nhập để thêm vào Yêu thích");
-      return;
-    }
-
-    setFavLoading(true);
-    const isFav = checkFav(item.id);
-    const svc = item.isTvShow ? tvShowService : movieService;
-
-    try {
-      if (isFav) {
-        await svc.removeFavorite(item.id);
-        onFavoriteToggle?.(item, false);
-        toast.info(`Đã bỏ "${item.title}" khỏi Yêu thích`);
-      } else {
-        await svc.addFavorite(item.id);
-        onFavoriteToggle?.(item, true);
-        toast.success(`Đã thêm "${item.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      if (isUnauthorizedError(err)) {
-        toast.warning("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại");
-      } else {
-        toast.error(getErrorMessage(err, "Không thể cập nhật danh sách yêu thích"));
-      }
-    } finally {
-      setFavLoading(false);
-    }
-  };
+  const handleFavoriteClick = (e, item) => toggleFav(item, e);
 
   const handlePlay = (e, item) => {
     e.stopPropagation();
@@ -270,7 +205,7 @@ export default function RecommendSection({
 
   if (!list.length || !activeItem) return null;
 
-  const isCurrentFav = checkFav(activeItem.id);
+  const isCurrentFav = checkFav(activeItem);
   const isCurrentPremium = activeItem.isPremium && !userHasPremium(getCurrentUser());
   const matchPct = calculateMatchPercentage(activeItem);
   const displayGenre =
@@ -874,7 +809,7 @@ export default function RecommendSection({
           }}
         >
           {list.map((item) => {
-            const isFav = checkFav(item.id);
+            const isFav = checkFav(item);
             const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
             const itemMatch = calculateMatchPercentage(item);
 

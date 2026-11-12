@@ -1,6 +1,7 @@
 // src/components/layout/Navbar.jsx
 
 import React, { useState, useRef, useEffect, useCallback, useReducer } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, User, LogOut, Shield, ChevronDown, X, Clock, Crown, Info } from "lucide-react";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
@@ -32,78 +33,101 @@ const toSlug = (name) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-const fetchSearch = async (q) => {
-  const res = await axiosInstance.get(`/movies/search?query=${encodeURIComponent(q)}`);
-  const raw = res.data?.data ?? res.data ?? [];
+/* =========================================================
+   Search (React Query + AbortSignal)
+   • 3 query độc lập → phim hiện trước, không phải chờ diễn viên (request nặng nhất).
+   • Gõ tiếp → request cũ bị huỷ, không còn chuyện kết quả cũ ghi đè kết quả mới.
+   • Cache theo từ khoá → xoá phím / gõ lại là có kết quả ngay, không gọi API.
+========================================================= */
+
+const MIN_SEARCH_LEN = 2;
+const SEARCH_DEBOUNCE_MS = 220;
+const EMPTY = [];
+
+const SEARCH_QUERY_OPTS = {
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+  placeholderData: keepPreviousData, // giữ kết quả cũ trong lúc tải → Panel làm mờ thay vì nháy shimmer
+  retry: 1,
+  refetchOnWindowFocus: false,
+};
+
+// select ở mức module → reference ổn định, không tạo mảng mới mỗi render
+const pickMovies = (d) => d.slice(0, 5);
+const pickTvShows = (d) => d.slice(0, 4);
+
+const isAbort = (err) => err?.code === "ERR_CANCELED" || err?.name === "CanceledError" || err?.name === "AbortError";
+const toList = (res) => {
+  const raw = res?.data?.data ?? res?.data ?? [];
   return Array.isArray(raw) ? raw : [];
 };
 
-const fetchTvShowSearch = async (q) => {
+const fetchSearch = async (q, signal) =>
+  toList(await axiosInstance.get(`/movies/search?query=${encodeURIComponent(q)}`, { signal }));
+
+const fetchTvShowSearch = async (q, signal) => {
   try {
-    const res = await axiosInstance.get(`/tvshows/search?query=${encodeURIComponent(q)}`);
-    const raw = res.data?.data ?? res.data ?? [];
-    return Array.isArray(raw) ? raw : [];
-  } catch {
+    return toList(await axiosInstance.get(`/tvshows/search?query=${encodeURIComponent(q)}`, { signal }));
+  } catch (err) {
+    if (isAbort(err)) throw err; // huỷ ≠ rỗng: đừng cache [] cho request bị huỷ
     return [];
   }
 };
 
-const fetchActorSearch = async (q) => {
-  try {
-    const [movieRes, tvRes] = await Promise.allSettled([
-      axiosInstance.get(`/movies/search/actor?actorName=${encodeURIComponent(q)}`),
-      axiosInstance.get(`/tvshows/search/actor?actorName=${encodeURIComponent(q)}`),
-    ]);
+const fetchActorSearch = async (q, signal) => {
+  const enc = encodeURIComponent(q);
+  const [movieRes, tvRes] = await Promise.allSettled([
+    axiosInstance.get(`/movies/search/actor?actorName=${enc}`, { signal }),
+    axiosInstance.get(`/tvshows/search/actor?actorName=${enc}`, { signal }),
+  ]);
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-    const extractRaw = (res) => {
-      if (res.status !== "fulfilled") return [];
-      const raw = res.value?.data?.data ?? res.value?.data;
-      return Array.isArray(raw) ? raw : [];
-    };
+  const extractRaw = (res) => {
+    if (res.status !== "fulfilled") return [];
+    const raw = res.value?.data?.data ?? res.value?.data;
+    return Array.isArray(raw) ? raw : [];
+  };
 
-    const actorMap = new Map();
+  const ql = q.toLowerCase();
+  const actorMap = new Map();
 
-    const processSource = (rawList) => {
-      rawList.forEach((item) => {
-        const itemTitle = item.title ?? item.name;
-        const castList = item.cast ?? item.Cast ?? [];
-        castList.forEach((c) => {
-          const name = c.name ?? c.Name ?? c.personName;
-          if (!name || !name.toLowerCase().includes(q.toLowerCase())) return;
+  const processSource = (rawList) => {
+    rawList.forEach((item) => {
+      const itemTitle = item.title ?? item.name;
+      const castList = item.cast ?? item.Cast ?? [];
+      castList.forEach((c) => {
+        const name = c.name ?? c.Name ?? c.personName;
+        if (!name || !name.toLowerCase().includes(ql)) return;
 
-          if (actorMap.has(name)) {
-            const existing = actorMap.get(name);
-            if (itemTitle && !existing.knownMovies.includes(itemTitle))
-              existing.knownMovies.push(itemTitle);
-            return;
-          }
+        if (actorMap.has(name)) {
+          const existing = actorMap.get(name);
+          if (itemTitle && !existing.knownMovies.includes(itemTitle)) existing.knownMovies.push(itemTitle);
+          return;
+        }
 
-          actorMap.set(name, {
-            id: c.tmdbPersonId ?? c.TmdbPersonId ?? c.personId ?? name,
-            name,
-            profileUrl: c.profileUrl ?? c.ProfileUrl ?? null,
-            character: c.character ?? c.Character ?? null,
-            biography: c.biography ?? c.Biography ?? null,
-            birthday: c.birthday ?? c.Birthday ?? null,
-            placeOfBirth: c.placeOfBirth ?? c.PlaceOfBirth ?? null,
-            deathday: c.deathday ?? null,
-            popularity: c.popularity ?? null,
-            tmdbPersonId: c.tmdbPersonId ?? c.TmdbPersonId ?? null,
-            profileImages: c.profileImages ?? c.ProfileImages ?? [],
-            movies: c.movies ?? [],
-            knownMovies: [itemTitle].filter(Boolean),
-          });
+        actorMap.set(name, {
+          id: c.tmdbPersonId ?? c.TmdbPersonId ?? c.personId ?? name,
+          name,
+          profileUrl: c.profileUrl ?? c.ProfileUrl ?? null,
+          character: c.character ?? c.Character ?? null,
+          biography: c.biography ?? c.Biography ?? null,
+          birthday: c.birthday ?? c.Birthday ?? null,
+          placeOfBirth: c.placeOfBirth ?? c.PlaceOfBirth ?? null,
+          deathday: c.deathday ?? null,
+          popularity: c.popularity ?? null,
+          tmdbPersonId: c.tmdbPersonId ?? c.TmdbPersonId ?? null,
+          profileImages: c.profileImages ?? c.ProfileImages ?? [],
+          movies: c.movies ?? [],
+          knownMovies: [itemTitle].filter(Boolean),
         });
       });
-    };
+    });
+  };
 
-    processSource(extractRaw(movieRes));
-    processSource(extractRaw(tvRes));
+  processSource(extractRaw(movieRes));
+  processSource(extractRaw(tvRes));
 
-    return [...actorMap.values()].slice(0, 3);
-  } catch {
-    return [];
-  }
+  return [...actorMap.values()].slice(0, 3);
 };
 
 const DESKTOP_LINKS = [
@@ -121,10 +145,6 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
 
-  const [results, setResults] = useState([]);
-  const [tvShows, setTvShows] = useState([]);
-  const [actors, setActors] = useState([]);
-  const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   const isMobile = useIsMobile();
@@ -139,15 +159,50 @@ const Navbar = () => {
   const searchWrapRef = useRef(null);
   const filterBtnRef = useRef(null);
 
-  const debouncedQuery = useDebounce(searchQuery, 350);
+  const debouncedQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
+  const q = searchQuery.trim();
+  const dq = debouncedQuery.trim();
+  const searchActive = showSearch && dq.length >= MIN_SEARCH_LEN;
+
+  const movieQ = useQuery({
+    queryKey: ["nav-search", "movies", dq],
+    queryFn: ({ signal }) => fetchSearch(dq, signal),
+    enabled: searchActive,
+    select: pickMovies,
+    ...SEARCH_QUERY_OPTS,
+  });
+  const tvQ = useQuery({
+    queryKey: ["nav-search", "tv", dq],
+    queryFn: ({ signal }) => fetchTvShowSearch(dq, signal),
+    enabled: searchActive,
+    select: pickTvShows,
+    ...SEARCH_QUERY_OPTS,
+  });
+  const actorQ = useQuery({
+    queryKey: ["nav-search", "actors", dq],
+    queryFn: ({ signal }) => fetchActorSearch(dq, signal),
+    enabled: searchActive,
+    ...SEARCH_QUERY_OPTS,
+  });
+
+  // Khi không tìm (đóng / <2 ký tự) thì bỏ qua cả dữ liệu placeholder
+  const results = searchActive ? movieQ.data ?? EMPTY : EMPTY;
+  const tvShows = searchActive ? tvQ.data ?? EMPTY : EMPTY;
+  const actors = searchActive ? actorQ.data ?? EMPTY : EMPTY;
+  const isFetching = searchActive && (movieQ.isFetching || tvQ.isFetching || actorQ.isFetching);
 
   const currentUser = useStoredUser();
   const [, forceRender] = useReducer((n) => n + 1, 0);
 
-  const goHome = () => {
+  const goHome = useCallback(() => {
     navigate("/");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, [navigate]);
+
+  // guardedNav có thể đổi reference mỗi render → bọc ref để MobileBottomNav (memo) không render lại khi gõ phím
+  const guardedRef = useRef(guardedNav);
+  guardedRef.current = guardedNav;
+  const guardedStable = useCallback((path) => guardedRef.current(path), []);
 
   useEffect(() => {
     window.addEventListener("userUpdated", forceRender);
@@ -174,71 +229,45 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const doSearch = useCallback(async (q) => {
-    setSearching(true);
-    setShowResults(true);
-    try {
-      const [movieData, actorData, tvData] = await Promise.all([
-        fetchSearch(q),
-        fetchActorSearch(q),
-        fetchTvShowSearch(q),
-      ]);
-      setResults(movieData.slice(0, 5));
-      setActors(actorData);
-      setTvShows(tvData.slice(0, 4));
-    } catch {
-      setResults([]);
-      setActors([]);
-      setTvShows([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
-
+  // Mở dropdown khi có từ khoá hợp lệ; đóng khi xoá/đóng tìm kiếm
   useEffect(() => {
-    if (!showSearch || debouncedQuery.trim().length < 1) {
-      setResults([]);
-      setTvShows([]);
-      setActors([]);
-      setShowResults(false);
-      return;
-    }
-    doSearch(debouncedQuery.trim());
-  }, [debouncedQuery, showSearch, doSearch]);
+    setShowResults(searchActive);
+  }, [searchActive, dq]);
 
-  const openSearch = () => {
+  const openSearch = useCallback(() => {
     setShowSearch(true);
     if (!isMobile) setTimeout(() => searchInputRef.current?.focus(), 80);
-  };
+  }, [isMobile]);
 
-  const closeSearch = () => {
+  const closeSearch = useCallback(() => {
     setShowSearch(false);
     setSearchQuery("");
-    setResults([]);
-    setTvShows([]);
-    setActors([]);
     setShowResults(false);
-  };
+  }, []);
 
-  const handleSearchSubmit = (e) => {
-    e?.preventDefault?.();
-    const q = searchQuery.trim();
-    navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
-    closeSearch();
-  };
+  const handleSearchSubmit = useCallback(
+    (e) => {
+      e?.preventDefault?.();
+      const text = searchQuery.trim();
+      navigate(text ? `/search?q=${encodeURIComponent(text)}` : "/search");
+      closeSearch();
+    },
+    [navigate, searchQuery, closeSearch],
+  );
 
-  const goMovie = (m) => {
+  // Callback ổn định → MovieResultItem / ActorResultItem (memo) không render lại khi gõ phím
+  const goMovie = useCallback((m) => {
     navigate(`/movie/${m.id}/info`);
     closeSearch();
-  };
-  const goTvShow = (s) => {
+  }, [navigate, closeSearch]);
+  const goTvShow = useCallback((s) => {
     navigate(`/tvshow/${s.id}/info`);
     closeSearch();
-  };
-  const goActor = (a) => {
+  }, [navigate, closeSearch]);
+  const goActor = useCallback((a) => {
     navigate(`/person/${toSlug(a.name)}`, { state: { actor: a } });
     closeSearch();
-  };
+  }, [navigate, closeSearch]);
 
   const handleFilterApply = useCallback(
     (params) => {
@@ -287,12 +316,12 @@ const Navbar = () => {
   const iconColor = scrolled ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.75)";
 
   const hasAny = results.length > 0 || tvShows.length > 0 || actors.length > 0;
-  const q = searchQuery.trim();
-  const pending = q !== debouncedQuery.trim(); // đang gõ, chưa kịp gọi API
-  const panelSearching = searching || pending;
+  const canSearch = q.length >= MIN_SEARCH_LEN;
+  const pending = showSearch && canSearch && q !== dq; // đang gõ, chưa kịp gọi API
+  const panelSearching = isFetching || pending;
 
   const dropdownVisible =
-    !isMobile && showResults && (searching || hasAny || debouncedQuery.trim().length >= 2);
+    !isMobile && showResults && (isFetching || hasAny || dq.length >= MIN_SEARCH_LEN);
 
   const panelProps = {
     query: searchQuery,
@@ -497,7 +526,7 @@ const Navbar = () => {
                             zIndex: 9998,
                           }}
                         >
-                          <SearchResultsPanel {...panelProps} searching={searching} />
+                          <SearchResultsPanel {...panelProps} />
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -743,7 +772,7 @@ const Navbar = () => {
             onSubmit={handleSearchSubmit}
             onClose={closeSearch}
           >
-            {q ? (
+            {canSearch ? (
               <SearchResultsPanel {...panelProps} />
             ) : (
               <p style={{ padding: "40px 24px", textAlign: "center", fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "rgba(255,255,255,0.35)" }}>
@@ -757,7 +786,7 @@ const Navbar = () => {
             onSearch={openSearch}
             onHome={goHome}
             onNavigate={navigate}
-            onGuarded={guardedNav}
+            onGuarded={guardedStable}
           />
         </>
       )}

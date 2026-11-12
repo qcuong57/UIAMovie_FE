@@ -1,68 +1,77 @@
 // src/components/common/Pagination.jsx
 // ─── Component phân trang dùng chung — dark cinema aesthetic ─────────────────
 //
-// Nhận props từ usePagination().props hoặc truyền trực tiếp:
-//
 //   <Pagination
 //     page={3}
 //     totalPages={12}
 //     total={280}
-//     pageSize={28}
+//     pageSize={24}
 //     onPageChange={(p) => handlePageChange(p)}
 //   />
 //
-//   hoặc spread thẳng:
-//   <Pagination {...pagination.props} />
+// Desktop: « ‹ 1 … 4 5 6 … 12 › »  (+ "Đến trang" khi > 10 trang)
+// Mobile : ‹  3 / 12  ›            (bấm "3 / 12" để nhập số trang; vùng chạm 42px)
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { C, FONT_BODY, FONT_DISPLAY } from '../../context/homeTokens';
+import { FONT_BODY } from '../../context/homeTokens';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
-const ACCENT    = '#e5181e';
-const BTN_SIZE  = 36;
+const ACCENT = '#e5181e';
+const BTN_DESKTOP = 36;
+const BTN_MOBILE = 42; // vùng chạm đủ lớn cho ngón tay
+
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+/**
+ * Luôn trả về cùng số ô (7 khi siblingCount = 1) để thanh phân trang không giật
+ * khi chuyển trang: 1 2 3 4 5 … 12 → 1 … 4 5 6 … 12 → 1 … 8 9 10 11 12.
+ */
+const buildPages = (page, total, sibling = 1) => {
+  const slots = sibling * 2 + 5;
+  if (total <= slots) return range(1, total);
+
+  const left = Math.max(page - sibling, 1);
+  const right = Math.min(page + sibling, total);
+  const dotsLeft = left > 2;
+  const dotsRight = right < total - 1;
+  const edgeCount = 3 + 2 * sibling;
+
+  if (!dotsLeft && dotsRight) return [...range(1, edgeCount), 'DOTS_RIGHT', total];
+  if (dotsLeft && !dotsRight) return [1, 'DOTS_LEFT', ...range(total - edgeCount + 1, total)];
+  return [1, 'DOTS_LEFT', ...range(left, right), 'DOTS_RIGHT', total];
+};
 
 // ── Một nút trang ─────────────────────────────────────────────────────────────
-const PageButton = React.memo(({ children, active, disabled, onClick, isIcon, wide }) => {
+const PageButton = React.memo(({ children, active, disabled, onClick, label, size }) => {
   const [hov, setHov] = useState(false);
-
-  const bg = active
-    ? `rgba(229,24,30,0.14)`
-    : hov && !disabled
-      ? 'rgba(255,255,255,0.07)'
-      : 'transparent';
-
-  const border = active
-    ? `1px solid rgba(229,24,30,0.5)`
-    : `1px solid ${hov && !disabled ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)'}`;
-
-  const color = active
-    ? ACCENT
-    : disabled
-      ? 'rgba(255,255,255,0.18)'
-      : hov
-        ? 'rgba(255,255,255,0.85)'
-        : 'rgba(255,255,255,0.45)';
+  const hovering = hov && !disabled;
 
   return (
     <motion.button
-      whileTap={!disabled ? { scale: 0.88 } : undefined}
-      onClick={disabled ? undefined : onClick}
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      whileTap={!disabled ? { scale: 0.9 } : undefined}
+      onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width:  wide ? 'auto' : BTN_SIZE,
-        minWidth: BTN_SIZE,
-        height: BTN_SIZE,
-        padding: wide ? '0 10px' : 0,
+        minWidth: size,
+        height: size,
+        padding: '0 6px',
         borderRadius: 8,
-        border,
-        background: bg,
-        color,
+        border: active
+          ? '1px solid rgba(229,24,30,0.5)'
+          : `1px solid ${hovering ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+        background: active ? 'rgba(229,24,30,0.14)' : hovering ? 'rgba(255,255,255,0.07)' : 'transparent',
+        color: active ? ACCENT : disabled ? 'rgba(255,255,255,0.2)' : hovering ? '#fff' : 'rgba(255,255,255,0.65)',
         cursor: disabled ? 'default' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: FONT_BODY,
-        fontSize: active ? 13 : 13,
+        fontSize: 13.5,
         fontWeight: active ? 700 : 500,
         transition: 'background 0.14s, border-color 0.14s, color 0.14s',
         userSelect: 'none',
@@ -74,112 +83,127 @@ const PageButton = React.memo(({ children, active, disabled, onClick, isIcon, wi
   );
 });
 
-// ── Dấu ... ───────────────────────────────────────────────────────────────────
-const Dots = ({ onJump }) => {
-  const [hov, setHov] = useState(false);
-  return (
-    <motion.span
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      onClick={onJump}
-      style={{
-        width: BTN_SIZE, height: BTN_SIZE,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: hov ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)',
-        fontFamily: FONT_BODY, fontSize: 14,
-        cursor: onJump ? 'pointer' : 'default',
-        letterSpacing: 1,
-        transition: 'color 0.15s',
-        flexShrink: 0,
-      }}
-    >
-      ···
-    </motion.span>
-  );
-};
+// ── Dấu … (bấm để nhảy 5 trang) ───────────────────────────────────────────────
+const Dots = ({ onJump, label, size }) => (
+  <button
+    type="button"
+    onClick={onJump}
+    aria-label={label}
+    style={{
+      minWidth: size, height: size, padding: 0,
+      background: 'none', border: 'none',
+      color: 'rgba(255,255,255,0.35)',
+      fontFamily: FONT_BODY, fontSize: 14, letterSpacing: 1,
+      cursor: 'pointer', flexShrink: 0,
+    }}
+  >
+    ···
+  </button>
+);
 
-// ── Jump-to-page input ────────────────────────────────────────────────────────
-const JumpInput = ({ totalPages, onJump }) => {
-  const [val, setVal]   = useState('');
+// ── Nhập số trang (popover) ───────────────────────────────────────────────────
+const JumpInput = ({ page, totalPages, onJump, label, size, openUp, minWidth }) => {
+  const [val, setVal] = useState('');
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Mở → focus ô nhập; bấm ra ngoài → đóng
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [open]);
 
   const commit = () => {
     const n = parseInt(val, 10);
-    if (!isNaN(n) && n >= 1 && n <= totalPages) onJump(n);
-    setVal(''); setOpen(false);
+    if (!Number.isNaN(n) && n >= 1 && n <= totalPages && n !== page) onJump(n);
+    setVal('');
+    setOpen(false);
   };
 
   return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+    <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
       <motion.button
-        whileTap={{ scale: 0.9 }}
-        onClick={() => { setOpen(v => !v); setTimeout(() => ref.current?.focus(), 50); }}
+        type="button"
+        whileTap={{ scale: 0.95 }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
         style={{
-          height: BTN_SIZE, padding: '0 10px',
-          borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
-          background: open ? 'rgba(255,255,255,0.07)' : 'transparent',
-          color: 'rgba(255,255,255,0.3)', cursor: 'pointer',
-          fontFamily: FONT_BODY, fontSize: 11, fontWeight: 600,
-          letterSpacing: '0.06em', transition: 'all 0.15s',
-          flexShrink: 0,
+          height: size, minWidth, padding: '0 12px',
+          borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)',
+          background: open ? 'rgba(255,255,255,0.08)' : 'transparent',
+          color: 'rgba(255,255,255,0.75)', cursor: 'pointer',
+          fontFamily: FONT_BODY, fontSize: 13, fontWeight: 600,
+          transition: 'background 0.15s', flexShrink: 0, whiteSpace: 'nowrap',
         }}
       >
-        Đến trang
+        {label}
       </motion.button>
 
       <AnimatePresence>
         {open && (
           <motion.div
             key="jump"
-            initial={{ opacity: 0, y: 6, scale: 0.95 }}
+            role="dialog"
+            aria-label="Đến trang"
+            initial={{ opacity: 0, y: openUp ? -6 : 6, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.95 }}
+            exit={{ opacity: 0, y: openUp ? -6 : 6, scale: 0.96 }}
             transition={{ duration: 0.15 }}
             style={{
-              position: 'absolute', top: 'calc(100% + 8px)', left: '50%',
-              transform: 'translateX(-50%)',
+              position: 'absolute',
+              ...(openUp ? { bottom: 'calc(100% + 8px)' } : { top: 'calc(100% + 8px)' }),
+              left: '50%', transform: 'translateX(-50%)',
               background: 'rgba(14,14,14,0.97)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10, padding: '10px 12px',
-              display: 'flex', alignItems: 'center', gap: 6,
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 12, padding: '10px 12px',
+              display: 'flex', alignItems: 'center', gap: 8,
               zIndex: 99, backdropFilter: 'blur(20px)',
               boxShadow: '0 12px 40px rgba(0,0,0,0.8)',
               whiteSpace: 'nowrap',
             }}
           >
             <input
-              ref={ref}
-              type="number"
-              min={1} max={totalPages}
+              ref={inputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label={`Số trang, từ 1 đến ${totalPages}`}
               value={val}
-              onChange={e => setVal(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setOpen(false); }}
-              placeholder="1"
+              onChange={(e) => setVal(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') setOpen(false);
+              }}
+              placeholder={String(page)}
               style={{
-                width: 52, height: 30, padding: '0 8px',
-                borderRadius: 6, border: '1px solid rgba(255,255,255,0.12)',
+                width: 60, height: 38, padding: '0 8px',
+                borderRadius: 8, border: '1px solid rgba(255,255,255,0.16)',
                 background: 'rgba(255,255,255,0.06)',
-                color: 'white', fontFamily: FONT_BODY, fontSize: 13,
+                color: '#fff', fontFamily: FONT_BODY, fontSize: 16, // ≥16px: iOS không tự zoom
                 outline: 'none', textAlign: 'center',
               }}
             />
-            <span style={{
-              fontFamily: FONT_BODY, fontSize: 11,
-              color: 'rgba(255,255,255,0.25)',
-            }}>
+            <span style={{ fontFamily: FONT_BODY, fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
               / {totalPages}
             </span>
             <motion.button
-              whileTap={{ scale: 0.9 }}
+              type="button"
+              whileTap={{ scale: 0.94 }}
               onClick={commit}
               style={{
-                height: 30, padding: '0 10px', borderRadius: 6,
+                height: 38, padding: '0 16px', borderRadius: 8,
                 background: ACCENT, border: 'none', cursor: 'pointer',
-                color: 'white', fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700,
+                color: '#fff', fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700,
               }}
             >
-              OK
+              Đi
             </motion.button>
           </motion.div>
         )}
@@ -187,7 +211,6 @@ const JumpInput = ({ totalPages, onJump }) => {
     </div>
   );
 };
-
 
 export default function Pagination({
   page,
@@ -200,120 +223,110 @@ export default function Pagination({
   showInfo = true,
   itemLabel = 'phim',
 }) {
+  const isMobile = useIsMobile(); // hook phải đứng trước mọi early return
   if (!totalPages || totalPages <= 1) return null;
 
-  // Tính pageNumbers nếu không được truyền
-  const pageNumbers = externalPageNumbers ?? (() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const left  = Math.max(2, page - 1);
-    const right = Math.min(totalPages - 1, page + 1);
-    const pages = [1];
-    if (left > 2) pages.push('DOTS_LEFT');
-    for (let i = left; i <= right; i++) pages.push(i);
-    if (right < totalPages - 1) pages.push('DOTS_RIGHT');
-    pages.push(totalPages);
-    return pages;
-  })();
-
+  const size = isMobile ? BTN_MOBILE : BTN_DESKTOP;
+  const pageNumbers = externalPageNumbers ?? buildPages(page, totalPages, 1);
   const autoShowJump = showJump ?? totalPages > 10;
+  const showEnds = totalPages > (isMobile ? 10 : 7); // « » chỉ khi nhiều trang
 
   const from = total ? Math.min((page - 1) * pageSize + 1, total) : null;
-  const to   = total ? Math.min(page * pageSize, total) : null;
+  const to = total ? Math.min(page * pageSize, total) : null;
+
+  const go = (p) => onPageChange(Math.min(Math.max(p, 1), totalPages));
+
+  const firstBtn = showEnds && (
+    <PageButton size={size} label="Trang đầu" disabled={page <= 1} onClick={() => go(1)}>
+      <ChevronsLeft size={15} strokeWidth={2} />
+    </PageButton>
+  );
+  const prevBtn = (
+    <PageButton size={size} label="Trang trước" disabled={page <= 1} onClick={() => go(page - 1)}>
+      <ChevronLeft size={16} strokeWidth={2} />
+    </PageButton>
+  );
+  const nextBtn = (
+    <PageButton size={size} label="Trang sau" disabled={page >= totalPages} onClick={() => go(page + 1)}>
+      <ChevronRight size={16} strokeWidth={2} />
+    </PageButton>
+  );
+  const lastBtn = showEnds && (
+    <PageButton size={size} label="Trang cuối" disabled={page >= totalPages} onClick={() => go(totalPages)}>
+      <ChevronsRight size={15} strokeWidth={2} />
+    </PageButton>
+  );
 
   return (
-    <motion.div
+    <motion.nav
+      aria-label="Phân trang"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       style={{
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', gap: 14,
-        padding: '40px 0 20px',
+        padding: isMobile ? '28px 0 16px' : '40px 0 20px',
       }}
     >
-      {/* Info row */}
       {showInfo && from !== null && (
-        <p style={{
-          fontFamily: FONT_BODY, fontSize: 11,
-          color: 'rgba(255,255,255,0.28)',
-          letterSpacing: '0.04em',
-        }}>
+        <p style={{ margin: 0, fontFamily: FONT_BODY, fontSize: 12.5, color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
           Đang hiển thị{' '}
-          <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-            {from}–{to}
-          </span>
+          <strong style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{from}–{to}</strong>
           {' '}trong tổng số{' '}
-          <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-            {total.toLocaleString()}
-          </span>
+          <strong style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{total.toLocaleString('vi-VN')}</strong>
           {' '}{itemLabel}
         </p>
       )}
 
-      {/* Controls row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {isMobile ? (
+        // ── Mobile: ‹  3 / 12  › — nút to, không bao giờ tràn ngang ──
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', maxWidth: '100%' }}>
+          {firstBtn}
+          {prevBtn}
+          <JumpInput
+            page={page}
+            totalPages={totalPages}
+            onJump={go}
+            size={size}
+            minWidth={84}
+            openUp
+            label={<>{page} <span style={{ opacity: 0.5, fontWeight: 500 }}>/ {totalPages}</span></>}
+          />
+          {nextBtn}
+          {lastBtn}
+        </div>
+      ) : (
+        // ── Desktop: « ‹ 1 … 4 5 6 … 12 › » ──
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {firstBtn}
+          {prevBtn}
+          <div style={{ width: 6 }} />
 
-        {/* First page */}
-        {totalPages > 7 && (
-          <PageButton
-            disabled={page <= 1}
-            onClick={() => onPageChange(1)}
-            isIcon
-          >
-            <ChevronsLeft size={14} strokeWidth={2} />
-          </PageButton>
-        )}
+          {pageNumbers.map((p) => {
+            if (p === 'DOTS_LEFT')
+              return <Dots key="dl" size={size} label="Lùi 5 trang" onJump={() => go(page - 5)} />;
+            if (p === 'DOTS_RIGHT')
+              return <Dots key="dr" size={size} label="Tới 5 trang" onJump={() => go(page + 5)} />;
+            return (
+              <PageButton key={p} size={size} label={`Trang ${p}`} active={p === page} onClick={() => go(p)}>
+                {p}
+              </PageButton>
+            );
+          })}
 
-        {/* Prev */}
-        <PageButton disabled={page <= 1} onClick={() => onPageChange(page - 1)} isIcon>
-          <ChevronLeft size={15} strokeWidth={2} />
-        </PageButton>
+          <div style={{ width: 6 }} />
+          {nextBtn}
+          {lastBtn}
 
-        {/* Gap */}
-        <div style={{ width: 6 }} />
-
-        {/* Page numbers */}
-        {pageNumbers.map((p, i) => {
-          if (p === 'DOTS_LEFT')  return <Dots key="dl" />;
-          if (p === 'DOTS_RIGHT') return <Dots key="dr" />;
-          return (
-            <PageButton
-              key={p}
-              active={p === page}
-              onClick={() => onPageChange(p)}
-            >
-              {p}
-            </PageButton>
-          );
-        })}
-
-        {/* Gap */}
-        <div style={{ width: 6 }} />
-
-        {/* Next */}
-        <PageButton disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} isIcon>
-          <ChevronRight size={15} strokeWidth={2} />
-        </PageButton>
-
-        {/* Last page */}
-        {totalPages > 7 && (
-          <PageButton
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(totalPages)}
-            isIcon
-          >
-            <ChevronsRight size={14} strokeWidth={2} />
-          </PageButton>
-        )}
-
-        {/* Jump to page */}
-        {autoShowJump && (
-          <>
-            <div style={{ width: 10 }} />
-            <JumpInput totalPages={totalPages} onJump={onPageChange} />
-          </>
-        )}
-      </div>
-    </motion.div>
+          {autoShowJump && (
+            <>
+              <div style={{ width: 10 }} />
+              <JumpInput page={page} totalPages={totalPages} onJump={go} size={size} label="Đến trang" />
+            </>
+          )}
+        </div>
+      )}
+    </motion.nav>
   );
 }
