@@ -17,6 +17,7 @@ import tvShowService from "../../services/tvShowService";
 import { useMinimumLoading } from "../../hooks/useMinimumLoading";
 import { queryKeys, STALE } from "../../config/queryKeys";
 import { ignoreMissingEndpoint } from "../../utils/queryHelpers";
+import { normalizeMovie, normalizeTvShow } from "../../utils/normalizeMedia";
 import BackButton from "../../components/common/BackButton";
 import SeoMeta from "../../components/common/SeoMeta";
 import LoadingScreen from "../../components/ui/LoadingScreen";
@@ -25,34 +26,6 @@ import ComingSoonFeatured from "../../components/home/coming-soon/ComingSoonFeat
 import ComingSoonCard from "../../components/home/coming-soon/ComingSoonCard";
 
 const ACCENT = C.gold;
-
-const normalizeMovie = (m) => ({
-  id: m.id,
-  title: m.title,
-  releaseDate: m.releaseDate ?? null,
-  rating: m.rating ?? m.imdbRating ?? 0,
-  posterUrl: m.posterUrl || null,
-  backdropUrl: m.backdropUrl || null,
-  genres: m.genres || [],
-  description: m.description || "",
-  isPremium: m.isPremium ?? false,
-  trailerVideoUrl: m.trailerVideoUrl || null,
-  isTvShow: false,
-});
-
-const normalizeTvShow = (s) => ({
-  id: s.id,
-  title: s.title ?? s.name,
-  firstAirDate: s.firstAirDate ?? null,
-  rating: s.rating ?? s.voteAverage ?? 0,
-  posterUrl: s.posterUrl || null,
-  backdropUrl: s.backdropUrl || null,
-  genres: s.genres || [],
-  description: s.description || s.overview || "",
-  isPremium: s.isPremium ?? false,
-  trailerVideoUrl: s.trailerVideoUrl || null,
-  isTvShow: true,
-});
 
 const extractItems = (data) =>
   Array.isArray(data)

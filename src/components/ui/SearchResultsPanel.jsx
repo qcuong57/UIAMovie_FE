@@ -54,6 +54,8 @@ const SearchResultsPanel = ({
   onMovie,
   onTvShow,
   onActor,
+  onPrefetchMovie,
+  onPrefetchTvShow,
   onSeeAll,
 }) => {
   const hasAny = movies.length + tvShows.length + actors.length > 0;
@@ -75,14 +77,14 @@ const SearchResultsPanel = ({
       key: "movies",
       title: "Phim",
       count: movies.length,
-      items: movies.map((m, i) => <MovieResultItem key={m.id} movie={m} index={i} onSelect={onMovie} />),
+      items: movies.map((m, i) => <MovieResultItem key={m.id} movie={m} index={i} onSelect={onMovie} onPrefetch={onPrefetchMovie} />),
     },
     tvShows.length > 0 && {
       key: "tv",
       title: "TV Show",
       count: tvShows.length,
       // MovieResultItem tự đọc firstAirDate → không cần clone object (giữ reference ổn định cho memo)
-      items: tvShows.map((s, i) => <MovieResultItem key={s.id} movie={s} index={i} onSelect={onTvShow} />),
+      items: tvShows.map((s, i) => <MovieResultItem key={s.id} movie={s} index={i} onSelect={onTvShow} onPrefetch={onPrefetchTvShow} />),
     },
     actors.length > 0 && {
       key: "actors",

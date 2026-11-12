@@ -1,7 +1,5 @@
 // src/utils/premium.js
-// Một nơi duy nhất quyết định "user có Premium hay không".
-// Trước đây lặp ở MovieDetailPage, TvShowDetailPage, MovieInfoPage, MovieCard, RecommendSection.
-
+// Nguồn duy nhất cho logic "user có Premium không" (dùng ở MovieCard, MovieDetailPage, TvShowDetailPage).
 export function userHasPremium(user) {
   if (!user) return false;
   return (

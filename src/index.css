@@ -45,3 +45,16 @@ html.vp-fs header,
 html.vp-fs [data-site-nav] {
   display: none !important;
 }
+
+/* Bottom nav nổi trên mobile (MobileBottomNav): cao 62px + cách đáy 12px + safe-area.
+   Chừa chỗ để nội dung/footer cuối trang không bị che. Khớp breakpoint của useIsMobile (768px). */
+@media screen and (max-width: 768px) {
+  #root {
+    padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+  }
+  /* Fullscreen giả: bottom nav bị ẩn nên bỏ khoảng chừa */
+  html.vp-fs #root {
+    padding-bottom: 0;
+  }
+}

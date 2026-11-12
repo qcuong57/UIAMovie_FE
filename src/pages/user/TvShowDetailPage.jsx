@@ -18,6 +18,7 @@ import ReviewSection from "../../components/movie/Reviewsection";
 import BackButton from "../../components/common/BackButton";
 import SeoMeta from "../../components/common/SeoMeta";
 import { buildTvShowSeo } from "../../config/seo";
+import { userHasPremium } from "../../utils/premium";
 
 import { C, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
 import SectionTitle from "../../components/movie/ui/SectionTitle";
@@ -38,16 +39,6 @@ const RELATED_FILTER = { page: 1, pageSize: 12, sortBy: "rating" };
 const selectRelated = (d) => unwrapList(d, ["tvShows"]).map(normalizeTvShow);
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
-
-// ── Premium helper (đồng bộ với MovieCard.jsx) ────────────────────
-function userHasPremium(user) {
-  if (!user) return false;
-  return (
-    user.isPremium === true ||
-    user.plan === "premium" ||
-    user.subscription?.active === true
-  );
-}
 
 // ══════════════════════════════════════════════════════════════
 // MAIN

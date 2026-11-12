@@ -1,7 +1,7 @@
 // src/components/layout/Navbar.jsx
 
 import React, { useState, useRef, useEffect, useCallback, useReducer } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, User, LogOut, Shield, ChevronDown, X, Clock, Crown, Info } from "lucide-react";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
@@ -19,6 +19,8 @@ import * as transitions from "../../motion-configs/transitions";
 import authService from "../../services/authService";
 import { useStoredUser } from "../../hooks/useStoredUser";
 import axiosInstance from "../../config/axios";
+import { queryKeys } from "../../config/queryKeys";
+import { prefetchMovie, prefetchTvShow } from "../../hooks/useMediaDetail";
 import NavbarFilterModal from "../ui/NavbarFilterModal";
 import NotificationBell from "../ui/NotificationBell";
 
@@ -41,7 +43,7 @@ const toSlug = (name) =>
 ========================================================= */
 
 const MIN_SEARCH_LEN = 2;
-const SEARCH_DEBOUNCE_MS = 220;
+const SEARCH_DEBOUNCE_MS = 150;
 const EMPTY = [];
 
 const SEARCH_QUERY_OPTS = {
@@ -74,60 +76,31 @@ const fetchTvShowSearch = async (q, signal) => {
   }
 };
 
+// 1 request nhẹ vào bảng Person (thay cho 2 request kéo cả cast của phim/TV rồi lọc phía client).
+// Endpoint: GET /api/persons/search → { id, name, profileUrl, tmdbPersonId }
 const fetchActorSearch = async (q, signal) => {
-  const enc = encodeURIComponent(q);
-  const [movieRes, tvRes] = await Promise.allSettled([
-    axiosInstance.get(`/movies/search/actor?actorName=${enc}`, { signal }),
-    axiosInstance.get(`/tvshows/search/actor?actorName=${enc}`, { signal }),
-  ]);
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-
-  const extractRaw = (res) => {
-    if (res.status !== "fulfilled") return [];
-    const raw = res.value?.data?.data ?? res.value?.data;
-    return Array.isArray(raw) ? raw : [];
-  };
-
-  const ql = q.toLowerCase();
-  const actorMap = new Map();
-
-  const processSource = (rawList) => {
-    rawList.forEach((item) => {
-      const itemTitle = item.title ?? item.name;
-      const castList = item.cast ?? item.Cast ?? [];
-      castList.forEach((c) => {
-        const name = c.name ?? c.Name ?? c.personName;
-        if (!name || !name.toLowerCase().includes(ql)) return;
-
-        if (actorMap.has(name)) {
-          const existing = actorMap.get(name);
-          if (itemTitle && !existing.knownMovies.includes(itemTitle)) existing.knownMovies.push(itemTitle);
-          return;
-        }
-
-        actorMap.set(name, {
-          id: c.tmdbPersonId ?? c.TmdbPersonId ?? c.personId ?? name,
-          name,
-          profileUrl: c.profileUrl ?? c.ProfileUrl ?? null,
-          character: c.character ?? c.Character ?? null,
-          biography: c.biography ?? c.Biography ?? null,
-          birthday: c.birthday ?? c.Birthday ?? null,
-          placeOfBirth: c.placeOfBirth ?? c.PlaceOfBirth ?? null,
-          deathday: c.deathday ?? null,
-          popularity: c.popularity ?? null,
-          tmdbPersonId: c.tmdbPersonId ?? c.TmdbPersonId ?? null,
-          profileImages: c.profileImages ?? c.ProfileImages ?? [],
-          movies: c.movies ?? [],
-          knownMovies: [itemTitle].filter(Boolean),
-        });
-      });
-    });
-  };
-
-  processSource(extractRaw(movieRes));
-  processSource(extractRaw(tvRes));
-
-  return [...actorMap.values()].slice(0, 3);
+  const res = await axiosInstance.get("/persons/search", {
+    params: { query: q, page: 1, pageSize: 3 },
+    signal,
+  });
+  const raw = res?.data?.data ?? res?.data ?? [];
+  const list = Array.isArray(raw) ? raw : raw?.items ?? [];
+  return list.slice(0, 3).map((p) => ({
+    id: p.tmdbPersonId ?? p.id ?? p.name,
+    personId: p.id ?? null,
+    name: p.name,
+    profileUrl: p.profileUrl ?? null,
+    tmdbPersonId: p.tmdbPersonId ?? null,
+    character: null,
+    biography: null,
+    birthday: null,
+    placeOfBirth: null,
+    deathday: null,
+    popularity: null,
+    profileImages: [],
+    movies: [],
+    knownMovies: [],
+  }));
 };
 
 const DESKTOP_LINKS = [
@@ -165,31 +138,33 @@ const Navbar = () => {
   const searchActive = showSearch && dq.length >= MIN_SEARCH_LEN;
 
   const movieQ = useQuery({
-    queryKey: ["nav-search", "movies", dq],
+    queryKey: queryKeys.search.navMovies(dq),
     queryFn: ({ signal }) => fetchSearch(dq, signal),
     enabled: searchActive,
     select: pickMovies,
     ...SEARCH_QUERY_OPTS,
   });
   const tvQ = useQuery({
-    queryKey: ["nav-search", "tv", dq],
+    queryKey: queryKeys.search.navTv(dq),
     queryFn: ({ signal }) => fetchTvShowSearch(dq, signal),
     enabled: searchActive,
     select: pickTvShows,
     ...SEARCH_QUERY_OPTS,
   });
   const actorQ = useQuery({
-    queryKey: ["nav-search", "actors", dq],
+    queryKey: queryKeys.search.navActors(dq),
     queryFn: ({ signal }) => fetchActorSearch(dq, signal),
-    enabled: searchActive,
+    enabled: searchActive, // endpoint nhẹ → chạy song song với phim/TV
     ...SEARCH_QUERY_OPTS,
   });
 
   // Khi không tìm (đóng / <2 ký tự) thì bỏ qua cả dữ liệu placeholder
   const results = searchActive ? movieQ.data ?? EMPTY : EMPTY;
   const tvShows = searchActive ? tvQ.data ?? EMPTY : EMPTY;
-  const actors = searchActive ? actorQ.data ?? EMPTY : EMPTY;
-  const isFetching = searchActive && (movieQ.isFetching || tvQ.isFetching || actorQ.isFetching);
+  // Không hiện diễn viên của từ khoá cũ (placeholder) → tránh kết quả lệch với từ khoá đang gõ
+  const actors = searchActive && !actorQ.isPlaceholderData ? actorQ.data ?? EMPTY : EMPTY;
+  // Chỉ phim + TV quyết định "đang tìm" (làm mờ panel). Diễn viên nạp sau, không giữ panel mờ.
+  const isFetching = searchActive && (movieQ.isFetching || tvQ.isFetching);
 
   const currentUser = useStoredUser();
   const [, forceRender] = useReducer((n) => n + 1, 0);
@@ -234,40 +209,77 @@ const Navbar = () => {
     setShowResults(searchActive);
   }, [searchActive, dq]);
 
-  const openSearch = useCallback(() => {
-    setShowSearch(true);
-    if (!isMobile) setTimeout(() => searchInputRef.current?.focus(), 80);
-  }, [isMobile]);
+  // Mobile: overlay có 1 history entry riêng → nút Back (Android) đóng overlay thay vì thoát trang.
+  const searchEntryRef = useRef(false);
 
-  const closeSearch = useCallback(() => {
+  const resetSearch = useCallback(() => {
     setShowSearch(false);
     setSearchQuery("");
     setShowResults(false);
   }, []);
 
+  const openSearch = useCallback(() => {
+    setShowSearch(true);
+    if (!isMobile) {
+      setTimeout(() => searchInputRef.current?.focus(), 80);
+      return;
+    }
+    if (!searchEntryRef.current) {
+      window.history.pushState({ ...window.history.state, __search: true }, "");
+      searchEntryRef.current = true;
+    }
+  }, [isMobile]);
+
+  // Đóng bằng UI (nút ←, Esc): lùi 1 entry, popstate bên dưới sẽ reset state.
+  const closeSearch = useCallback(() => {
+    if (searchEntryRef.current) {
+      window.history.back();
+      return;
+    }
+    resetSearch();
+  }, [resetSearch]);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (!searchEntryRef.current) return;
+      searchEntryRef.current = false;
+      resetSearch();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [resetSearch]);
+
+  // Điều hướng từ kết quả: thay entry của overlay (không push thêm) → Back từ trang mới quay về trang cũ.
+  const navigateFromSearch = useCallback(
+    (to, opts) => {
+      const replace = searchEntryRef.current;
+      searchEntryRef.current = false;
+      navigate(to, { ...opts, replace });
+      resetSearch();
+    },
+    [navigate, resetSearch],
+  );
+
+  const queryClient = useQueryClient();
+  const prefetchMovieItem = useCallback((m) => prefetchMovie(queryClient, m?.id), [queryClient]);
+  const prefetchTvItem = useCallback((t) => prefetchTvShow(queryClient, t?.id), [queryClient]);
+
   const handleSearchSubmit = useCallback(
     (e) => {
       e?.preventDefault?.();
       const text = searchQuery.trim();
-      navigate(text ? `/search?q=${encodeURIComponent(text)}` : "/search");
-      closeSearch();
+      navigateFromSearch(text ? `/search?q=${encodeURIComponent(text)}` : "/search");
     },
-    [navigate, searchQuery, closeSearch],
+    [navigateFromSearch, searchQuery],
   );
 
   // Callback ổn định → MovieResultItem / ActorResultItem (memo) không render lại khi gõ phím
-  const goMovie = useCallback((m) => {
-    navigate(`/movie/${m.id}/info`);
-    closeSearch();
-  }, [navigate, closeSearch]);
-  const goTvShow = useCallback((s) => {
-    navigate(`/tvshow/${s.id}/info`);
-    closeSearch();
-  }, [navigate, closeSearch]);
-  const goActor = useCallback((a) => {
-    navigate(`/person/${toSlug(a.name)}`, { state: { actor: a } });
-    closeSearch();
-  }, [navigate, closeSearch]);
+  const goMovie = useCallback((m) => navigateFromSearch(`/movie/${m.id}/info`), [navigateFromSearch]);
+  const goTvShow = useCallback((s) => navigateFromSearch(`/tvshow/${s.id}/info`), [navigateFromSearch]);
+  const goActor = useCallback(
+    (a) => navigateFromSearch(`/person/${toSlug(a.name)}`, { state: { actor: a } }),
+    [navigateFromSearch],
+  );
 
   const handleFilterApply = useCallback(
     (params) => {
@@ -332,6 +344,8 @@ const Navbar = () => {
     onMovie: goMovie,
     onTvShow: goTvShow,
     onActor: goActor,
+    onPrefetchMovie: prefetchMovieItem,
+    onPrefetchTvShow: prefetchTvItem,
     onSeeAll: handleSearchSubmit,
   };
 

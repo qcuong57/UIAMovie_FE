@@ -2,7 +2,7 @@
 // Trang thông tin chi tiết TV Show — hiển thị trước khi vào xem
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
-import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -24,7 +24,7 @@ import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { useToast } from "../../components/common/Toast";
+import { useFavoriteToggle } from "../../hooks/useFavorites";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 const EMPTY = [];
@@ -37,7 +37,6 @@ export default function TvShowInfoPage() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
-  const toast = useToast();
 
   // ── Dữ liệu: React Query (cache chung với trang xem /tvshow/:id) ──
   const { data: rawShow, isPending, isError, error: queryError, refetch, isRefetching } = useTvShow(id);
@@ -46,11 +45,14 @@ export default function TvShowInfoPage() {
     [rawShow],
   );
   const trailers = show?.trailers ?? EMPTY;
-  const [showTrailer, setShowTrailer] = useState(false);
 
-  // ── Favorite state ──
-  const [isFav, setIsFav] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
+  // ── Yêu thích: dùng chung cache React Query ──
+  const favItem = useMemo(
+    () => (show ? { id: show.id, title: show.title, isTvShow: true } : null),
+    [show],
+  );
+  const { isFav, toggle: handleToggleFav } = useFavoriteToggle(favItem);
+  const [showTrailer, setShowTrailer] = useState(false);
 
   // Mở từ thông báo (?reviewId=...) thì vào thẳng tab Đánh giá
   const [searchParams] = useSearchParams();
@@ -70,63 +72,6 @@ export default function TvShowInfoPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
-
-  // ── Trạng thái yêu thích ban đầu (chỉ khi đã đăng nhập) ──────────
-  const loggedIn = !!currentUser;
-  useEffect(() => {
-    if (!id || !loggedIn || !tvShowService.getFavorites) {
-      setIsFav(false);
-      return;
-    }
-    let cancelled = false;
-    tvShowService
-      .getFavorites()
-      .catch(() => [])
-      .then((favRes) => {
-        if (cancelled) return;
-        const rawFavs = Array.isArray(favRes)
-          ? favRes
-          : favRes?.data || favRes?.favorites || favRes?.items || [];
-        setIsFav(rawFavs.some((f) => String(f.tvShowId ?? f.id ?? f.tvShow?.id) === String(id)));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, loggedIn]);
-
-  // ── Logic Toggle Favorite ──
-  const handleToggleFav = useCallback(async () => {
-    if (favLoading) return;
-
-    if (!getCurrentUser()) {
-      toast?.warning?.("Bạn cần đăng nhập để thêm vào Yêu thích");
-      return;
-    }
-
-    setFavLoading(true);
-    const nextState = !isFav;
-    setIsFav(nextState);
-
-    try {
-      if (!nextState) {
-        if (tvShowService.removeFavorite) {
-          await tvShowService.removeFavorite(id);
-        }
-        toast?.info?.(`"${show?.title}" đã được bỏ khỏi Yêu thích`);
-      } else {
-        if (tvShowService.addFavorite) {
-          await tvShowService.addFavorite(id);
-        }
-        toast?.success?.(`Đã thêm "${show?.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      console.error("[TvShowInfoPage] Fav Error:", err);
-      setIsFav(!nextState); // Rollback nếu lỗi API
-      toast?.error?.("Không thể cập nhật Yêu thích, vui lòng thử lại");
-    } finally {
-      setFavLoading(false);
-    }
-  }, [favLoading, isFav, id, show?.title, toast]);
 
   // Lazy-load episodes khi user bấm vào season
   const handleSeasonSelect = async (season) => {

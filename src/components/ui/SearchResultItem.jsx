@@ -153,8 +153,15 @@ const useSelect = (item, onSelect, onClick) =>
    `onClick` vẫn được hỗ trợ để không vỡ chỗ khác đang dùng.
 ========================================================= */
 
-export const MovieResultItem = memo(function MovieResultItem({ movie, onSelect, onClick, index = 0 }) {
+export const MovieResultItem = memo(function MovieResultItem({ movie, onSelect, onClick, onPrefetch, index = 0 }) {
   const handle = useSelect(movie, onSelect, onClick);
+  // Chỉ prefetch khi rê CHUỘT (không phải chạm) → mobile không tốn request thừa. prefetchQuery tự bỏ qua nếu cache còn tươi.
+  const handleEnter = useCallback(
+    (e) => {
+      if (e.pointerType === "mouse") onPrefetch?.(movie);
+    },
+    [movie, onPrefetch],
+  );
 
   const year = getYear(movie?.releaseDate ?? movie?.firstAirDate); // TV show dùng firstAirDate
   const rating = movie?.rating ?? movie?.imdbRating;
@@ -166,6 +173,7 @@ export const MovieResultItem = memo(function MovieResultItem({ movie, onSelect, 
       type="button"
       className="sri"
       onClick={handle}
+      onPointerEnter={onPrefetch ? handleEnter : undefined}
       style={{ ...colorVars(genreColor), animationDelay: delay(index) }}
     >
       <span className="sri-bar" aria-hidden="true" />

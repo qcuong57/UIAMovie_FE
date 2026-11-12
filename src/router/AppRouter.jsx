@@ -1,5 +1,5 @@
 // src/router/AppRouter.jsx
-import React, { useEffect, useRef } from "react";
+import React, { Suspense, lazy, useEffect, useRef } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -9,32 +9,35 @@ import {
   useLocation,
 } from "react-router-dom";
 
-import HomePage from "../pages/user/Homepage";
-import MovieInfoPage from "../pages/user/MovieInfoPage";
-import MovieDetailPage from "../pages/user/MovieDetailPage";
-import LandingPage from "../pages/Landingpage";
-import AboutUs from "../pages/AboutUs";
 import Navbar from "../components/layout/Navbar";
-import SearchPage from "../pages/user/Searchpage";
-import BrowsePage from "../pages/user/BrowsePage";
-import ProfilePage from "../pages/user/ProfilePage";
-import SecurityPage from "../pages/user/SecurityPage";
-import PersonPage from "../pages/user/PersonPage";
-import FavoritesPage from "../pages/user/FavoritesPage";
-import ComingSoonPage from "../pages/user/ComingSoonPage";
-import WatchHistoryPage from "../pages/user/WatchHistoryPage";
-import AdminPage from "../pages/admin/AdminPage";
-import TvShowInfoPage from "../pages/user/TvShowInfoPage";
-import TvShowDetailPage from "../pages/user/TvShowDetailPage";
-import PremiumPage from "../pages/PremiumPage";
-import PaymentResultPage from "../pages/PaymentResultPage";
-import AnnouncementsPage from "../pages/user/AnnouncementsPage";
-import NotFoundPage from "../pages/NotFoundPage";
 import ErrorBoundary from "../components/common/ErrorBoundary";
 import SeoMeta from "../components/common/SeoMeta";
 import { useToast } from "../components/common/Toast";
 import { useIsLoggedIn, useStoredUser } from "../hooks/useStoredUser";
 import { postLoginPath } from "../utils/authRedirect";
+import LoadingScreen from "../components/ui/LoadingScreen";
+
+// Mỗi trang một chunk riêng → bundle đầu nhẹ, AdminPage chỉ tải khi vào /admin
+const HomePage = lazy(() => import("../pages/user/Homepage"));
+const MovieInfoPage = lazy(() => import("../pages/user/MovieInfoPage"));
+const MovieDetailPage = lazy(() => import("../pages/user/MovieDetailPage"));
+const LandingPage = lazy(() => import("../pages/Landingpage"));
+const AboutUs = lazy(() => import("../pages/AboutUs"));
+const SearchPage = lazy(() => import("../pages/user/Searchpage"));
+const BrowsePage = lazy(() => import("../pages/user/BrowsePage"));
+const ProfilePage = lazy(() => import("../pages/user/ProfilePage"));
+const SecurityPage = lazy(() => import("../pages/user/SecurityPage"));
+const PersonPage = lazy(() => import("../pages/user/PersonPage"));
+const FavoritesPage = lazy(() => import("../pages/user/FavoritesPage"));
+const ComingSoonPage = lazy(() => import("../pages/user/ComingSoonPage"));
+const WatchHistoryPage = lazy(() => import("../pages/user/WatchHistoryPage"));
+const AdminPage = lazy(() => import("../pages/admin/AdminPage"));
+const TvShowInfoPage = lazy(() => import("../pages/user/TvShowInfoPage"));
+const TvShowDetailPage = lazy(() => import("../pages/user/TvShowDetailPage"));
+const PremiumPage = lazy(() => import("../pages/PremiumPage"));
+const PaymentResultPage = lazy(() => import("../pages/PaymentResultPage"));
+const AnnouncementsPage = lazy(() => import("../pages/user/AnnouncementsPage"));
+const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 
 /** Scroll lên đầu trang mỗi khi route thay đổi */
 const ScrollToTop = () => {
@@ -56,7 +59,9 @@ const WithNavbar = () => {
       {/* Trang con crash → chỉ vùng nội dung hiện PageError, Navbar vẫn dùng được.
           resetKey: sang trang khác thì tự thoát khỏi trạng thái lỗi. */}
       <ErrorBoundary resetKey={pathname}>
-        <Outlet />
+        <Suspense fallback={<LoadingScreen />}>
+          <Outlet />
+        </Suspense>
       </ErrorBoundary>
     </>
   );
@@ -106,6 +111,7 @@ const protectedPage = (Page) => (
 const AppRouter = () => (
   <BrowserRouter>
     <ScrollToTop />
+    <Suspense fallback={<LoadingScreen />}>
     <Routes>
       {/* ── Trang guest (không Navbar) ── */}
       <Route
@@ -151,6 +157,7 @@ const AppRouter = () => (
       <Route path="/profile" element={protectedPage(ProfilePage)} />
       <Route path="/settings/security" element={protectedPage(SecurityPage)} />
     </Routes>
+    </Suspense>
   </BrowserRouter>
 );
 

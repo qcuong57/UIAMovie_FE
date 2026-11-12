@@ -2,11 +2,10 @@
 // Trang thông tin chi tiết phim — hiển thị trước khi vào xem phim
 // Route: /movie/:id/info → /movie/:id (player)
 
-import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import movieService from "../../services/movieService";
 import { useMovie } from "../../hooks/useMediaDetail";
 import { normalizeMovieInfo } from "../../utils/normalizeDetail";
 import DetailPageError from "../../components/common/DetailPageError";
@@ -32,21 +31,13 @@ import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { useToast } from "../../components/common/Toast";
+import { useFavoriteToggle } from "../../hooks/useFavorites";
+import { userHasPremium } from "../../utils/premium";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
-
-function userHasPremium(user) {
-  if (!user) return false;
-  return (
-    user.isPremium === true ||
-    user.plan === "premium" ||
-    user.subscription?.active === true
-  );
-}
 
 const EMPTY = [];
 const EMPTY_INFO = { movie: null, cast: EMPTY, directors: EMPTY, actors: EMPTY };
@@ -58,7 +49,6 @@ export default function MovieInfoPage() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
-  const toast = useToast();
 
   // ── Dữ liệu: React Query. Cùng cache với trang xem /movie/:id → bấm "Xem" là có ngay, không gọi lại API ──
   const { data: rawMovie, isPending, isError, error: queryError, refetch, isRefetching } = useMovie(id);
@@ -67,12 +57,15 @@ export default function MovieInfoPage() {
     [rawMovie],
   );
   const trailers = movie?.trailers ?? EMPTY;
+
+  // ── Yêu thích: dùng chung cache React Query (optimistic + rollback + toast nằm trong hook) ──
+  const favItem = useMemo(
+    () => (movie ? { id: movie.id, title: movie.title, isTvShow: false } : null),
+    [movie],
+  );
+  const { isFav, toggle: handleToggleFav } = useFavoriteToggle(favItem);
   const [showTrailer, setShowTrailer] = useState(false);
   
-  // ── Favorite state ──
-  const [isFav, setIsFav] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
-
   // Mở từ thông báo (?reviewId=...) thì vào thẳng tab Đánh giá
   const [searchParams] = useSearchParams();
   const reviewIdParam = searchParams.get("reviewId");
@@ -90,59 +83,6 @@ export default function MovieInfoPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
-
-  // ── Trạng thái yêu thích ban đầu (chỉ khi đã đăng nhập) ──────────
-  const loggedIn = !!currentUser;
-  useEffect(() => {
-    if (!id || !loggedIn) {
-      setIsFav(false);
-      return;
-    }
-    let cancelled = false;
-    movieService
-      .getFavorites()
-      .catch(() => [])
-      .then((favRes) => {
-        if (cancelled) return;
-        const rawFavs = Array.isArray(favRes)
-          ? favRes
-          : favRes?.data || favRes?.favorites || favRes?.items || [];
-        setIsFav(rawFavs.some((f) => String(f.movieId ?? f.id ?? f.movie?.id) === String(id)));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, loggedIn]);
-
-  // ── Logic Toggle Favorite ──
-  const handleToggleFav = useCallback(async () => {
-    if (favLoading) return;
-
-    if (!getCurrentUser()) {
-      toast?.warning?.("Bạn cần đăng nhập để thêm vào Yêu thích");
-      return;
-    }
-
-    setFavLoading(true);
-    const nextState = !isFav;
-    setIsFav(nextState);
-
-    try {
-      if (!nextState) {
-        await movieService.removeFavorite(id);
-        toast?.info?.(`"${movie?.title}" đã được bỏ khỏi Yêu thích`);
-      } else {
-        await movieService.addFavorite(id);
-        toast?.success?.(`Đã thêm "${movie?.title}" vào Yêu thích`);
-      }
-    } catch (err) {
-      console.error("[MovieInfoPage] Fav Error:", err);
-      setIsFav(!nextState); // Rollback nếu lỗi API
-      toast?.error?.("Không thể cập nhật Yêu thích, vui lòng thử lại");
-    } finally {
-      setFavLoading(false);
-    }
-  }, [favLoading, isFav, id, movie?.title, toast]);
 
   // ── Derived ─────────────────────────────────────────────────────
   // directors / actors đã được normalizeMovieInfo tính sẵn ở trên

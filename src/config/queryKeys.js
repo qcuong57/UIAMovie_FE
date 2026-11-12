@@ -33,7 +33,14 @@ export const queryKeys = {
   },
   // Trang Duyệt / Tìm kiếm: filter là MỘT object (gồm cả page) → key ổn định, prefetch dùng đúng key này.
   browse: { all: ["browse"], list: (filter) => ["browse", "list", filter] },
-  search: { all: ["search"], list: (filter) => ["search", "list", filter] },
+  // Navbar search (dropdown/overlay): chung gốc "search" → thuộc PUBLIC_QUERY_ROOTS, không bị reset khi đổi tài khoản.
+  search: {
+    all: ["search"],
+    list: (filter) => ["search", "list", filter],
+    navMovies: (q) => ["search", "nav", "movies", q],
+    navTv: (q) => ["search", "nav", "tv", q],
+    navActors: (q) => ["search", "nav", "actors", q],
+  },
   recommendations: {
     all: ["recommendations"],
     personalized: (userId, daySeed) => [
