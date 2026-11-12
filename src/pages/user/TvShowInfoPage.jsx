@@ -2,18 +2,21 @@
 // Trang thông tin chi tiết TV Show — hiển thị trước khi vào xem
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
-import React, { useState, useEffect, useCallback, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
+import { useTvShow } from "../../hooks/useMediaDetail";
+import { normalizeTvShowInfo } from "../../utils/normalizeDetail";
+import DetailPageError from "../../components/common/DetailPageError";
 import SeoMeta from "../../components/common/SeoMeta";
 import { buildTvShowSeo } from "../../config/seo";
 import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
 import TrailerModal from "../../components/movie/ui/TrailerModal";
 import Skeleton from "../../components/movie/ui/Skeleton";
-import { C, extractYoutubeKey, fmt, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
+import { C, fmt, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
 
 // ── Extracted components ──────────────────────────────────────────
 import TvShowInfoHero from "../../components/movie/tvshow/TvShowInfoHero";
@@ -24,6 +27,9 @@ import LoadingScreen from "../../components/ui/LoadingScreen";
 import { useToast } from "../../components/common/Toast";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
+const EMPTY = [];
+const EMPTY_INFO = { show: null, cast: EMPTY, creators: EMPTY };
+
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════
@@ -33,12 +39,13 @@ export default function TvShowInfoPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [show, setShow] = useState(null);
-  const [cast, setCast] = useState([]);
-  const [directorsFromShow, setDirectorsFromShow] = useState([]);
-  const [trailers, setTrailers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // ── Dữ liệu: React Query (cache chung với trang xem /tvshow/:id) ──
+  const { data: rawShow, isPending, isError, error: queryError, refetch, isRefetching } = useTvShow(id);
+  const { show, cast, creators } = useMemo(
+    () => (rawShow ? normalizeTvShowInfo(rawShow) : EMPTY_INFO),
+    [rawShow],
+  );
+  const trailers = show?.trailers ?? EMPTY;
   const [showTrailer, setShowTrailer] = useState(false);
 
   // ── Favorite state ──
@@ -64,140 +71,28 @@ export default function TvShowInfoPage() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
 
+  // ── Trạng thái yêu thích ban đầu (chỉ khi đã đăng nhập) ──────────
+  const loggedIn = !!currentUser;
   useEffect(() => {
-    if (!id) return;
-    fetchAll();
-  }, [id]);
-
-  // ── Fetch ──────────────────────────────────────────────────────
-  const fetchAll = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [res, favRes] = await Promise.all([
-        tvShowService.getTvShowById(id),
-        tvShowService.getFavorites ? tvShowService.getFavorites().catch(() => []) : Promise.resolve([]),
-      ]);
-      const envelope = res?.data ?? res;
-      const raw = envelope?.data ?? envelope?.tvShow ?? envelope;
-
-      // Đồng bộ trạng thái yêu thích ban đầu
-      const rawFavs = Array.isArray(favRes)
-        ? favRes
-        : favRes?.data || favRes?.favorites || favRes?.items || [];
-      const favorited = rawFavs.some(
-        (f) => String(f.tvShowId ?? f.id ?? f.tvShow?.id) === String(id)
-      );
-      setIsFav(favorited);
-
-      const normalized = {
-        id: raw.id,
-        title: raw.title ?? raw.name,
-        tagline: raw.tagline || "",
-        description: raw.description ?? raw.overview ?? "",
-        year: raw.firstAirDate
-          ? new Date(raw.firstAirDate).getFullYear()
-          : (raw.year ?? null),
-        firstAirDate: raw.firstAirDate ?? null,
-        lastAirDate: raw.lastAirDate ?? null,
-        status: raw.status ?? "",
-        originCountry: Array.isArray(raw.originCountry)
-          ? raw.originCountry.join(", ")
-          : (raw.originCountry ?? ""),
-        language: raw.language ?? raw.originalLanguage ?? "",
-        rating: raw.rating ?? raw.imdbRating ?? 0,
-        voteCount: raw.voteCount ?? 0,
-        popularity: raw.popularity ?? null,
-        numberOfSeasons: raw.numberOfSeasons ?? raw.seasons?.length ?? 0,
-        numberOfEpisodes: raw.numberOfEpisodes ?? null,
-        genres: raw.genres ?? [],
-        posterUrl: raw.posterUrl ?? raw.poster ?? null,
-        backdropUrl: raw.backdropUrl ?? raw.backdrop ?? null,
-        trailerKey:
-          raw.trailerKey ??
-          extractYoutubeKey(
-            raw.videos?.find((v) => v.videoType === "trailer")?.videoUrl,
-          ),
-        trailerVideoUrl:
-          raw.trailerVideoUrl ||
-          raw.videos?.find((v) => v.videoType === "trailer_upload")?.videoUrl ||
-          null,
-        trailers: raw.trailers ?? [],
-        reviews: raw.reviews ?? [],
-        images: raw.images ?? [],
-        seasons: raw.seasons?.length
-          ? raw.seasons
-          : Array.from({ length: raw.numberOfSeasons ?? 0 }, (_, i) => ({
-              seasonNumber: i + 1,
-              name: `Mùa ${i + 1}`,
-              episodeCount: null,
-              airDate: null,
-              posterUrl: null,
-            })),
-        networks: raw.networks ?? [],
-      };
-      setShow(normalized);
-      if (normalized.trailers?.length) setTrailers(normalized.trailers);
-
-      // Directors / creators
-      if (raw?.createdBy?.length) {
-        setDirectorsFromShow(
-          raw.createdBy.map((p) => ({
-            id: p.id ?? p.personId ?? null,
-            name: p.name,
-            profileUrl: p.profileUrl ?? null,
-            biography: p.biography ?? null,
-            birthday: p.birthday ?? null,
-            placeOfBirth: p.placeOfBirth ?? null,
-          })),
-        );
-      } else if (raw?.directorDetail) {
-        setDirectorsFromShow([
-          {
-            id: raw.directorDetail.id ?? null,
-            name: raw.directorDetail.name,
-            profileUrl: raw.directorDetail.profileUrl,
-            biography: raw.directorDetail.biography,
-            birthday: raw.directorDetail.birthday,
-            placeOfBirth: raw.directorDetail.placeOfBirth,
-          },
-        ]);
-      } else if (raw?.director) {
-        setDirectorsFromShow([{ name: raw.director, profileUrl: null }]);
-      }
-
-      // Cast
-      const rawCast = Array.isArray(raw?.cast) && raw.cast.length > 0
-        ? raw.cast
-        : (raw?.seasons ?? []).flatMap(s => Array.isArray(s.cast) ? s.cast : []);
-
-      if (rawCast.length > 0) {
-        const seen = new Set();
-        const deduped = rawCast.filter(c => {
-          const key = c.id ?? c.personId ?? c.name;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        const sorted = deduped
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          .map((c) => ({
-            id: c.id ?? c.personId ?? c.tmdbPersonId ?? null,
-            name: c.name,
-            character: c.character ?? c.roles?.[0]?.character ?? "",
-            profileUrl: c.profileUrl ?? null,
-            biography: c.biography,
-            birthday: c.birthday,
-            placeOfBirth: c.placeOfBirth,
-          }));
-        setCast(sorted);
-      }
-    } catch (err) {
-      setError(err.message || "Không thể tải dữ liệu TV show");
-    } finally {
-      setLoading(false);
+    if (!id || !loggedIn || !tvShowService.getFavorites) {
+      setIsFav(false);
+      return;
     }
-  };
+    let cancelled = false;
+    tvShowService
+      .getFavorites()
+      .catch(() => [])
+      .then((favRes) => {
+        if (cancelled) return;
+        const rawFavs = Array.isArray(favRes)
+          ? favRes
+          : favRes?.data || favRes?.favorites || favRes?.items || [];
+        setIsFav(rawFavs.some((f) => String(f.tvShowId ?? f.id ?? f.tvShow?.id) === String(id)));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loggedIn]);
 
   // ── Logic Toggle Favorite ──
   const handleToggleFav = useCallback(async () => {
@@ -250,11 +145,6 @@ export default function TvShowInfoPage() {
     }
   };
 
-  const creators =
-    directorsFromShow.length > 0
-      ? directorsFromShow
-      : cast.filter((p) => p.job === "Director" || p.department === "Directing");
-
   const actors = cast.filter(
     (p) => p.job !== "Director" && p.department !== "Directing",
   );
@@ -272,63 +162,17 @@ export default function TvShowInfoPage() {
     ? show.genres.map((g) => (typeof g === "string" ? g : g.name)).filter(Boolean)
     : [];
 
-  // ── Loading ──────────────────────────────────────────────────────
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  // ── Error ────────────────────────────────────────────────────────
-  if (error) {
+  // ── Loading / Error ──────────────────────────────────────────────
+  if (isPending) return <LoadingScreen />;
+  if (isError || !show) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: C.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <style>{GLOBAL_STYLES}</style>
-        <div style={{ textAlign: "center" }}>
-          <p
-            style={{
-              fontFamily: "'Be Vietnam Pro', sans-serif",
-              fontSize: 48,
-              fontWeight: 900,
-              color: C.accent,
-              marginBottom: 12,
-            }}
-          >
-            Oops!
-          </p>
-          <p
-            style={{
-              fontFamily: "'Nunito', sans-serif",
-              fontSize: 14,
-              color: C.textSub,
-              marginBottom: 24,
-            }}
-          >
-            {error}
-          </p>
-          <button
-            onClick={fetchAll}
-            style={{
-              padding: "10px 24px",
-              borderRadius: 40,
-              background: C.accent,
-              color: "#fff",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "'Nunito', sans-serif",
-              fontWeight: 600,
-            }}
-          >
-            Thử lại
-          </button>
-        </div>
-      </div>
+      <DetailPageError
+        error={queryError}
+        onRetry={() => refetch()}
+        retrying={isRefetching}
+        notFoundMessage="Không tìm thấy TV show này."
+        fallbackMessage="Không thể tải dữ liệu TV show. Vui lòng thử lại."
+      />
     );
   }
 

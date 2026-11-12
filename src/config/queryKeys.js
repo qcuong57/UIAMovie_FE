@@ -25,6 +25,12 @@ export const queryKeys = {
     country: (code) => ["home", "country", code],
   },
   reviews: { home: ["reviews", "home"] },
+  // Trang Sắp chiếu & Tin tức: dữ liệu công khai
+  comingSoon: { all: ["coming-soon"] },
+  announcements: {
+    all: ["announcements"],
+    list: (type) => ["announcements", "list", type],
+  },
   // Trang Duyệt / Tìm kiếm: filter là MỘT object (gồm cả page) → key ổn định, prefetch dùng đúng key này.
   browse: { all: ["browse"], list: (filter) => ["browse", "list", filter] },
   search: { all: ["search"], list: (filter) => ["search", "list", filter] },
@@ -56,6 +62,8 @@ export const PUBLIC_QUERY_ROOTS = new Set([
   "genres",
   "browse",
   "search",
+  "coming-soon",
+  "announcements",
 ]);
 
 // Mức làm mới theo độ biến động của dữ liệu (dùng cho staleTime từng query)

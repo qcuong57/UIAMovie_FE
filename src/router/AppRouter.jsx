@@ -29,6 +29,8 @@ import TvShowDetailPage from "../pages/user/TvShowDetailPage";
 import PremiumPage from "../pages/PremiumPage";
 import PaymentResultPage from "../pages/PaymentResultPage";
 import AnnouncementsPage from "../pages/user/AnnouncementsPage";
+import NotFoundPage from "../pages/NotFoundPage";
+import ErrorBoundary from "../components/common/ErrorBoundary";
 import SeoMeta from "../components/common/SeoMeta";
 import { useToast } from "../components/common/Toast";
 import { useIsLoggedIn, useStoredUser } from "../hooks/useStoredUser";
@@ -44,14 +46,21 @@ const ScrollToTop = () => {
 };
 
 /** Layout có Navbar — chỉ dùng cho các trang phim chính */
-const WithNavbar = () => (
-  <>
-    {/* SEO mặc định + canonical theo đường dẫn; trang con có SeoMeta riêng sẽ ghi đè */}
-    <SeoMeta />
-    <Navbar />
-    <Outlet />
-  </>
-);
+const WithNavbar = () => {
+  const { pathname } = useLocation();
+  return (
+    <>
+      {/* SEO mặc định + canonical theo đường dẫn; trang con có SeoMeta riêng sẽ ghi đè */}
+      <SeoMeta />
+      <Navbar />
+      {/* Trang con crash → chỉ vùng nội dung hiện PageError, Navbar vẫn dùng được.
+          resetKey: sang trang khác thì tự thoát khỏi trạng thái lỗi. */}
+      <ErrorBoundary resetKey={pathname}>
+        <Outlet />
+      </ErrorBoundary>
+    </>
+  );
+};
 
 /**
  * Chỉ cho vào khi đã đăng nhập.
@@ -84,11 +93,6 @@ const GuestRoute = ({ children }) => {
   if (!user) return children;
   return <Navigate to={postLoginPath(user, location.state?.from)} replace />;
 };
-
-/** Route không tồn tại: đã đăng nhập → Trang chủ, khách → Về chúng tôi */
-const FallbackRedirect = () => (
-  <Navigate to={useIsLoggedIn() ? "/" : "/about-us"} replace />
-);
 
 const protectedPage = (Page) => (
   <ProtectedRoute>
@@ -135,6 +139,9 @@ const AppRouter = () => (
         <Route path="/favorites" element={protectedPage(FavoritesPage)} />
         <Route path="/watch-history" element={protectedPage(WatchHistoryPage)} />
         <Route path="/payment/result" element={protectedPage(PaymentResultPage)} />
+
+        {/* URL không tồn tại → trang 404 (vẫn có Navbar) */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
 
       {/* ── Admin (layout riêng, không dùng Navbar) ── */}
@@ -143,9 +150,6 @@ const AppRouter = () => (
       {/* ── Trang cài đặt ── */}
       <Route path="/profile" element={protectedPage(ProfilePage)} />
       <Route path="/settings/security" element={protectedPage(SecurityPage)} />
-
-      {/* ── Fallback ── */}
-      <Route path="*" element={<FallbackRedirect />} />
     </Routes>
   </BrowserRouter>
 );

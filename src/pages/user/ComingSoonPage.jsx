@@ -1,6 +1,7 @@
 // src/pages/user/ComingSoonPage.jsx
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { CalendarClock, Film, Tv, Inbox, RotateCcw } from "lucide-react";
 import {
@@ -13,6 +14,9 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { sortComingSoonMovies } from "../../utils/releaseDateUtils";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
+import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { queryKeys, STALE } from "../../config/queryKeys";
+import { ignoreMissingEndpoint } from "../../utils/queryHelpers";
 import BackButton from "../../components/common/BackButton";
 import SeoMeta from "../../components/common/SeoMeta";
 import LoadingScreen from "../../components/ui/LoadingScreen";
@@ -59,6 +63,26 @@ const extractItems = (data) =>
       data?.data?.items ??
       data?.data ??
       []);
+
+const EMPTY = [];
+
+// Gọi API ở mức module; queryFn phải NÉM lỗi khi thất bại (không .catch(() => []) để khỏi cache danh sách rỗng "giả").
+// TV show là nguồn phụ: chỉ bỏ qua khi endpoint không tồn tại (404/501).
+const fetchComingSoon = async () => {
+  const [movies, tvShows] = await Promise.all([
+    movieService.getMovies({ isUpcoming: true, sortBy: "releaseDate", sortDesc: false, pageSize: 100 }),
+    ignoreMissingEndpoint(
+      tvShowService.getTvShows({ isUpcoming: true, sortBy: "firstAirDate", sortDesc: false, pageSize: 100 }),
+    ),
+  ]);
+  return { movies, tvShows };
+};
+
+const selectComingSoon = ({ movies, tvShows }) =>
+  sortComingSoonMovies([
+    ...extractItems(movies).map(normalizeMovie),
+    ...extractItems(tvShows).map(normalizeTvShow),
+  ]);
 
 const MONTH_LABELS = [
   "Tháng 1",
@@ -313,50 +337,20 @@ function MonthGroup({ monthKey, items, index, isMobile }) {
 
 export default function ComingSoonPage() {
   const isMobile = useIsMobile();
-  const [status, setStatus] = useState("loading");
-  const [allItems, setAllItems] = useState([]);
   const [tab, setTab] = useState("all");
 
-  const load = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const [moviesRes, tvRes] = await Promise.all([
-        movieService.getMovies({
-          isUpcoming: true,
-          sortBy: "releaseDate",
-          sortDesc: false,
-          pageSize: 100,
-        }),
-        tvShowService
-          .getTvShows({
-            isUpcoming: true,
-            sortBy: "firstAirDate",
-            sortDesc: false,
-            pageSize: 100,
-          })
-          .catch(() => []),
-      ]);
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: queryKeys.comingSoon.all,
+    queryFn: fetchComingSoon,
+    select: selectComingSoon,
+    staleTime: STALE.medium,
+  });
+  const allItems = data ?? EMPTY;
 
-      const movies = extractItems(moviesRes).map(normalizeMovie);
-      const tvShows = extractItems(tvRes).map(normalizeTvShow);
-      const merged = sortComingSoonMovies([...movies, ...tvShows]);
-
-      if (!merged.length) {
-        setStatus("empty");
-        return;
-      }
-
-      setAllItems(merged);
-      setStatus("ready");
-    } catch (err) {
-      console.error("[ComingSoonPage] load error:", err);
-      setStatus("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // LoadingScreen luôn hiện tối thiểu một nhịp khi vào trang (giống các trang danh sách khác)
+  const minLoading = useMinimumLoading(isPending);
+  const status = minLoading ? "loading" : isError ? "error" : allItems.length ? "ready" : "empty";
+  const load = () => refetch(); // nút "Thử lại" trong khối lỗi
 
   const counts = useMemo(
     () => ({

@@ -7,12 +7,15 @@
 //   MovieTitleBlock   – tiêu đề, meta pills, mô tả, nút "Thông tin"
 //   MovieTabsPanel    – tabs: Diễn viên | Đánh giá | Thêm thông tin
 
-import React, { useState, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
-import movieService from "../../services/movieService";
+import { useMovie } from "../../hooks/useMediaDetail";
+import { useTrendingMovies } from "../../hooks/useHomeQueries";
+import { normalizeMovieWatch } from "../../utils/normalizeDetail";
+import DetailPageError from "../../components/common/DetailPageError";
 import BackButton from "../../components/common/BackButton";
 import SeoMeta from "../../components/common/SeoMeta";
 import { buildMovieSeo } from "../../config/seo";
@@ -29,6 +32,7 @@ import MovieTabsPanel from "../../components/movie/film/MovieTabsPanel";
 import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import { Crown } from "lucide-react";
 
+const EMPTY = [];
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
 // ── Premium helper (đồng bộ với MovieCard.jsx) ────────────────────
@@ -49,11 +53,17 @@ export default function MovieDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [movie,   setMovie]   = useState(null);
-  const [dirs,    setDirs]    = useState([]);
-  const [actors,  setActors]  = useState([]);
-  const [related, setRelated] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // ── Dữ liệu: React Query (cache chung với trang thông tin /movie/:id/info) ──
+  const { data: movie = null, isPending, isError, error: queryError, refetch, isRefetching } = useMovie(id);
+  const { dirs, actors } = useMemo(() => normalizeMovieWatch(movie), [movie]);
+
+  // Phim liên quan: dùng lại cache "trending" của trang chủ; mobile không hiện sidebar nên không tải
+  const { data: trending = EMPTY } = useTrendingMovies({ enabled: !isMobile });
+  const related = useMemo(
+    () => trending.filter((x) => String(x.id) !== String(id)).slice(0, 12),
+    [trending, id],
+  );
+
   const [tab,     setTab]     = useState("cast");
 
   // Đọc hồ sơ từ sessionStore: tự cập nhật khi refreshPremiumStatus(), đăng xuất/đăng nhập ở tab khác.
@@ -73,82 +83,19 @@ export default function MovieDetailPage() {
     setShowGate(!!isPremiumLocked);
   }, [isPremiumLocked]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setDirs([]);
-        setActors([]);
-
-        const [movieRes, trendingRes] = await Promise.all([
-          movieService.getMovieById(id),
-          movieService.getTrendingMovies().catch(() => ({ data: [] })),
-        ]);
-
-        const movieData = movieRes?.data ?? movieRes;
-        setMovie(movieData);
-
-        // Đạo diễn
-        if (movieData?.directorDetail) {
-          setDirs([{
-            id:           movieData.directorDetail.id ?? movieData.directorDetail.personId ?? null,
-            name:         movieData.directorDetail.name,
-            profileUrl:   movieData.directorDetail.profileUrl,
-            biography:    movieData.directorDetail.biography,
-            birthday:     movieData.directorDetail.birthday,
-            placeOfBirth: movieData.directorDetail.placeOfBirth,
-          }]);
-        } else if (movieData?.director) {
-          setDirs([{ id: movieData.directorId || null, name: movieData.director, profileUrl: null }]);
-        }
-
-        // Diễn viên
-        if (Array.isArray(movieData?.cast) && movieData.cast.length > 0) {
-          setActors(
-            [...movieData.cast]
-              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-              .map((c) => ({
-                id:           c.id ?? c.personId ?? c.tmdbPersonId ?? null,
-                tmdbPersonId: c.tmdbPersonId ?? c.personId ?? null,
-                name:         c.name,
-                character:    c.character,
-                profileUrl:   c.profileUrl,
-                biography:    c.biography ?? c.bio ?? null,
-                birthday:     c.birthday ?? c.dob ?? null,
-                deathday:     c.deathday ?? null,
-                placeOfBirth: c.placeOfBirth ?? null,
-                knownFor:     c.knownForDepartment ?? c.knownFor ?? null,
-                popularity:   c.popularity ?? null,
-                profileImages: c.profileImages ?? [],
-                movies:       c.movies ?? c.filmography ?? [],
-              })),
-          );
-        }
-
-        // Phim liên quan
-        const tRaw = trendingRes?.data ?? trendingRes;
-        const movies = Array.isArray(tRaw) ? tRaw : (tRaw?.movies ?? []);
-        setRelated(
-          movies
-            .filter((x) => x.id !== id)
-            .slice(0, 12)
-            .map((x) => ({
-              id:       x.id,
-              title:    x.title,
-              year:     x.releaseDate ? new Date(x.releaseDate).getFullYear() : x.year,
-              rating:   x.rating,
-              posterUrl: x.posterUrl,
-            })),
-        );
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
-
-  if (loading) return <LoadingScreen />;
+  // ── Loading / Error ──────────────────────────────────────────────
+  if (isPending) return <LoadingScreen />;
+  if (isError || !movie) {
+    return (
+      <DetailPageError
+        error={queryError}
+        onRetry={() => refetch()}
+        retrying={isRefetching}
+        notFoundMessage="Không tìm thấy phim này."
+        fallbackMessage="Không thể tải phim. Vui lòng thử lại."
+      />
+    );
+  }
 
   const year = movie?.releaseDate
     ? new Date(movie.releaseDate).getFullYear()

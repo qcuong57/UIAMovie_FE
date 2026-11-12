@@ -1,5 +1,6 @@
 // src/pages/user/AnnouncementsPage.jsx
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import {
@@ -12,6 +13,9 @@ import {
 } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeTokens";
 import notificationService from "../../services/notificationService";
+import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { queryKeys, STALE } from "../../config/queryKeys";
+import PageError from "../../components/common/PageError";
 import Footer from "../../components/layout/Footer";
 import SeoMeta from "../../components/common/SeoMeta";
 import { buildAnnouncementSeo } from "../../config/seo";
@@ -192,38 +196,29 @@ function ArticleMarkdownRenderer({ content }) {
   );
 }
 
+const EMPTY = [];
+const ANNOUNCEMENT_TYPE = "admin_announcement";
+const selectItems = (d) => d?.items ?? EMPTY;
+
 // ══════════════════════════════════════════════════════════════════════════════
 // COMPONENT CHÍNH
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AnnouncementsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [announcements, setAnnouncements] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [copied, setCopied] = useState(false);
 
   const detailId = searchParams.get("id");
 
-  const fetchNews = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { items } = await notificationService.getPublicAnnouncements(
-        1,
-        100,
-        "admin_announcement",
-      );
-      setAnnouncements(items);
-    } catch (err) {
-      console.error("[AnnouncementsPage] Tải tin tức thất bại:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchNews();
-  }, [fetchNews]);
+  const { data: announcements = EMPTY, isPending, isError, refetch, isRefetching } = useQuery({
+    queryKey: queryKeys.announcements.list(ANNOUNCEMENT_TYPE),
+    queryFn: () => notificationService.getPublicAnnouncements(1, 100, ANNOUNCEMENT_TYPE),
+    select: selectItems,
+    staleTime: STALE.medium,
+  });
+  // LoadingScreen mở màn: luôn hiện tối thiểu một nhịp, tải chậm hơn thì ở lại đến khi có dữ liệu
+  const loading = useMinimumLoading(isPending);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -264,6 +259,16 @@ export default function AnnouncementsPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (!loading && isError && announcements.length === 0) {
+    return (
+      <PageError
+        message="Không thể tải tin tức. Vui lòng thử lại."
+        onRetry={() => refetch()}
+        retrying={isRefetching}
+      />
+    );
+  }
 
   return (
     <>

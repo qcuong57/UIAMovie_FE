@@ -330,7 +330,8 @@ src/
 │   │   ├── user/       # UserDetailPanel, UserEditModal
 │   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
 │   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
-│   ├── common/         # BackButton, Pagination, PageError, AdminPagination, SeeAllButton, Toast
+│   ├── common/         # BackButton, Pagination, PageError, DetailPageError, ErrorBoundary,
+│   │                   # AdminPagination, SeeAllButton, Toast
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
 │   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
 │   ├── layout/         # Navbar, MobileBottomNav, Footer
@@ -567,7 +568,7 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Avatar upload** — needs a backend upload endpoint; today the avatar is preview-only
 - [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
-- [x] ~~Migrate Home, Browse, Search, Favorites and Movie / TV detail to TanStack Query~~ (done)
+- [x] ~~Migrate Home, Browse, Search, Favorites, Movie / TV Info + Watch pages, Coming Soon and Announcements to TanStack Query~~ (done)
 - [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the admin tables
 - [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
 - [ ] **Smaller home payloads** — the home page still downloads two 100-item lists only to find trailers and artwork. Add backend filters (for example `hasTrailer=true&pageSize=15`) and put the movie / show title and poster inside the review DTO, which removes the per-review `getMovieById` calls

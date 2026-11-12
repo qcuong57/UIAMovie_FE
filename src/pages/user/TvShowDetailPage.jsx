@@ -1,11 +1,18 @@
 // src/pages/user/TvShowDetailPage.jsx
-import React, { useState, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { List } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
+import { useTvShow } from "../../hooks/useMediaDetail";
+import { normalizeTvShowWatch } from "../../utils/normalizeDetail";
+import { normalizeTvShow } from "../../utils/normalizeMedia";
+import { unwrapList } from "../../utils/queryHelpers";
+import { queryKeys, STALE } from "../../config/queryKeys";
+import DetailPageError from "../../components/common/DetailPageError";
 import PersonScrollRow from "../../components/movie/Personscrollrow";
 import ReviewSection from "../../components/movie/Reviewsection";
 import BackButton from "../../components/common/BackButton";
@@ -24,6 +31,11 @@ import TvShowTitleBlock from "../../components/movie/tvshow/TvShowTitleBlock";
 import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import { Crown } from "lucide-react";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+
+const EMPTY = [];
+// Gợi ý "liên quan": một query riêng (lỗi không làm hỏng trang chính)
+const RELATED_FILTER = { page: 1, pageSize: 12, sortBy: "rating" };
+const selectRelated = (d) => unwrapList(d, ["tvShows"]).map(normalizeTvShow);
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
@@ -46,11 +58,23 @@ export default function TvShowDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [tvShow, setTvShow] = useState(null);
-  const [actors, setActors] = useState([]);
-  const [related, setRelated] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("episodes");
+
+  // ── Dữ liệu: React Query (cache chung với trang thông tin /tvshow/:id/info) ──
+  const { data: rawTvShow, isPending, isError, error: queryError, refetch, isRefetching } = useTvShow(id);
+  const { tvShow, actors } = useMemo(() => normalizeTvShowWatch(rawTvShow), [rawTvShow]);
+
+  const { data: relatedList = EMPTY } = useQuery({
+    queryKey: queryKeys.tvShows.list(RELATED_FILTER),
+    queryFn: () => tvShowService.getTvShows(RELATED_FILTER),
+    select: selectRelated,
+    staleTime: STALE.list,
+    enabled: !isMobile, // mobile không hiện sidebar
+  });
+  const related = useMemo(
+    () => relatedList.filter((x) => String(x.id) !== String(id)).slice(0, 12),
+    [relatedList, id],
+  );
 
   // Episode / season selection — pre-fill từ navigation state hoặc sessionStorage (để giữ khi reload)
   const [selectedSeason, setSelectedSeason] = useState(() => {
@@ -93,93 +117,16 @@ export default function TvShowDetailPage() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
 
+  // Đổi sang show khác → dọn trạng thái tập/mùa (dữ liệu show do React Query lo)
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setActors([]);
-        setSeasonEpisodesCache({});
-        // Chỉ reset season/episode khi navigate sang show khác (không phải reload)
-        if (
-          !location.state?.selectedSeason &&
-          !sessionStorage.getItem(`tvshow_${id}_season`)
-        )
-          setSelectedSeason(null);
-        if (
-          !location.state?.selectedEpisode &&
-          !sessionStorage.getItem(`tvshow_${id}_episode`)
-        )
-          setSelectedEpisode(null);
-        setEpisodeDetail(null);
-
-        const [tvRes, trendingRes] = await Promise.all([
-          tvShowService.getTvShowById(id),
-          tvShowService
-            .getTvShows({ page: 1, pageSize: 12, sortBy: "rating" })
-            .catch(() => ({ items: [] })),
-        ]);
-
-        // BE: ApiResponseDTO<TvShowDTO> → axios unwrap → { data: TvShowDTO, message }
-        const tvEnvelope = tvRes?.data ?? tvRes;
-        const tvData = tvEnvelope?.data ?? tvEnvelope;
-
-        // BE không trả seasons array → generate từ numberOfSeasons
-        const patchedSeasons = tvData?.seasons?.length
-          ? tvData.seasons
-          : Array.from({ length: tvData?.numberOfSeasons ?? 0 }, (_, i) => ({
-              seasonNumber: i + 1,
-              name: `Mùa ${i + 1}`,
-              episodeCount: null,
-              airDate: null,
-            }));
-        setTvShow({ ...tvData, seasons: patchedSeasons });
-
-        // Cast
-        if (Array.isArray(tvData?.cast) && tvData.cast.length > 0) {
-          setActors(
-            [...tvData.cast]
-              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-              .map((c) => ({
-                id: c.id ?? c.personId ?? null,
-                tmdbPersonId: c.tmdbPersonId ?? c.personId ?? null,
-                name: c.name,
-                character: c.character,
-                profileUrl: c.profileUrl,
-                biography: c.biography ?? null,
-                birthday: c.birthday ?? null,
-                deathday: c.deathday ?? null,
-                placeOfBirth: c.placeOfBirth ?? null,
-                knownFor: c.knownForDepartment ?? null,
-                popularity: c.popularity ?? null,
-              })),
-          );
-        }
-
-        // Related
-        const tRaw = trendingRes?.data ?? trendingRes;
-        const shows = Array.isArray(tRaw)
-          ? tRaw
-          : (tRaw?.items ?? tRaw?.tvShows ?? []);
-        setRelated(
-          shows
-            .filter((x) => x.id !== id)
-            .slice(0, 12)
-            .map((x) => ({
-              id: x.id,
-              title: x.title ?? x.name,
-              year: x.firstAirDate
-                ? new Date(x.firstAirDate).getFullYear()
-                : x.year,
-              rating: x.rating ?? x.imdbRating,
-              posterUrl: x.posterUrl,
-            })),
-        );
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setSeasonEpisodesCache({});
+    // Chỉ reset season/episode khi navigate sang show khác (không phải reload)
+    if (!location.state?.selectedSeason && !sessionStorage.getItem(`tvshow_${id}_season`))
+      setSelectedSeason(null);
+    if (!location.state?.selectedEpisode && !sessionStorage.getItem(`tvshow_${id}_episode`))
+      setSelectedEpisode(null);
+    setEpisodeDetail(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Lazy-load season episodes khi selectedSeason thay đổi (BE không trả episodes trong GET /id)
@@ -310,7 +257,18 @@ export default function TvShowDetailPage() {
     if (ep) handleSelectEpisode(selectedSeason, ep);
   }, [nextEpisode, selectedSeason, seasonEpisodesCache]);
 
-  if (loading) return <LoadingScreen />;
+  if (isPending) return <LoadingScreen />;
+  if (isError || !tvShow) {
+    return (
+      <DetailPageError
+        error={queryError}
+        onRetry={() => refetch()}
+        retrying={isRefetching}
+        notFoundMessage="Không tìm thấy TV show này."
+        fallbackMessage="Không thể tải TV show. Vui lòng thử lại."
+      />
+    );
+  }
 
   const firstAirYear = tvShow?.firstAirDate
     ? new Date(tvShow.firstAirDate).getFullYear()
