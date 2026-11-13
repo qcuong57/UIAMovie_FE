@@ -15,7 +15,7 @@ export const queryKeys = {
     list: (filter) => ["tvshows", "list", filter],
     detail: (id) => ["tvshows", "detail", String(id)],
   },
-  genres: { all: ["genres"] },
+  genres: { all: ["genres"], admin: ["genres", "admin"] },
   home: {
     all: ["home"],
     trendingMovies: ["home", "trending-movies"],
@@ -59,6 +59,35 @@ export const queryKeys = {
     favoriteList: ["me", "favorites", "list"],
     watchHistory: ["me", "watch-history"],
   },
+  // ── ADMIN ── gốc "admin" KHÔNG nằm trong PUBLIC_QUERY_ROOTS → tự reset khi đổi tài khoản.
+  admin: {
+    all: ["admin"],
+    movies: {
+      all: ["admin", "movies"],
+      list: () => ["admin", "movies", "list"],
+      detail: (id) => ["admin", "movies", "detail", String(id)],
+      subtitles: (id) => ["admin", "movies", "subtitles", String(id)],
+    },
+    // TV show: filter là MỘT object (gồm page) → key ổn định, prefetch trang kế dùng đúng key này.
+    // seasons(showId) là TIỀN TỐ của season(showId, n) → vá/invalidate/xoá cả nhóm season của một show.
+    tvShows: {
+      all: ["admin", "tvShows"],
+      lists: () => ["admin", "tvShows", "list"],
+      list: (filter) => ["admin", "tvShows", "list", filter],
+      detail: (id) => ["admin", "tvShows", "detail", String(id)],
+      seasons: (showId) => ["admin", "tvShows", "seasons", String(showId)],
+      season: (showId, seasonNumber) => ["admin", "tvShows", "seasons", String(showId), String(seasonNumber)],
+      subtitles: (episodeId) => ["admin", "tvShows", "subtitles", String(episodeId)],
+    },
+    persons: { search: (q) => ["admin", "persons", "search", q] },
+    // Người dùng: filter là MỘT object (gồm page) → key ổn định, prefetch trang kế dùng đúng key này.
+    users: {
+      all: ["admin", "users"],
+      lists: () => ["admin", "users", "list"],
+      list: (filter) => ["admin", "users", "list", filter],
+      detail: (id) => ["admin", "users", "detail", String(id)],
+    },
+  },
   premium: { plans: ["premium", "plans"] },
 };
 
@@ -73,10 +102,21 @@ export const PUBLIC_QUERY_ROOTS = new Set([
   "announcements",
 ]);
 
+// Cache phía người dùng bị ảnh hưởng khi admin thêm / sửa / xoá phim → invalidate cùng lúc.
+export const CATALOG_ROOTS = new Set([
+  "movies",
+  "tvshows",
+  "home",
+  "browse",
+  "search",
+  "coming-soon",
+]);
+
 // Mức làm mới theo độ biến động của dữ liệu (dùng cho staleTime từng query)
 export const STALE = {
   static: 60 * 60_000, // genres, quốc gia: ít đổi
   medium: 5 * 60_000, // hàng theo quốc gia, review trang chủ
   list: 2 * 60_000, // danh sách phim trang chủ
   user: 60_000, // dữ liệu cá nhân (favorites, lịch sử xem)
+  admin: 30_000, // bảng / chi tiết admin: cần tươi hơn catalogue công khai
 };

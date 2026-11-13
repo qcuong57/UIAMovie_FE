@@ -2,10 +2,11 @@
 // Ô chọn thể loại (multi-select) và gallery ảnh backdrop, dùng chung cho
 // MovieAddModal & MovieEditModal.
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Upload, X, ImageOff } from 'lucide-react';
-import movieService from '../../../services/movieService';
-import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
+import React, { useState, useRef } from "react";
+import { Upload, X, ImageOff } from "lucide-react";
+import movieService from "../../../services/movieService";
+import { useAdminGenres } from "../../../hooks/useAdminMovies";
+import { T, FONT_BODY as FONT } from "../../../context/adminTokens";
 
 // ── Chọn thể loại ────────────────────────────────────────────────────────────
 /**
@@ -14,50 +15,69 @@ import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
  *   onChange – (nextArray) => void
  */
 export function GenrePickerField({ value = [], onChange }) {
-  const [genres, setGenres]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    movieService.getGenres()
-      .then(res => {
-        if (cancelled) return;
-        const list = res?.data ?? res ?? [];
-        setGenres(Array.isArray(list) ? list : []);
-      })
-      .catch(() => { if (!cancelled) setError('Không tải được danh sách thể loại'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+  // Cache 1 giờ, dùng chung giữa Add / Edit modal → mở lần 2 không "Đang tải thể loại..."
+  const { data: genres = [], isPending: loading, isError } = useAdminGenres();
+  const error = isError ? "Không tải được danh sách thể loại" : "";
 
   const toggle = (id) => {
-    onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id]);
+    onChange(
+      value.includes(id) ? value.filter((v) => v !== id) : [...value, id],
+    );
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <label
+        style={{
+          fontFamily: FONT,
+          fontSize: 11,
+          fontWeight: 700,
+          color: T.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+        }}
+      >
         Thể loại
       </label>
 
       {loading && (
-        <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>Đang tải thể loại...</p>
+        <p
+          style={{
+            fontFamily: FONT,
+            fontSize: 12.5,
+            color: T.textMuted,
+            margin: 0,
+          }}
+        >
+          Đang tải thể loại...
+        </p>
       )}
 
       {!loading && error && (
-        <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red, margin: 0 }}>{error}</p>
+        <p
+          style={{ fontFamily: FONT, fontSize: 12.5, color: T.red, margin: 0 }}
+        >
+          {error}
+        </p>
       )}
 
       {!loading && !error && genres.length === 0 && (
-        <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>
-          Chưa có thể loại nào trong hệ thống. Hãy đồng bộ thể loại từ TMDB trước.
+        <p
+          style={{
+            fontFamily: FONT,
+            fontSize: 12.5,
+            color: T.textMuted,
+            margin: 0,
+          }}
+        >
+          Chưa có thể loại nào trong hệ thống. Hãy đồng bộ thể loại từ TMDB
+          trước.
         </p>
       )}
 
       {!loading && genres.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-          {genres.map(g => {
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {genres.map((g) => {
             const active = value.includes(g.id);
             return (
               <button
@@ -65,12 +85,16 @@ export function GenrePickerField({ value = [], onChange }) {
                 type="button"
                 onClick={() => toggle(g.id)}
                 style={{
-                  padding: '6px 12px', borderRadius: 999,
+                  padding: "6px 12px",
+                  borderRadius: 999,
                   background: active ? T.accent : T.surfaceAlt,
                   border: `1px solid ${active ? T.accent : T.border}`,
-                  color: active ? 'white' : T.textSub,
-                  fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                  cursor: 'pointer', transition: 'all 0.15s',
+                  color: active ? "white" : T.textSub,
+                  fontFamily: FONT,
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
                 }}
               >
                 {g.name}
@@ -95,73 +119,143 @@ export function GenrePickerField({ value = [], onChange }) {
  *   value     – string URL hiện tại
  *   onChange  – (nextUrl) => void
  */
-export function PosterField({ label, imageType = 'poster', value = '', onChange }) {
+export function PosterField({
+  label,
+  imageType = "poster",
+  value = "",
+  onChange,
+}) {
   const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState('');
+  const [uploadErr, setUploadErr] = useState("");
   const fileRef = useRef();
 
   const handleFile = async (file) => {
     if (!file) return;
     setUploading(true);
-    setUploadErr('');
+    setUploadErr("");
     try {
       const res = await movieService.uploadImage(file, imageType);
       const url = res?.data?.url ?? res?.url;
       if (url) onChange(url);
-      else setUploadErr('Không nhận được URL từ server');
+      else setUploadErr("Không nhận được URL từ server");
     } catch (e) {
-      setUploadErr(e?.response?.data?.message ?? e?.message ?? 'Upload ảnh thất bại');
+      setUploadErr(
+        e?.response?.data?.message ?? e?.message ?? "Upload ảnh thất bại",
+      );
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <label
+        style={{
+          fontFamily: FONT,
+          fontSize: 11,
+          fontWeight: 700,
+          color: T.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+        }}
+      >
         {label}
       </label>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
         <input
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           placeholder="Dán URL ảnh..."
           style={{
-            flex: 1, height: 42, padding: '0 14px',
-            background: T.surface, border: `1px solid ${T.border}`,
-            borderRadius: 10, color: T.text, outline: 'none',
-            fontFamily: FONT, fontSize: 13, boxSizing: 'border-box',
+            flex: 1,
+            height: 42,
+            padding: "0 14px",
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: 10,
+            color: T.text,
+            outline: "none",
+            fontFamily: FONT,
+            fontSize: 13,
+            boxSizing: "border-box",
           }}
         />
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={e => handleFile(e.target.files?.[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           style={{
-            display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-            height: 42, padding: '0 14px', borderRadius: 10,
-            background: T.surfaceAlt, border: `1px dashed ${T.border}`,
-            cursor: uploading ? 'wait' : 'pointer', color: T.textSub,
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            whiteSpace: "nowrap",
+            height: 42,
+            padding: "0 14px",
+            borderRadius: 10,
+            background: T.surfaceAlt,
+            border: `1px dashed ${T.border}`,
+            cursor: uploading ? "wait" : "pointer",
+            color: T.textSub,
+            fontFamily: FONT,
+            fontSize: 13,
+            fontWeight: 600,
           }}
         >
-          {uploading
-            ? <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
-            : <Upload size={14} />
-          }
+          {uploading ? (
+            <div
+              style={{
+                width: 13,
+                height: 13,
+                borderRadius: "50%",
+                border: "2px solid currentColor",
+                borderTopColor: "transparent",
+                animation: "spin 0.7s linear infinite",
+              }}
+            />
+          ) : (
+            <Upload size={14} />
+          )}
           Upload
         </button>
       </div>
 
-      {uploadErr && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}>{uploadErr}</p>}
+      {uploadErr && (
+        <p
+          style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}
+        >
+          {uploadErr}
+        </p>
+      )}
 
       {value && (
-        <div style={{ width: 96, borderRadius: 8, overflow: 'hidden', border: `1px solid ${T.border}`, aspectRatio: imageType === 'poster' ? '2/3' : '16/9' }}>
-          <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <div
+          style={{
+            width: 96,
+            borderRadius: 8,
+            overflow: "hidden",
+            border: `1px solid ${T.border}`,
+            aspectRatio: imageType === "poster" ? "2/3" : "16/9",
+          }}
+        >
+          <img
+            src={value}
+            alt=""
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
         </div>
       )}
     </div>
@@ -179,29 +273,31 @@ const nextBdUid = () => `bd_${Date.now()}_${bdUidSeq++}`;
  */
 export function BackdropGalleryField({ value = [], onChange }) {
   const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState('');
-  const [urlInput, setUrlInput] = useState('');
-  const [urlErr, setUrlErr] = useState('');
+  const [uploadErr, setUploadErr] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [urlErr, setUrlErr] = useState("");
   const fileRef = useRef();
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
     setUploading(true);
-    setUploadErr('');
+    setUploadErr("");
     try {
       const uploaded = [];
       for (const file of Array.from(files)) {
-        const res = await movieService.uploadImage(file, 'backdrop');
+        const res = await movieService.uploadImage(file, "backdrop");
         const url = res?.data?.url ?? res?.url;
         if (url) uploaded.push({ uid: nextBdUid(), url });
       }
       if (uploaded.length) onChange([...value, ...uploaded]);
-      else setUploadErr('Không nhận được URL từ server');
+      else setUploadErr("Không nhận được URL từ server");
     } catch (e) {
-      setUploadErr(e?.response?.data?.message ?? e?.message ?? 'Upload ảnh thất bại');
+      setUploadErr(
+        e?.response?.data?.message ?? e?.message ?? "Upload ảnh thất bại",
+      );
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -209,70 +305,123 @@ export function BackdropGalleryField({ value = [], onChange }) {
     const url = urlInput.trim();
     if (!url) return;
     if (!/^https?:\/\/.+/i.test(url)) {
-      setUrlErr('Link phải bắt đầu bằng http:// hoặc https://');
+      setUrlErr("Link phải bắt đầu bằng http:// hoặc https://");
       return;
     }
-    if (value.some(v => v.url === url)) {
-      setUrlErr('Link này đã có trong danh sách');
+    if (value.some((v) => v.url === url)) {
+      setUrlErr("Link này đã có trong danh sách");
       return;
     }
     onChange([...value, { uid: nextBdUid(), url }]);
-    setUrlInput('');
-    setUrlErr('');
+    setUrlInput("");
+    setUrlErr("");
   };
 
   const handleUrlKeyDown = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleAddUrl();
     }
   };
 
-  const remove = (uid) => onChange(value.filter(v => v.uid !== uid));
+  const remove = (uid) => onChange(value.filter((v) => v.uid !== uid));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <label
+        style={{
+          fontFamily: FONT,
+          fontSize: 11,
+          fontWeight: 700,
+          color: T.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+        }}
+      >
         Ảnh Backdrop (gallery)
       </label>
 
-      <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
-        onChange={e => handleFiles(e.target.files)} />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => handleFiles(e.target.files)}
+      />
 
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={uploading}
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          height: 42, borderRadius: 10,
-          background: T.surfaceAlt, border: `1px dashed ${T.border}`,
-          cursor: uploading ? 'wait' : 'pointer', color: T.textSub,
-          fontFamily: FONT, fontSize: 13, fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          height: 42,
+          borderRadius: 10,
+          background: T.surfaceAlt,
+          border: `1px dashed ${T.border}`,
+          cursor: uploading ? "wait" : "pointer",
+          color: T.textSub,
+          fontFamily: FONT,
+          fontSize: 13,
+          fontWeight: 600,
         }}
       >
-        {uploading
-          ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang upload...</>
-          : <><Upload size={14} /> Thêm ảnh backdrop (chọn được nhiều ảnh)</>
-        }
+        {uploading ? (
+          <>
+            <div
+              style={{
+                width: 13,
+                height: 13,
+                borderRadius: "50%",
+                border: "2px solid currentColor",
+                borderTopColor: "transparent",
+                animation: "spin 0.7s linear infinite",
+              }}
+            />{" "}
+            Đang upload...
+          </>
+        ) : (
+          <>
+            <Upload size={14} /> Thêm ảnh backdrop (chọn được nhiều ảnh)
+          </>
+        )}
       </button>
 
-      {uploadErr && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}>{uploadErr}</p>}
+      {uploadErr && (
+        <p
+          style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}
+        >
+          {uploadErr}
+        </p>
+      )}
 
       {/* Nhập link ảnh trực tiếp (không qua upload) */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
         <input
           type="text"
           value={urlInput}
-          onChange={e => { setUrlInput(e.target.value); if (urlErr) setUrlErr(''); }}
+          onChange={(e) => {
+            setUrlInput(e.target.value);
+            if (urlErr) setUrlErr("");
+          }}
           onKeyDown={handleUrlKeyDown}
           placeholder="Dán link ảnh backdrop (https://...)"
           style={{
-            flex: 1, height: 38, padding: '0 12px',
+            flex: 1,
+            height: 38,
+            padding: "0 12px",
             background: T.surface,
-            border: `1px solid ${urlErr ? 'rgba(220,38,38,0.5)' : T.border}`,
-            borderRadius: 9, color: T.text, outline: 'none',
-            fontFamily: FONT, fontSize: 13, boxSizing: 'border-box',
+            border: `1px solid ${urlErr ? "rgba(220,38,38,0.5)" : T.border}`,
+            borderRadius: 9,
+            color: T.text,
+            outline: "none",
+            fontFamily: FONT,
+            fontSize: 13,
+            boxSizing: "border-box",
           }}
         />
         <button
@@ -280,34 +429,76 @@ export function BackdropGalleryField({ value = [], onChange }) {
           onClick={handleAddUrl}
           disabled={!urlInput.trim()}
           style={{
-            height: 38, padding: '0 14px', borderRadius: 9,
+            height: 38,
+            padding: "0 14px",
+            borderRadius: 9,
             background: urlInput.trim() ? T.accent : T.surfaceAlt,
             border: `1px solid ${urlInput.trim() ? T.accent : T.border}`,
-            color: urlInput.trim() ? 'white' : T.textMuted,
-            cursor: urlInput.trim() ? 'pointer' : 'not-allowed',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
-            whiteSpace: 'nowrap',
+            color: urlInput.trim() ? "white" : T.textMuted,
+            cursor: urlInput.trim() ? "pointer" : "not-allowed",
+            fontFamily: FONT,
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
           }}
         >
           Thêm link
         </button>
       </div>
-      {urlErr && <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}>{urlErr}</p>}
+      {urlErr && (
+        <p
+          style={{ fontFamily: FONT, fontSize: 11.5, color: T.red, margin: 0 }}
+        >
+          {urlErr}
+        </p>
+      )}
 
       {value.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          {value.map(img => (
-            <div key={img.uid} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: `1px solid ${T.border}`, aspectRatio: '16/9' }}>
-              <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 8,
+          }}
+        >
+          {value.map((img) => (
+            <div
+              key={img.uid}
+              style={{
+                position: "relative",
+                borderRadius: 8,
+                overflow: "hidden",
+                border: `1px solid ${T.border}`,
+                aspectRatio: "16/9",
+              }}
+            >
+              <img
+                src={img.url}
+                alt=""
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
               <button
                 type="button"
                 onClick={() => remove(img.uid)}
                 style={{
-                  position: 'absolute', top: 4, right: 4,
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.55)', border: 'none',
-                  cursor: 'pointer', color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "rgba(0,0,0,0.55)",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 <X size={11} />
@@ -316,13 +507,21 @@ export function BackdropGalleryField({ value = [], onChange }) {
           ))}
         </div>
       ) : (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 12px', borderRadius: 9,
-          background: T.surfaceAlt, border: `1px solid ${T.border}`,
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 12px",
+            borderRadius: 9,
+            background: T.surfaceAlt,
+            border: `1px solid ${T.border}`,
+          }}
+        >
           <ImageOff size={14} color={T.textMuted} />
-          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>Chưa có ảnh backdrop nào</span>
+          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>
+            Chưa có ảnh backdrop nào
+          </span>
         </div>
       )}
     </div>
@@ -331,5 +530,5 @@ export function BackdropGalleryField({ value = [], onChange }) {
 
 // ── Helpers chuyển đổi sang shape DTO backend (ImportImageDTO) ────────────────
 export function backdropStateToDto(backdropState) {
-  return backdropState.map(b => ({ url: b.url, imageType: 'backdrop' }));
+  return backdropState.map((b) => ({ url: b.url, imageType: "backdrop" }));
 }

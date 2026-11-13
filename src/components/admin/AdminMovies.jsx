@@ -1,11 +1,13 @@
 // src/components/admin/AdminMovies.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
   AlertCircle, Search, Eye, Pencil, Video, Crown, Plus,
 } from 'lucide-react';
-import movieService from '../../services/movieService';
+import {
+  useAdminMovies, useSetMoviePremium, usePendingPremiumIds, useRefreshMovies,
+} from '../../hooks/useAdminMovies';
 import { Input } from '../ui';
 import { usePagination } from '../../hooks/usePagination';
 import AdminPagination from '../common/AdminPagination';
@@ -138,9 +140,13 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminMovies() {
-  const [allMovies,   setAllMovies]   = useState([]);
-  const [filtered,    setFiltered]    = useState([]);
-  const [loading,     setLoading]     = useState(true);
+  // Server state: TanStack Query (cache dùng chung với DetailPanel / EditModal)
+  const { data: allMovies = [], isPending: loading, isFetching, refetch } = useAdminMovies();
+  const refreshMovies = useRefreshMovies();
+  const togglePremium = useSetMoviePremium();
+  const pendingPremiumIds = usePendingPremiumIds();
+
+  // UI state
   const [search,      setSearch]      = useState('');
   const [sortBy,      setSortBy]      = useState('releaseDate');
   const [sortDir,     setSortDir]     = useState('desc');
@@ -149,60 +155,34 @@ export default function AdminMovies() {
   const [detailId,    setDetailId]    = useState(null);
   const [editMovie,   setEditMovie]   = useState(null);
   const [uploadMovie, setUploadMovie] = useState(null);
-  const [togglingId,  setTogglingId]  = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
-  const pageMovies = pagination.paginate(filtered);
-
-  const fetchMovies = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await movieService.getMovies({ page: 1, pageSize: 500 });
-      const raw = Array.isArray(res) ? res : res?.items ?? res?.movies ?? res?.data?.items ?? res?.data ?? [];
-      setAllMovies(raw.map(m => ({ ...m, year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : m.year })));
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchMovies(); }, [fetchMovies]);
-
-  useEffect(() => {
+  // Dữ liệu dẫn xuất → useMemo (không còn useEffect + setFiltered gây render 2 lần)
+  const deferredSearch = useDeferredValue(search);
+  const filtered = useMemo(() => {
     let list = [...allMovies];
-    if (search.trim()) list = list.filter(m => m.title?.toLowerCase().includes(search.toLowerCase()));
+    const q = deferredSearch.trim().toLowerCase();
+    if (q) list = list.filter(m => m.title?.toLowerCase().includes(q));
     list.sort((a, b) => {
       if (sortBy === 'title')       return sortDir === 'asc' ? (a.title||'').localeCompare(b.title||'','vi') : (b.title||'').localeCompare(a.title||'','vi');
       if (sortBy === 'rating')      return sortDir === 'asc' ? (a.rating||0)-(b.rating||0) : (b.rating||0)-(a.rating||0);
       if (sortBy === 'releaseDate') return sortDir === 'asc' ? new Date(a.releaseDate||0)-new Date(b.releaseDate||0) : new Date(b.releaseDate||0)-new Date(a.releaseDate||0);
       return 0;
     });
-    setFiltered(list);
-  }, [allMovies, search, sortBy, sortDir]);
+    return list;
+  }, [allMovies, deferredSearch, sortBy, sortDir]);
+
+  const pagination = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
+  const pageMovies = pagination.paginate(filtered);
 
   const handleSort = (key) => {
     if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortBy(key); setSortDir('desc'); }
   };
 
-  /**
-   * Toggle Premium cho 1 phim.
-   * Optimistic update ngay lập tức → rollback nếu API lỗi.
-   */
-  const handleTogglePremium = async (movie) => {
-    if (togglingId) return;
-    const next = !movie.isPremium;
-    setTogglingId(movie.id);
-    setAllMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isPremium: next } : m));
-    try {
-      await movieService.setPremium(movie.id, next);
-    } catch (e) {
-      console.error('[AdminMovies] togglePremium failed:', e);
-      // Rollback
-      setAllMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isPremium: !next } : m));
-    } finally {
-      setTogglingId(null);
-    }
-  };
+  /** Free ↔ Premium: optimistic update + rollback nằm trong useSetMoviePremium. */
+  const handleTogglePremium = (movie) =>
+    togglePremium.mutate({ id: movie.id, isPremium: !movie.isPremium });
 
   return (
     <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
@@ -226,8 +206,8 @@ export default function AdminMovies() {
           </h2>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <GhostBtn onClick={fetchMovies}>
-            <RefreshCw size={14}/> Tải lại
+          <GhostBtn onClick={() => refetch()}>
+            <RefreshCw size={14}/> {isFetching && !loading ? 'Đang tải...' : 'Tải lại'}
           </GhostBtn>
           <GhostBtn onClick={() => setShowAddModal(true)}>
             <Plus size={14}/> Thêm thủ công
@@ -357,7 +337,7 @@ export default function AdminMovies() {
                   <td style={{ padding: '12px 16px' }}>
                     <PremiumToggle
                       isPremium={!!m.isPremium}
-                      loading={togglingId === m.id}
+                      loading={pendingPremiumIds.includes(m.id)}
                       onClick={() => handleTogglePremium(m)}
                     />
                   </td>
@@ -392,14 +372,12 @@ export default function AdminMovies() {
       <MovieAddModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onCreated={() => fetchMovies()}
       />
 
       {/* ── Delete modal ── */}
       <MovieDeleteModal
         movie={deleteMovie}
         onClose={() => setDeleteMovie(null)}
-        onDeleted={(id) => setAllMovies(prev => prev.filter(m => m.id !== id))}
       />
 
       {/* ── Backdrop ── */}
@@ -420,7 +398,7 @@ export default function AdminMovies() {
             defaultTab="movie"
             singleTab
             onClose={() => setShowPanel(false)}
-            onImported={fetchMovies}
+            onImported={refreshMovies}
           />
         )}
       </AnimatePresence>
@@ -452,7 +430,6 @@ export default function AdminMovies() {
       <MovieEditModal
         movie={editMovie}
         onClose={() => setEditMovie(null)}
-        onSaved={updated => setAllMovies(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))}
       />
     </div>
   );

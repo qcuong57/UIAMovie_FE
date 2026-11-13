@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Check, Crown, X, ImagePlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import tvShowService from '../../../services/tvShowService';
+import { useCreateTvShow } from '../../../hooks/useAdminTvShows';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, PosterField, BackdropGalleryField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields';
@@ -193,6 +194,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
   const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
 
   const [saving, setSaving] = useState(false);
+  const createShow = useCreateTvShow(); // tạo xong tự làm mới danh sách (tổng số đổi) + phía user
   const toast = useToast();
   const [error,  setError]  = useState('');
 
@@ -256,23 +258,24 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
         trailers: youtubeUrl.trim() ? [{ youtubeUrl: youtubeUrl.trim(), name: form.title.trim() }] : [],
         seasons: seasonsStateToDto(seasons),
       };
-      const res = await tvShowService.createTvShow(dto);
-      const showId = res?.data?.showId ?? res?.showId;
-
-      // Video trailer tự upload — chỉ upload được sau khi TV show đã có id
-      if (showId && pendingTrailerFile) {
-        setTrailerUploading(true); setTrailerUploadProgress(0);
-        try {
-          await tvShowService.uploadTrailerVideo(showId, pendingTrailerFile, setTrailerUploadProgress);
-        } catch (uploadErr) {
-          // TV show đã tạo thành công — chỉ báo riêng lỗi upload trailer, không rollback việc tạo show
-          toast.error(
-            uploadErr?.response?.data?.message ?? uploadErr?.message ?? 'Upload video trailer thất bại',
-            'Tạo TV show thành công nhưng upload trailer lỗi',
-          );
-        } finally {
-          setTrailerUploading(false);
-        }
+      // Lỗi upload trailer KHÔNG làm hỏng việc tạo show: hook trả về { showId, trailerError }
+      if (pendingTrailerFile) { setTrailerUploading(true); setTrailerUploadProgress(0); }
+      let created;
+      try {
+        created = await createShow.mutateAsync({
+          dto,
+          trailerFile: pendingTrailerFile,
+          onProgress: setTrailerUploadProgress,
+        });
+      } finally {
+        setTrailerUploading(false);
+      }
+      const { showId, trailerError } = created;
+      if (trailerError) {
+        toast.error(
+          trailerError?.response?.data?.message ?? trailerError?.message ?? 'Upload video trailer thất bại',
+          'Tạo TV show thành công nhưng upload trailer lỗi',
+        );
       }
 
       toast.success(`Đã tạo TV show "${form.title.trim()}"`);

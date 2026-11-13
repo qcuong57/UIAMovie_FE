@@ -8,13 +8,15 @@
 // đã tạo xong, ở tab "Seasons" tại trang chi tiết (EpisodeVideoZone trong
 // TvShowDetailPanel.jsx). Field này chỉ nhập metadata (tên tập, mô tả, ảnh still...).
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Plus, X, Tv, Film, Check } from 'lucide-react';
-import axiosInstance from '../../../config/axios';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { PosterField } from '../shared/GenreAndImageFields';
 import tvShowService from '../../../services/tvShowService';
+import {
+  useTvShowSeason, useAddEpisode, useDeleteEpisode, useUpdateSeason, useUpdateEpisode,
+} from '../../../hooks/useAdminTvShows';
 
 let seasonUidSeq = 0;
 const nextSeasonUid = () => `season_${Date.now()}_${seasonUidSeq++}`;
@@ -471,65 +473,62 @@ function EditModalShell({ open, title, subtitle, onClose, error, saving, onSave,
 //   onEpisodeAdded   – (episodeDTO) => void   (tùy chọn) báo trang cha có tập mới
 //   onEpisodeDeleted – (episodeId) => void    (tùy chọn) báo trang cha đã xóa tập
 function SeasonEpisodesManager({ tvShowId, seasonNumber, onEpisodeAdded, onEpisodeDeleted }) {
-  const [episodes, setEpisodes]         = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [loadError, setLoadError]       = useState('');
-  const [newEpisode, setNewEpisode]     = useState(makeEmptyEpisode());
-  const [adding, setAdding]             = useState(false);
-  const [addError, setAddError]         = useState('');
-  const [deletingId, setDeletingId]     = useState(null);
+  // Danh sách tập nằm trong cache TanStack Query (cùng key với trang chi tiết) →
+  // thêm/xóa tập ở đây, tab Seasons ở DetailPanel tự cập nhật theo, không cần callback để đồng bộ.
+  const { data: episodes = [], isPending: loading, error: loadErr } = useTvShowSeason(tvShowId, seasonNumber);
+  const addEpisode    = useAddEpisode();
+  const deleteEpisode = useDeleteEpisode();
 
+  const loadError  = loadErr ? 'Không tải được danh sách tập' : '';
+  const adding     = addEpisode.isPending;
+  const deletingId = deleteEpisode.isPending ? deleteEpisode.variables?.episodeId : null;
+
+  const [newEpisode, setNewEpisode] = useState(makeEmptyEpisode());
+  const [addError, setAddError]     = useState('');
+
+  // Điền sẵn "số tập kế tiếp" MỘT lần cho mỗi season, khi dữ liệu tải xong
+  // (refetch nền không được ghi đè số người dùng đang gõ).
+  const seededFor = useRef(null);
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true); setLoadError('');
-    tvShowService.getSeason(tvShowId, seasonNumber)
-      .then(res => {
-        if (cancelled) return;
-        const eps = res?.episodes ?? (Array.isArray(res) ? res : []);
-        const sorted = [...eps].sort((a, b) => a.episodeNumber - b.episodeNumber);
-        setEpisodes(sorted);
-        const nextNumber = sorted.length ? Math.max(...sorted.map(e => e.episodeNumber)) + 1 : 1;
-        setNewEpisode(prev => ({ ...prev, episodeNumber: String(nextNumber) }));
-      })
-      .catch(() => { if (!cancelled) setLoadError('Không tải được danh sách tập'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [tvShowId, seasonNumber]);
+    const key = `${tvShowId}:${seasonNumber}`;
+    if (loading || seededFor.current === key) return;
+    seededFor.current = key;
+    const nextNumber = episodes.length ? Math.max(...episodes.map(e => e.episodeNumber ?? 0)) + 1 : 1;
+    setNewEpisode(prev => ({ ...prev, episodeNumber: String(nextNumber) }));
+  }, [loading, episodes, tvShowId, seasonNumber]);
 
   const handleAdd = async () => {
     if (!newEpisode.title.trim()) { setAddError('Tên tập không được để trống'); return; }
     if (!(Number(newEpisode.episodeNumber) > 0)) { setAddError('Số tập phải lớn hơn 0'); return; }
-    setAdding(true); setAddError('');
+    setAddError('');
     try {
-      const created = await tvShowService.addEpisode(tvShowId, seasonNumber, {
-        episodeNumber: Number(newEpisode.episodeNumber),
-        title: newEpisode.title.trim(),
-        overview: newEpisode.overview.trim() || null,
-        stillUrl: newEpisode.stillUrl.trim() || null,
-        runtime: newEpisode.runtime ? Number(newEpisode.runtime) : null,
-        rating: newEpisode.rating ? Number(newEpisode.rating) : null,
-        airDate: newEpisode.airDate ? new Date(newEpisode.airDate).toISOString() : null,
+      const created = await addEpisode.mutateAsync({
+        showId: tvShowId,
+        seasonNumber,
+        payload: {
+          episodeNumber: Number(newEpisode.episodeNumber),
+          title: newEpisode.title.trim(),
+          overview: newEpisode.overview.trim() || null,
+          stillUrl: newEpisode.stillUrl.trim() || null,
+          runtime: newEpisode.runtime ? Number(newEpisode.runtime) : null,
+          rating: newEpisode.rating ? Number(newEpisode.rating) : null,
+          airDate: newEpisode.airDate ? new Date(newEpisode.airDate).toISOString() : null,
+        },
       });
-      setEpisodes(prev => [...prev, created].sort((a, b) => a.episodeNumber - b.episodeNumber));
       setNewEpisode({ ...makeEmptyEpisode(), episodeNumber: String(Number(newEpisode.episodeNumber) + 1) });
       onEpisodeAdded?.(created);
     } catch (e) {
       setAddError(e?.response?.data?.message ?? e?.message ?? 'Không thêm được tập phim');
-    } finally {
-      setAdding(false);
     }
   };
 
   const handleDelete = async (ep) => {
-    setDeletingId(ep.id); setAddError('');
+    setAddError('');
     try {
-      await tvShowService.deleteEpisode(ep.id);
-      setEpisodes(prev => prev.filter(e => e.id !== ep.id));
+      await deleteEpisode.mutateAsync({ showId: tvShowId, episodeId: ep.id });
       onEpisodeDeleted?.(ep.id);
     } catch (e) {
       setAddError(e?.response?.data?.message ?? e?.message ?? 'Không xóa được tập phim');
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -627,9 +626,11 @@ function SeasonEpisodesManager({ tvShowId, seasonNumber, onEpisodeAdded, onEpiso
  */
 export function SeasonEditModal({ tvShowId, season, onClose, onSaved, onEpisodeAdded, onEpisodeDeleted }) {
   const [form, setForm]     = useState({ name: '', overview: '', posterUrl: '', airDate: '' });
-  const [saving, setSaving] = useState(false);
+  const updateSeason = useUpdateSeason();
+  const saving = updateSeason.isPending;
   const [error, setError]   = useState('');
 
+  // Khởi tạo form khi mở season (theo seasonNumber) — cập nhật cache/refetch nền không ghi đè phần đang sửa.
   useEffect(() => {
     if (season) {
       setForm({
@@ -640,29 +641,34 @@ export function SeasonEditModal({ tvShowId, season, onClose, onSaved, onEpisodeA
       });
       setError('');
     }
-  }, [season]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season?.seasonNumber]);
 
   const handleSave = async () => {
-    setSaving(true); setError('');
+    setError('');
+    const patch = {
+      seasonNumber: season.seasonNumber,
+      name: form.name.trim(),
+      overview: form.overview.trim(),
+      posterUrl: form.posterUrl.trim(),
+      airDate: form.airDate || null,
+    };
     try {
-      await axiosInstance.put(`/tvshows/${tvShowId}/seasons/${season.seasonNumber}`, {
-        name: form.name.trim(),
-        overview: form.overview.trim(),
-        posterUrl: form.posterUrl.trim(),
-        airDate: form.airDate ? new Date(form.airDate).toISOString() : null,
-      });
-      onSaved?.({
+      await updateSeason.mutateAsync({
+        showId: tvShowId,
         seasonNumber: season.seasonNumber,
-        name: form.name.trim(),
-        overview: form.overview.trim(),
-        posterUrl: form.posterUrl.trim(),
-        airDate: form.airDate || null,
+        payload: {
+          name: patch.name,
+          overview: patch.overview,
+          posterUrl: patch.posterUrl,
+          airDate: form.airDate ? new Date(form.airDate).toISOString() : null,
+        },
+        patch, // hook vá thẳng vào detail.seasons trong cache
       });
+      onSaved?.(patch);
       onClose();
     } catch (e) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu season');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -699,13 +705,15 @@ export function SeasonEditModal({ tvShowId, season, onClose, onSaved, onEpisodeA
  * phát sóng. Không sửa video — dùng chức năng upload/xóa video tập riêng.
  *
  * Props:
+ *   tvShowId – Guid TV show (để vá đúng cache season của show; thiếu thì chỉ gọi onSaved)
  *   episode  – { id, episodeNumber, title, overview, stillUrl, runtime, rating, airDate } | null (null = đóng)
  *   onClose  – () => void
- *   onSaved  – (patch) => void   gọi sau khi lưu thành công để trang cha cập nhật state cục bộ
+ *   onSaved  – (patch) => void   (tùy chọn) gọi sau khi lưu thành công
  */
-export function EpisodeEditModal({ episode, onClose, onSaved }) {
+export function EpisodeEditModal({ tvShowId, episode, onClose, onSaved }) {
   const [form, setForm]     = useState({ title: '', overview: '', stillUrl: '', runtime: '', rating: '', airDate: '' });
-  const [saving, setSaving] = useState(false);
+  const updateEpisode = useUpdateEpisode();
+  const saving = updateEpisode.isPending;
   const [error, setError]   = useState('');
 
   useEffect(() => {
@@ -720,34 +728,39 @@ export function EpisodeEditModal({ episode, onClose, onSaved }) {
       });
       setError('');
     }
-  }, [episode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode?.id]);
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Tên tập không được để trống'); return; }
-    setSaving(true); setError('');
+    setError('');
+    const patch = {
+      id: episode.id,
+      title: form.title.trim(),
+      overview: form.overview.trim(),
+      stillUrl: form.stillUrl.trim(),
+      runtime: form.runtime ? Number(form.runtime) : null,
+      rating: form.rating ? Number(form.rating) : null,
+      airDate: form.airDate || null,
+    };
     try {
-      await axiosInstance.put(`/tvshows/episodes/${episode.id}`, {
-        title: form.title.trim(),
-        overview: form.overview.trim(),
-        stillUrl: form.stillUrl.trim(),
-        runtime: form.runtime ? Number(form.runtime) : null,
-        rating: form.rating ? Number(form.rating) : null,
-        airDate: form.airDate ? new Date(form.airDate).toISOString() : null,
+      await updateEpisode.mutateAsync({
+        showId: tvShowId,
+        episodeId: episode.id,
+        payload: {
+          title: patch.title,
+          overview: patch.overview,
+          stillUrl: patch.stillUrl,
+          runtime: patch.runtime,
+          rating: patch.rating,
+          airDate: form.airDate ? new Date(form.airDate).toISOString() : null,
+        },
+        patch, // hook vá tập này trong mọi season đang cache của show
       });
-      onSaved?.({
-        id: episode.id,
-        title: form.title.trim(),
-        overview: form.overview.trim(),
-        stillUrl: form.stillUrl.trim(),
-        runtime: form.runtime ? Number(form.runtime) : null,
-        rating: form.rating ? Number(form.rating) : null,
-        airDate: form.airDate || null,
-      });
+      onSaved?.(patch);
       onClose();
     } catch (e) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu episode');
-    } finally {
-      setSaving(false);
     }
   };
 

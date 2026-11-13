@@ -1,13 +1,13 @@
 // src/components/admin/movie/MovieEditModal.jsx  ← REDESIGNED light theme
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, Crown, X } from 'lucide-react';
-import axiosInstance from '../../../config/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, BackdropGalleryField, PosterField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields'; // ✅ file dùng chung với TvShow, preview poster/backdrop đã phóng to
 import movieService from '../../../services/movieService';
 import { useToast } from '../common/Toast';
+import { useAdminGenres, useAdminMovie, useUpdateMovie } from '../../../hooks/useAdminMovies';
 
 let editUidSeq = 0;
 const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;
@@ -166,47 +166,25 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
   const [error,  setError]  = useState('');
   const toast = useToast();
 
-  const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
-  const [fullMovie, setFullMovie] = useState(null); // chi tiết đầy đủ, fetch riêng vì list item (m) không có description/cast/director/images
+  // Server state qua TanStack Query. Chi tiết dùng chung cache với MovieDetailPanel
+  // (mở "Xem" rồi "Sửa" không tải lại); thể loại cache 1 giờ dùng chung với GenrePickerField.
+  const { data: allGenres = [] } = useAdminGenres();
+  const detailQuery = useAdminMovie(movie?.id);
+  // Fetch lỗi → tạm dùng object của bảng (title/rating/isPremium vẫn hiện đúng)
+  const fullMovie = detailQuery.data ?? (detailQuery.isError ? movie : null);
+  const updateMovie = useUpdateMovie();
 
+  // Chỉ khởi tạo form MỘT lần cho mỗi lần mở: refetch nền không được ghi đè phần admin đang gõ dở.
+  const formInitForRef   = useRef(null);
+  const genresInitForRef = useRef(null);
   useEffect(() => {
-    let cancelled = false;
-    movieService.getGenres()
-      .then(res => {
-        if (cancelled) return;
-        const list = res?.data ?? res ?? [];
-        setAllGenres(Array.isArray(list) ? list : []);
-      })
-      .catch(() => { /* GenrePickerField sẽ tự báo lỗi riêng nếu fetch thất bại */ });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Object `movie` truyền từ bảng danh sách chỉ là DTO rút gọn (không có description/cast/director/images).
-  // Luôn fetch lại chi tiết đầy đủ theo id khi modal mở để form không bị trống.
-  useEffect(() => {
-    let cancelled = false;
-    if (movie?.id) {
-      setFullMovie(null);
-      movieService.getMovieById(movie.id)
-        .then(res => {
-          if (cancelled) return;
-          const detail = res?.data ?? res ?? null;
-          setFullMovie(detail);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          // Fetch lỗi → tạm dùng object đã có (title/rating/isPremium vẫn hiện đúng, phần còn lại có thể trống)
-          setFullMovie(movie);
-        });
-    } else {
-      setFullMovie(null);
-    }
-    return () => { cancelled = true; };
-  }, [movie?.id]);
+    if (!movie) { formInitForRef.current = null; genresInitForRef.current = null; }
+  }, [movie]);
 
   useEffect(() => {
     const movie = fullMovie; // dùng bản chi tiết đầy đủ để khởi tạo form, không dùng list item nữa
-    if (movie) {
+    if (movie && formInitForRef.current !== movie.id) {
+      formInitForRef.current = movie.id;
       setForm({
         title:       movie.title       ?? '',
         description: movie.description ?? '',
@@ -269,7 +247,8 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
 
   // Match tên thể loại hiện có của phim (fullMovie.genres: string[]) sang Guid khi danh sách thể loại đã tải xong
   useEffect(() => {
-    if (!fullMovie || allGenres.length === 0) return;
+    if (!fullMovie || allGenres.length === 0 || genresInitForRef.current === fullMovie.id) return;
+    genresInitForRef.current = fullMovie.id;
     const names = (fullMovie.genres ?? []).map(n => n.toLowerCase());
     const matchedIds = allGenres
       .filter(g => names.includes(g.name.toLowerCase()))
@@ -285,60 +264,44 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
     }
     setSaving(true); setError('');
     try {
-      await axiosInstance.put(`/movies/${movie.id}`, {
-        title:       form.title.trim(),
-        description: form.description.trim() || null,
-        imdbRating:  rating,
-        isPremium:   form.isPremium,
-        posterUrl:   posterUrl.trim() || null,
-        backdropUrl: backdropUrl.trim() || null,
-        cast:        castStateToDto(cast),
-        director:    directorStateToDto(director),
-        genreIds,
-        backdropImages: backdropStateToDto(backdrops),
-      });
-
-      // Trailer Youtube — chỉ gọi API SET khi có URL thật sự và có thay đổi.
-      // Nếu user đã XÓA link Youtube (trước đó có, giờ để trống) → gọi xóa video
-      // videoType="trailer" trực tiếp bằng id, vì endpoint /trailer/youtube chỉ dùng để SET.
-      if (youtubeUrl.trim() && youtubeUrl.trim() !== initialYoutubeUrl.trim()) {
-        await movieService.setTrailerYoutube(movie.id, youtubeUrl.trim());
-      } else if (!youtubeUrl.trim() && initialYoutubeUrl.trim() && youtubeTrailerVideoId) {
-        await movieService.deleteVideo(youtubeTrailerVideoId);
-      }
-
-      // Trailer video tự upload — xóa video cũ nếu bị đánh dấu xóa và không có file mới thay thế
-      if (removeTrailerVideo && !pendingTrailerFile && trailerVideoId) {
-        await movieService.deleteVideo(trailerVideoId);
-      }
-      // Upload file trailer mới (nếu có) — ghi đè video trailer_upload hiện có (nếu có)
-      let trailerUploaded = false;
-      if (pendingTrailerFile) {
-        setTrailerUploading(true); setTrailerUploadProgress(0);
-        try {
-          await movieService.uploadTrailerVideo(movie.id, pendingTrailerFile, setTrailerUploadProgress);
-          trailerUploaded = true;
-        } finally {
-          setTrailerUploading(false);
-        }
-      }
-
       const genreNames = allGenres.filter(g => genreIds.includes(g.id)).map(g => g.name);
-      onSaved?.({
-        ...movie,
-        title:       form.title.trim(),
-        description: form.description.trim(),
-        rating,
-        isPremium:   form.isPremium,
-        posterUrl:   posterUrl.trim() || null,
-        backdropUrl: backdropUrl.trim() || null,
-        director:    director?.name || null,
-        genres:      genreNames,
-        images: [
-          ...(movie.images ?? []).filter(img => img.imageType !== 'backdrop'),
-          ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
-        ],
+      // Cả chuỗi PUT phim → trailer Youtube → xoá/upload trailer video nằm trong useUpdateMovie.
+      // onSuccess của hook tự cập nhật dòng trong bảng + làm mới chi tiết + catalogue công khai.
+      const { trailerUploaded } = await updateMovie.mutateAsync({
+        id: movie.id,
+        body: {
+          title:       form.title.trim(),
+          description: form.description.trim() || null,
+          imdbRating:  rating,
+          isPremium:   form.isPremium,
+          posterUrl:   posterUrl.trim() || null,
+          backdropUrl: backdropUrl.trim() || null,
+          cast:        castStateToDto(cast),
+          director:    directorStateToDto(director),
+          genreIds,
+          backdropImages: backdropStateToDto(backdrops),
+        },
+        trailer: {
+          youtubeUrl: youtubeUrl,
+          initialYoutubeUrl,
+          youtubeVideoId: youtubeTrailerVideoId,
+          removeVideo: removeTrailerVideo,
+          videoId: trailerVideoId,
+          file: pendingTrailerFile,
+          onProgress: (p) => { setTrailerUploading(true); setTrailerUploadProgress(p); },
+        },
+        patch: {
+          title:       form.title.trim(),
+          description: form.description.trim(),
+          rating,
+          isPremium:   form.isPremium,
+          posterUrl:   posterUrl.trim() || null,
+          backdropUrl: backdropUrl.trim() || null,
+          director:    director?.name || null,
+          genres:      genreNames,
+        },
       });
+      onSaved?.();
       onClose();
       toast.success(
         trailerUploaded
@@ -350,7 +313,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu thay đổi';
       setError(msg);
       toast.error(msg, 'Cập nhật thất bại');
-    } finally { setSaving(false); }
+    } finally { setSaving(false); setTrailerUploading(false); }
   };
 
   return (

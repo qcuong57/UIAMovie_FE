@@ -1,20 +1,24 @@
 // src/config/axios.js
 
-import axios from 'axios';
-import { getAccessToken, setAccessToken, clearAccessToken } from './tokenStore';
-import { hasStoredUser, clearStoredUser, subscribeStoredUser } from './sessionStore';
+import axios from "axios";
+import { getAccessToken, setAccessToken, clearAccessToken } from "./tokenStore";
+import {
+  hasStoredUser,
+  clearStoredUser,
+  subscribeStoredUser,
+} from "./sessionStore";
 
 // Luôn có đúng 1 dấu "/" ở cuối để nối path không bị "//".
 // Dev: không đặt VITE_API_URL → localhost.
 // Production: VITE_API_URL=https://<api-domain>/api (hoặc /api khi đã có proxy cùng domain).
 // const RAW_BASE_URL =  'http://localhost:5000/api/';
-const RAW_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/';
-const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, '') + '/';
+const RAW_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/";
+const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, "") + "/";
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
   withCredentials: true, // gửi/nhận HttpOnly cookie refreshToken
 });
 
@@ -28,7 +32,7 @@ const PUBLIC_AUTH =
 // KHÔNG tính 403: BE trả 403 khi Origin không nằm trong whitelist (vd. preview deploy),
 // đó là lỗi cấu hình chứ không phải hết phiên nên không được xoá hồ sơ người dùng.
 export const isAuthFailure = (err) =>
-  err?.code === 'NO_ACCESS_TOKEN' || err?.response?.status === 401;
+  err?.code === "NO_ACCESS_TOKEN" || err?.response?.status === 401;
 
 // ── REFRESH (single-flight) ──────────────────────────────────────────────────
 // Dùng chung cho interceptor 401 và bước khởi động. Mọi lời gọi đồng thời trong tab
@@ -41,26 +45,33 @@ let refreshPromise = null;
 let lastTransientFailure = null; // { at, error }
 
 const withRefreshLock = (task) =>
-  typeof navigator !== 'undefined' && navigator.locks?.request
-    ? navigator.locks.request('uiamovie-refresh-token', task)
+  typeof navigator !== "undefined" && navigator.locks?.request
+    ? navigator.locks.request("uiamovie-refresh-token", task)
     : task();
 
 export const refreshAccessToken = () => {
   if (!refreshPromise) {
-    if (lastTransientFailure && Date.now() - lastTransientFailure.at < TRANSIENT_FAILURE_COOLDOWN_MS) {
+    if (
+      lastTransientFailure &&
+      Date.now() - lastTransientFailure.at < TRANSIENT_FAILURE_COOLDOWN_MS
+    ) {
       return Promise.reject(lastTransientFailure.error);
     }
 
     refreshPromise = withRefreshLock(() =>
-      axios.post(`${API_BASE_URL}auth/refresh-token`, {}, { withCredentials: true, timeout: 20000 })
+      axios.post(
+        `${API_BASE_URL}auth/refresh-token`,
+        {},
+        { withCredentials: true, timeout: 20000 },
+      ),
     )
       .then((res) => {
         // Backend trả ApiResponseDTO { data: { accessToken, ... }, message }
         const payload = res.data?.data ?? res.data;
         const newAccessToken = payload?.accessToken;
         if (!newAccessToken) {
-          const err = new Error('Refresh response thiếu accessToken');
-          err.code = 'NO_ACCESS_TOKEN';
+          const err = new Error("Refresh response thiếu accessToken");
+          err.code = "NO_ACCESS_TOKEN";
           throw err;
         }
         setAccessToken(newAccessToken);
@@ -68,7 +79,9 @@ export const refreshAccessToken = () => {
         return newAccessToken;
       })
       .catch((err) => {
-        lastTransientFailure = isAuthFailure(err) ? null : { at: Date.now(), error: err };
+        lastTransientFailure = isAuthFailure(err)
+          ? null
+          : { at: Date.now(), error: err };
         throw err;
       })
       .finally(() => {
@@ -114,7 +127,12 @@ export const bootstrapSession = () => {
         return true;
       } catch (err) {
         if (import.meta.env?.DEV) {
-          console.warn('[bootstrap] refresh failed:', err?.response?.status, err?.response?.data, err?.code);
+          console.warn(
+            "[bootstrap] refresh failed:",
+            err?.response?.status,
+            err?.response?.data,
+            err?.code,
+          );
         }
         if (isAuthFailure(err)) {
           // Phiên hết hạn thật → xoá hồ sơ + token
@@ -135,7 +153,7 @@ export const bootstrapSession = () => {
 // ── Token mới cho nơi KHÔNG đi qua axios (SignalR, fetch...) ─────────────────
 const isExpiringSoon = (token, skewSeconds = 30) => {
   try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     const { exp } = JSON.parse(atob(b64));
     return !exp || exp * 1000 - Date.now() < skewSeconds * 1000;
   } catch {
@@ -150,12 +168,12 @@ export const getFreshAccessToken = async () => {
 
   if (!token) {
     // Khách → không có gì để lấy.
-    if (!hasStoredUser()) return '';
+    if (!hasStoredUser()) return "";
     // Đã đăng nhập nhưng bootstrap thất bại (vd. lỗi mạng) → thử refresh trực tiếp.
     try {
       return await refreshAccessToken();
     } catch {
-      return '';
+      return "";
     }
   }
 
@@ -163,7 +181,7 @@ export const getFreshAccessToken = async () => {
   try {
     return await refreshAccessToken();
   } catch {
-    return getAccessToken() || '';
+    return getAccessToken() || "";
   }
 };
 
@@ -179,22 +197,22 @@ subscribeStoredUser(() => {
 
 const clearSessionAndRedirect = () => {
   clearSession();
-  if (window.location.pathname !== '/welcome') {
-    window.location.href = '/welcome';
+  if (window.location.pathname !== "/welcome") {
+    window.location.href = "/welcome";
   }
 };
 
 // ── REQUEST: chờ bootstrap (nếu cần) rồi đính token từ bộ nhớ ────────────────
 axiosInstance.interceptors.request.use(
   async (config) => {
-    if (!PUBLIC_AUTH.test(config.url || '')) {
+    if (!PUBLIC_AUTH.test(config.url || "")) {
       await bootstrapSession();
     }
     const token = getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // ── RESPONSE: tự refresh khi 401 ─────────────────────────────────────────────
@@ -211,7 +229,7 @@ axiosInstance.interceptors.response.use(
 
     if (error.response.status === 401 && !original._retry) {
       // Endpoint auth công khai (login/register/otp/...) → trả lỗi thẳng về component
-      if (PUBLIC_AUTH.test(original.url || '')) {
+      if (PUBLIC_AUTH.test(original.url || "")) {
         return Promise.reject(error);
       }
 
@@ -235,7 +253,7 @@ axiosInstance.interceptors.response.use(
     }
 
     return Promise.reject(error); // giữ nguyên .response để component đọc được message
-  }
+  },
 );
 
 export default axiosInstance;

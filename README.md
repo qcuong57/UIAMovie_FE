@@ -129,6 +129,9 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 ### 🛡️ Admin Dashboard
 - **Stats overview** — total movies, genres, users, trending count
 - **Movie management** — search, edit, delete, and manage video files
+- **TV show management** — table with server-side paging, detail panel, edit / add modals (genres, poster, backdrop gallery, cast picker) and a Seasons tab:
+  - Each season is an accordion; episodes load on open and share one cache entry with the season edit modal, so adding, editing or deleting an episode (or pressing **Sync tập mới**) updates the list everywhere with no manual reload
+  - Per-episode video upload (progress bar, cancel-safe) / delete, HLS preview through `/playback`, and per-episode **subtitles** (upload, AI translate, AI generate from text, set default, delete). Subtitles still processing are polled from the list query itself (no per-row timers)
 - **TMDB import tool** — search TMDB and one-click import with conflict detection
 - **Video upload panel** — drag-and-drop upload to Cloudinary with real-time progress, cancel support, and quality/type selection
 - **Genre CRUD** — create, edit, delete genres with color-coded cards
@@ -248,6 +251,12 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 | `hooks/useMediaDetail.js` | `useMovie` / `useTvShow`: the Info page and the Watch page of the same title share one cache entry (`queryKeys.movies.detail` / `tvShows.detail`) |
 | `hooks/useMinimumLoading.js` | Keeps the entry `LoadingScreen` visible for a minimum time so it never flashes |
 | `utils/normalizeDetail.js` | DTO → view-model for Movie / TV Info and Watch pages (one place instead of one block per page) |
+| `hooks/useAdminMovies.js` | Admin → Phim: `useAdminMovies` (bảng), `useAdminMovie` (chi tiết, dùng chung DetailPanel / EditModal / VideoUploadPanel), `useAdminGenres`, `usePersonSearch`, và các mutation `useSetMoviePremium` (optimistic), `useUpdateMovie`, `useCreateMovie`, `useDeleteMovie`, `useUploadMovieVideo`, `useDeleteMovieVideo`. Mọi thay đổi gọi `invalidateCatalog` để cache người dùng (`CATALOG_ROOTS`) tải lại |
+| `hooks/useAdminUsers.js` | Admin → Người dùng, **phân trang server**: `useAdminUsers(filter)` (`filter` = page + search + role + subscriptionType nằm trong key, `keepPreviousData`, prefetch trang kế, `AbortSignal`), `useAdminUser` (chi tiết) và các mutation `useUpdateUser`, `useDeleteUser`, `useChangeUserRole`, `useBanUser`, `useUnbanUser`, `useGrantPremium`, `useRevokePremium` (ghi thẳng vào mọi trang đang cache) |
+| `hooks/useAdminTvShows.js` | Admin → TV Show: `useAdminTvShows(filter)` (phân trang server, `keepPreviousData`, prefetch trang kế), `useAdminTvShowDetail`, `useTvShowSeason(showId, seasonNumber, { enabled })` (một cache cho accordion và modal sửa season) và các mutation `useAddEpisode`, `useUpdateEpisode`, `useDeleteEpisode`, `useUpdateSeason`, `useUploadEpisodeVideo`, `useDeleteEpisodeVideo`, `useDeleteTvShowVideo`, `useSyncTvShowEpisodes`. Mutation vá thẳng vào cache season rồi invalidate catalogue người dùng (`CATALOG_ROOTS`) |
+| `hooks/useAdminEpisodeSubtitles.js` | Subtitle của tập: `useEpisodeSubtitles(episodeId)` (một query, tự bật `refetchInterval` khi còn subtitle `processing`, giữ danh sách cũ nếu refetch lỗi) và mutation `useUploadEpisodeSubtitle`, `useTranslateEpisodeSubtitle`, `useAiGenerateEpisodeSubtitle`, xoá, đặt mặc định (optimistic, lỗi thì lấy lại từ server) |
+| `hooks/useDebouncedValue.js` | Debounce giá trị ô tìm kiếm; giá trị đã debounce mới đi vào query key |
+| `hooks/useAdminSubtitles.js` | Subtitle của phim; một query tự refetch 3s khi còn subtitle đang xử lý |
 | Persisted cache | AI recommendations are persisted through `PersistQueryClientProvider` (`localStorage` key `uiamovie-query-cache`, 24 h, `buster: "v1"`); nothing else is persisted. The old hand-written `recommendationCache` was removed |
 
 ### Cache policy (`STALE`)
@@ -278,6 +287,9 @@ When the signed-in user changes (sign in, sign out, switch account, also from an
 - Writes are mutations with `onMutate` (optimistic), per-item rollback in `onError`, and `invalidateQueries` in `onSettled` only when no other mutation of the same key is running.
 - Navigate with `useNavigate()`, never `window.location.href`: a full reload throws away the Query cache and the in-memory access token.
 - Personal data lives under the `me` root so it is reset automatically on account change.
+- **Admin keys** live under the `admin` root (not in `PUBLIC_QUERY_ROOTS`), so they reset on account change. List filters are ONE object (page included) so prefetching the next page uses the exact key of the visible query. `admin.tvShows.seasons(showId)` is a **prefix** of `season(showId, n)`: invalidate or patch it to hit every season of a show.
+- Admin mutations **patch the cache first** (set / remove the row in every cached page), then call `invalidateCatalog` so the public caches in `CATALOG_ROOTS` reload. Modals initialise their form only when the edited entity changes, never when the cache refreshes, so a background refetch cannot overwrite what the admin is typing.
+- Import `queryKeys` from `config/queryKeys` everywhere (there is no `lib/queryKeys`).
 
 ---
 
@@ -328,6 +340,8 @@ src/
 │   │   ├── AdminPlans.jsx  # Premium plan management + manual grant / revoke
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
 │   │   ├── user/       # UserDetailPanel, UserEditModal
+│   │   ├── tvshow/     # TvShowDetailPanel, SeasonEpisodeFields (season / episode modals),
+│   │   │               # EpisodeSubtitlePanel, GenreAndImageFields, PersonPickerField
 │   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
 │   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
 │   ├── common/         # BackButton, Pagination, PageError, DetailPageError, ErrorBoundary,
@@ -363,6 +377,8 @@ src/
 │   ├── useCountryRows.js # Per-country rows, loaded when near the viewport
 │   ├── useFavorites.js # Favorites: read + optimistic toggle
 │   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
+│   ├── useAdminMovies.js / useAdminUsers.js / useAdminTvShows.js # Admin tables + mutations
+│   ├── useAdminSubtitles.js / useAdminEpisodeSubtitles.js # Movie / episode subtitles
 │   ├── useMinimumLoading.js # Minimum LoadingScreen time
 │   └── usePagination.js# Client & server-side pagination hook
 │
@@ -471,6 +487,7 @@ VITE_API_URL=http://localhost:5000/api
 3. Go to **Movies → TMDB Search** to search and import new films
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
+   - **TV Shows**: open a show → **Seasons** tab to edit a season, add / edit / delete episodes, upload an episode video and manage its subtitles; use **Sync tập mới** to pull new episodes from TMDB
 6. Open **Plans** to create Premium plans (price, duration, features, sale window, purchase limit, e-mail domains), preview the card, mark one as "most popular", and switch plans on or off. Use **Cấp / thu hồi Premium** to grant or revoke Premium for a user by ID. The page needs at least one plan on sale before `/premium` shows anything to buy
 7. Open **Ads** to manage ad videos. Use the schedule banner → **Cấu hình lịch phát** to pick Fixed or Random mode, tune the parameters and check them with the preview. Attach ads to **Global Slots** (calendar icon on each row) — in Random mode these slots are the pool the scheduler draws from
 8. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
@@ -569,7 +586,8 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
 - [x] ~~Migrate Home, Browse, Search, Favorites, Movie / TV Info + Watch pages, Coming Soon and Announcements to TanStack Query~~ (done)
-- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the admin tables
+- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the remaining admin tables (Movies, Users and TV Shows done: `queryKeys.admin.*`; Dashboard, Genres, Reviews, Persons, Plans, Revenue, Ads still to do)
+- [ ] **Admin TV Show leftovers** — `PersonPickerField` still calls `searchPersons` directly (move it to `usePersonSearch` + `useDebouncedValue`); two `SubtitleEditorModal` versions exist (`shared/SubtitleContentEditor` vs `tvshow/SubtitleEditorModal`), merge them; the subtitle list must return `status` and `errorMessage` because polling no longer uses `getSubtitleStatus`
 - [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
 - [ ] **Smaller home payloads** — the home page still downloads two 100-item lists only to find trailers and artwork. Add backend filters (for example `hasTrailer=true&pageSize=15`) and put the movie / show title and poster inside the review DTO, which removes the per-review `getMovieById` calls
 - [ ] **Prefetch on intent** — Search / Browse already prefetch the next page; still missing: `prefetchQuery(queryKeys.movies.detail(id))` when a card or search result is hovered / focused (`useMovie` / `useTvShow` share the key)

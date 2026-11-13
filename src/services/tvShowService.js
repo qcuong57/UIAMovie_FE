@@ -26,6 +26,7 @@ const tvShowService = {
    * @param {string}   [filter.sortBy]            - "rating" | "title" | "firstairdate"
    * @param {boolean}  [filter.sortDesc=true]
    * @param {string[]} [filter.ids]               - Danh sách ID cụ thể (AI mode)
+   * @param {Object}   [config]                   - { signal: AbortSignal } để huỷ request (TanStack Query truyền vào)
    */
   getTvShows: async ({
     page             = 1,
@@ -42,7 +43,7 @@ const tvShowService = {
     sortBy           = 'rating',
     sortDesc         = true,
     ids              = [],
-  } = {}) => {
+  } = {}, config = {}) => {
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -60,7 +61,7 @@ const tvShowService = {
       (genreIds ?? []).forEach(id => params.append('genreIds', id));
       (ids ?? []).forEach(id => params.append('ids', id));
 
-      const response = await axiosInstance.get(`/tvshows?${params}`);
+      const response = await axiosInstance.get(`/tvshows?${params}`, { signal: config?.signal });
       // Controller: Ok(ApiResponseDTO<object> { Data = result }) — unwrap .data
       const envelope = response.data ?? response;
       return envelope?.data ?? envelope;

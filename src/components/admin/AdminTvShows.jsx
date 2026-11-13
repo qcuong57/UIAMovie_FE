@@ -1,11 +1,10 @@
 // src/components/admin/AdminTvShows.jsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
   AlertCircle, Search, Tv, Eye, Pencil, Crown, Plus,
 } from 'lucide-react';
-import tvShowService from '../../services/tvShowService';
 import AdminTmdbSearch from './AdminTmdbSearch';
 import TvShowDetailPanel from './tvshow/TvShowDetailPanel';
 import TvShowEditModal   from './tvshow/TvShowEditModal';
@@ -13,7 +12,11 @@ import TvShowDeleteModal from './tvshow/TvShowDeleteModal';
 import TvShowAddModal    from './tvshow/TvShowAddModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 import AdminPagination from '../common/AdminPagination';
-import { useToast } from './common/Toast';
+import {
+  useAdminTvShows, useSetTvShowPremium, usePremiumPendingIds, useRefreshTvShows,
+} from '../../hooks/useAdminTvShows';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { usePageParam, usePagination } from '../../hooks/usePagination';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -138,89 +141,47 @@ const GhostBtn = ({ onClick, children, active, accent }) => {
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminTvShows() {
-  const [shows,      setShows]      = useState([]);
-  const [total,      setTotal]      = useState(0);
-  const [page,       setPage]       = useState(1);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [sortBy,     setSortBy]     = useState('firstairdate');
-  const [sortDir,    setSortDir]    = useState('desc');
-  const [deleteShow,  setDeleteShow]  = useState(null);
-  const [showPanel,  setShowPanel]  = useState(false);
-  const [detailId,   setDetailId]   = useState(null);
-  const [editShow,   setEditShow]   = useState(null);
-  const [togglingId, setTogglingId] = useState(null);
+  // ── Bộ lọc: chỉ giá trị đã debounce mới vào query key ──
+  const [search,  setSearch]  = useState('');
+  const [sortBy,  setSortBy]  = useState('firstairdate');
+  const [sortDir, setSortDir] = useState('desc');
+  const debouncedSearch = useDebouncedValue(search.trim(), 350);
+
+  // ── Trang gắn với chữ ký bộ lọc: đổi bộ lọc tự về trang 1, không cần effect ──
+  const filterSig = `${debouncedSearch}|${sortBy}|${sortDir}`;
+  const { page, setPage } = usePageParam({ resetKey: filterSig });
+
+  const {
+    data, isPending, isError, error, isFetching, isPlaceholderData, refetch,
+  } = useAdminTvShows({ page, pageSize: PAGE_SIZE, search: debouncedSearch, sortBy, sortDir });
+
+  const shows = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pg = usePagination({ total, pageSize: PAGE_SIZE, page, onPageChange: setPage }); // kẹp trang khi xoá người cuối
+
+  // ── Premium: optimistic + rollback riêng từng dòng ──
+  const setPremium = useSetTvShowPremium();
+  const pendingIds = usePremiumPendingIds();
+  const refreshTvShows = useRefreshTvShows();
+
+  // ── UI state ──
+  const [deleteShow,   setDeleteShow]   = useState(null);
+  const [showPanel,    setShowPanel]    = useState(false);
+  const [detailId,     setDetailId]     = useState(null);
+  const [editShow,     setEditShow]     = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const debounceRef = useRef(null);
-  const toast = useToast();
-
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  const fetchShows = useCallback(async (p, q, sb, sd) => {
-    setLoading(true);
-    try {
-      const res = await tvShowService.getTvShows({
-        page:     p,
-        pageSize: PAGE_SIZE,
-        search:   q,
-        sortBy:   sb,
-        sortDesc: sd === 'desc',
-      });
-      const data  = res?.data ?? res;
-      const items = Array.isArray(data) ? data : (data?.items ?? []);
-      const count = data?.totalCount ?? data?.total ?? items.length;
-      setShows(items.map(s => ({
-        ...s,
-        year: s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : null,
-      })));
-      setTotal(count);
-      setPage(p);
-    } catch (e) {
-      console.error('[AdminTvShows] fetch error:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchShows(1, '', 'firstairdate', 'desc');
-  }, []); // eslint-disable-line
-
-  const handleSearchChange = (val) => {
-    setSearch(val);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchShows(1, val, sortBy, sortDir), 400);
-  };
 
   const handleSort = (key) => {
-    const newDir = sortBy === key && sortDir === 'desc' ? 'asc' : 'desc';
+    setSortDir(sortBy === key && sortDir === 'desc' ? 'asc' : 'desc');
     setSortBy(key);
-    setSortDir(newDir);
-    fetchShows(1, search, key, newDir);
   };
 
-  const handlePage = (p) => fetchShows(p, search, sortBy, sortDir);
+  const handleTogglePremium = (show) =>
+    setPremium.mutate({ id: show.id, isPremium: !show.isPremium, title: show.title });
 
-  /**
-   * Toggle Premium cho 1 TV show.
-   * Optimistic update ngay → rollback nếu API lỗi.
-   */
-  const handleTogglePremium = async (show) => {
-    if (togglingId) return;
-    const next = !show.isPremium;
-    setTogglingId(show.id);
-    setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: next } : s));
-    try {
-      await tvShowService.setPremium(show.id, next);
-      toast.success(next ? `Đã đặt "${show.title}" thành Premium` : `Đã chuyển "${show.title}" về Free`);
-    } catch (e) {
-      console.error('[AdminTvShows] togglePremium failed:', e);
-      setShows(prev => prev.map(s => s.id === show.id ? { ...s, isPremium: !next } : s));
-      toast.error(e?.response?.data?.message ?? e?.message ?? 'Không thể cập nhật trạng thái Premium');
-    } finally {
-      setTogglingId(null);
-    }
-  };
+  const isSearching  = debouncedSearch !== '';
+  const showSkeleton = isPending;                       // chưa có dữ liệu nào
+  const dimTable     = isFetching && isPlaceholderData; // đổi trang/bộ lọc: giữ dữ liệu cũ, làm mờ
 
   return (
     <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
@@ -244,8 +205,8 @@ export default function AdminTvShows() {
           </h2>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <GhostBtn onClick={() => fetchShows(page, search, sortBy, sortDir)}>
-            <RefreshCw size={14}/> Tải lại
+          <GhostBtn onClick={() => refetch()}>
+            <RefreshCw size={14} style={isFetching ? { animation: 'spin 0.75s linear infinite' } : undefined}/> Tải lại
           </GhostBtn>
           <GhostBtn onClick={() => setShowAddModal(true)}>
             <Plus size={14}/> Thêm thủ công
@@ -271,7 +232,7 @@ export default function AdminTvShows() {
         <input
           placeholder="Tìm kiếm theo tên TV show..."
           value={search}
-          onChange={e => handleSearchChange(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
             fontFamily: FONT, fontSize: 13.5, color: T.text,
@@ -279,7 +240,7 @@ export default function AdminTvShows() {
         />
         {search && (
           <button
-            onClick={() => handleSearchChange('')}
+            onClick={() => setSearch('')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, lineHeight: 1, fontSize: 18 }}
           >×</button>
         )}
@@ -291,7 +252,7 @@ export default function AdminTvShows() {
         borderRadius: 16, overflow: 'hidden',
         boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
       }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', opacity: dimTable ? 0.55 : 1, transition: 'opacity 0.15s' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -307,13 +268,25 @@ export default function AdminTvShows() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <tr><td colSpan={8} style={{ padding: '64px 0', textAlign: 'center' }}><SpinnerLight /></td></tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '48px 0', textAlign: 'center' }}>
+                    <AlertCircle size={28} color={T.red} style={{ marginBottom: 8 }} />
+                    <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub, margin: '0 0 12px' }}>
+                      {error?.response?.data?.message ?? error?.message ?? 'Không tải được danh sách TV show'}
+                    </p>
+                    <GhostBtn onClick={() => refetch()}><RefreshCw size={14}/> Thử lại</GhostBtn>
+                  </td>
+                </tr>
               ) : shows.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ padding: '56px 0', textAlign: 'center' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>📺</div>
-                    <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy TV show</p>
+                    <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>
+                      {isSearching ? 'Không tìm thấy TV show phù hợp' : 'Chưa có TV show nào'}
+                    </p>
                   </td>
                 </tr>
               ) : shows.map((s, i) => (
@@ -387,7 +360,7 @@ export default function AdminTvShows() {
                   <td style={{ padding: '12px 16px' }}>
                     <PremiumToggle
                       isPremium={!!s.isPremium}
-                      loading={togglingId === s.id}
+                      loading={pendingIds.has(s.id)}
                       onClick={() => handleTogglePremium(s)}
                     />
                   </td>
@@ -413,27 +386,19 @@ export default function AdminTvShows() {
         </div>
       </div>
 
-      <AdminPagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={handlePage}
-        itemLabel="TV show"
-      />
+      <AdminPagination {...pg.props} isFetching={isFetching} itemLabel="TV show" />
 
       {/* Delete modal */}
       <TvShowDeleteModal
         show={deleteShow}
         onClose={() => setDeleteShow(null)}
-        onDeleted={() => fetchShows(page, search, sortBy, sortDir)}
       />
 
       {/* Add modal — thêm TV show thủ công (không qua TMDB) */}
       <TvShowAddModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onCreated={() => fetchShows(1, search, sortBy, sortDir)}
+        onCreated={() => setPage(1)}
       />
 
       {/* Backdrop */}
@@ -454,7 +419,7 @@ export default function AdminTvShows() {
             defaultTab="tv"
             singleTab
             onClose={() => setShowPanel(false)}
-            onImported={() => fetchShows(1, search, sortBy, sortDir)}
+            onImported={() => { refreshTvShows(); setPage(1); }}
           />
         )}
       </AnimatePresence>
@@ -474,10 +439,7 @@ export default function AdminTvShows() {
       <TvShowEditModal
         show={editShow}
         onClose={() => setEditShow(null)}
-        onSaved={(updated) => {
-          setShows(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
-          setEditShow(null);
-        }}
+        onSaved={() => setEditShow(null)} // bảng đã được hook vá trực tiếp trong cache
       />
     </div>
   );

@@ -1,7 +1,7 @@
 // src/components/admin/tvshow/TvShowEditModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, Crown, X } from 'lucide-react';
-import axiosInstance from '../../../config/axios';
+import { useAdminTvShow, useUpdateTvShow } from '../../../hooks/useAdminTvShows';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
@@ -180,7 +180,7 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
   const [error,  setError]  = useState('');
 
   const [allGenres, setAllGenres] = useState([]); // danh sách thể loại đầy đủ, dùng để match tên → id
-  const [fullShow, setFullShow]   = useState(null); // chi tiết đầy đủ, fetch riêng vì list item (show) không có description/cast/director/images
+  const updateShow = useUpdateTvShow();
 
   useEffect(() => {
     let cancelled = false;
@@ -194,32 +194,22 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Object `show` truyền từ bảng danh sách chỉ là DTO rút gọn (không có description/cast/director/images).
-  // Luôn fetch lại chi tiết đầy đủ theo id khi modal mở để form không bị trống.
+  // `show` từ bảng chỉ là DTO rút gọn → lấy chi tiết đầy đủ qua cache dùng chung với DetailPanel.
+  // Lỗi tải → tạm dùng object đã có (title/rating/isPremium vẫn đúng, phần còn lại có thể trống).
+  const detailQuery = useAdminTvShow(show?.id);
+  const fullShow = detailQuery.data ?? (detailQuery.isError ? show : null);
+
+  // Chỉ khởi tạo form MỘT lần cho mỗi lần mở: refetch nền không được ghi đè phần đang sửa.
+  const formInitedFor   = useRef(null);
+  const genresInitedFor = useRef(null);
   useEffect(() => {
-    let cancelled = false;
-    if (show?.id) {
-      setFullShow(null);
-      tvShowService.getTvShowById(show.id)
-        .then(res => {
-          if (cancelled) return;
-          const detail = res?.data ?? res ?? null;
-          setFullShow(detail);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          // Fetch lỗi → tạm dùng object đã có (title/rating/isPremium vẫn hiện đúng, phần còn lại có thể trống)
-          setFullShow(show);
-        });
-    } else {
-      setFullShow(null);
-    }
-    return () => { cancelled = true; };
-  }, [show?.id]);
+    if (!show) { formInitedFor.current = null; genresInitedFor.current = null; }
+  }, [show]);
 
   useEffect(() => {
     const s = fullShow; // dùng bản chi tiết đầy đủ để khởi tạo form, không dùng list item nữa
-    if (s) {
+    if (s && formInitedFor.current !== show?.id) {
+      formInitedFor.current = show?.id;
       setForm({
         title:       s.title ?? s.name ?? '',
         description: s.description ?? '',
@@ -283,7 +273,8 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
 
   // Match tên thể loại hiện có của TV show (fullShow.genres: string[]) sang Guid khi danh sách thể loại đã tải xong
   useEffect(() => {
-    if (!fullShow || allGenres.length === 0) return;
+    if (!fullShow || allGenres.length === 0 || genresInitedFor.current === show?.id) return;
+    genresInitedFor.current = show?.id;
     const names = (fullShow.genres ?? []).map(n => n.toLowerCase());
     const matchedIds = allGenres
       .filter(g => names.includes(g.name.toLowerCase()))
@@ -299,50 +290,10 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
     }
     setSaving(true); setError('');
     try {
-      await axiosInstance.put(`/tvshows/${show.id}`, {
-        title:          form.title.trim(),
-        description:    form.description.trim() || null,
-        rating,
-        isPremium:      form.isPremium,
-        status:         form.status || null,
-        posterUrl:      posterUrl.trim() || null,
-        backdropUrl:    backdropUrl.trim() || null,
-        cast:           castStateToDto(cast),
-        director:       directorStateToDto(director),
-        genreIds,
-        backdropImages: backdropStateToDto(backdrops),
-      });
-
-      // Trailer Youtube — chỉ gọi API SET khi có URL thật sự và có thay đổi.
-      // Nếu user đã XÓA link Youtube (trước đó có, giờ để trống) → gọi xóa video
-      // videoType="trailer" trực tiếp bằng id, vì endpoint /trailer/youtube chỉ dùng để SET.
-      if (youtubeUrl.trim() && youtubeUrl.trim() !== initialYoutubeUrl.trim()) {
-        await tvShowService.setTrailerYoutube(show.id, youtubeUrl.trim());
-      } else if (!youtubeUrl.trim() && initialYoutubeUrl.trim() && youtubeTrailerVideoId) {
-        await tvShowService.deleteVideo(youtubeTrailerVideoId);
-      }
-
-      // Trailer video tự upload — xóa video cũ nếu bị đánh dấu xóa và không có file mới thay thế
-      if (removeTrailerVideo && !pendingTrailerFile && trailerVideoId) {
-        await tvShowService.deleteVideo(trailerVideoId);
-      }
-      // Upload file trailer mới (nếu có) — ghi đè video trailer_upload hiện có (nếu có)
-      let trailerUploaded = false;
-      if (pendingTrailerFile) {
-        setTrailerUploading(true); setTrailerUploadProgress(0);
-        try {
-          await tvShowService.uploadTrailerVideo(show.id, pendingTrailerFile, setTrailerUploadProgress);
-          trailerUploaded = true;
-        } finally {
-          setTrailerUploading(false);
-        }
-      }
-
+      // PUT show → trailer Youtube → xoá/upload video trailer: hook chạy tuần tự như cũ
       const genreNames = allGenres.filter(g => genreIds.includes(g.id)).map(g => g.name);
-      onSaved?.({
-        ...show,
+      const listPatch = {
         title:       form.title.trim(),
-        description: form.description.trim(),
         rating,
         isPremium:   form.isPremium,
         status:      form.status || null,
@@ -350,11 +301,37 @@ export default function TvShowEditModal({ show, onClose, onSaved }) {
         backdropUrl: backdropUrl.trim() || null,
         director:    director?.name || null,
         genres:      genreNames,
-        images: [
-          ...(show.images ?? []).filter(img => img.imageType !== 'backdrop'),
-          ...backdrops.map(b => ({ id: b.id, url: b.url, imageType: 'backdrop' })),
-        ],
-      });
+      };
+      if (pendingTrailerFile) { setTrailerUploading(true); setTrailerUploadProgress(0); }
+      let trailerUploaded = false;
+      try {
+        ({ trailerUploaded } = await updateShow.mutateAsync({
+          id: show.id,
+          dto: {
+            title:          form.title.trim(),
+            description:    form.description.trim() || null,
+            rating,
+            isPremium:      form.isPremium,
+            status:         form.status || null,
+            posterUrl:      posterUrl.trim() || null,
+            backdropUrl:    backdropUrl.trim() || null,
+            cast:           castStateToDto(cast),
+            director:       directorStateToDto(director),
+            genreIds,
+            backdropImages: backdropStateToDto(backdrops),
+          },
+          trailer: {
+            youtubeUrl, initialYoutubeUrl, youtubeTrailerVideoId,
+            removeTrailerVideo, trailerVideoId,
+            pendingFile: pendingTrailerFile,
+            onProgress: setTrailerUploadProgress,
+          },
+          listPatch,   // hook vá thẳng vào mọi trang danh sách đang cache
+        }));
+      } finally {
+        setTrailerUploading(false);
+      }
+      onSaved?.({ ...show, ...listPatch, description: form.description.trim() });
       toast.success(
         trailerUploaded
           ? `Đã lưu thay đổi và upload trailer thành công cho "${form.title.trim()}"`

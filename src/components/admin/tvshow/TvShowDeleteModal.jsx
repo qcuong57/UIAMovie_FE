@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axiosInstance from '../../../config/axios';
+import { useDeleteTvShow } from '../../../hooks/useAdminTvShows';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 
@@ -13,16 +13,16 @@ import { useToast } from '../common/Toast';
  *   onDeleted – (id) => void   called after successful delete
  */
 export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);
-  const [error,    setError]    = useState('');
+  const [error, setError] = useState('');
   const toast = useToast();
+  const deleteShow = useDeleteTvShow(); // xoá xong tự dọn cache chi tiết/season + lấy lại danh sách
+  const deleting = deleteShow.isPending;
 
   const handleDelete = async () => {
     if (!show) return;
-    setDeleting(true);
     setError('');
     try {
-      await axiosInstance.delete(`/tvshows/${show.id}`);
+      await deleteShow.mutateAsync(show.id);
       toast.success(`Đã xóa "${show.title ?? show.name}"`);
       onDeleted?.(show.id);
       onClose();
@@ -30,8 +30,6 @@ export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa TV show';
       setError(msg);
       toast.error(msg);
-    } finally {
-      setDeleting(false);
     }
   };
 
