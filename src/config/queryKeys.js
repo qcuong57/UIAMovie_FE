@@ -15,7 +15,8 @@ export const queryKeys = {
     list: (filter) => ["tvshows", "list", filter],
     detail: (id) => ["tvshows", "detail", String(id)],
   },
-  genres: { all: ["genres"], admin: ["genres", "admin"] },
+  // `picker`: danh sách thể loại cho ô chọn thể loại trong form admin (mảng đã chuẩn hoá); cùng gốc "genres" nên đổi thể loại là làm mới luôn.
+  genres: { all: ["genres"], admin: ["genres", "admin"], picker: ["genres", "picker"] },
   home: {
     all: ["home"],
     trendingMovies: ["home", "trending-movies"],
@@ -79,7 +80,75 @@ export const queryKeys = {
       season: (showId, seasonNumber) => ["admin", "tvShows", "seasons", String(showId), String(seasonNumber)],
       subtitles: (episodeId) => ["admin", "tvShows", "subtitles", String(episodeId)],
     },
-    persons: { search: (q) => ["admin", "persons", "search", q] },
+    // Person: filter là MỘT object (gồm page). `search` (ô gợi ý PersonPickerField) tách riêng khỏi `list`.
+    // Doanh thu & đơn hàng. Tham số là object nên key ổn định theo từng bộ lọc / kỳ.
+    // Nội dung file phụ đề đang chỉnh (phim hoặc tập: mediaId khác nhau nên không đụng nhau).
+    subtitleContent: (mediaId, subtitleId) => ["admin", "subtitle-content", String(mediaId), String(subtitleId)],
+    // Thông báo / bản tin do admin phát. Cùng nguồn dữ liệu với trang Tin tức công khai (`announcements.*`).
+    announcements: { all: ["admin", "announcements"], list: ["admin", "announcements", "list"] },
+    // Gói Premium (admin): TẤT CẢ gói kể cả đã tắt bán. Bộ lọc gói của trang Doanh thu dùng chung key này.
+    plans: { all: ["admin", "plans"], list: ["admin", "plans", "list"] },
+    revenue: {
+      all: ["admin", "revenue"],
+      summary: ["admin", "revenue", "summary"],
+      chart: (params) => ["admin", "revenue", "chart", params],
+      orders: (filter) => ["admin", "revenue", "orders", filter],
+    },
+    // Quảng cáo: filter là MỘT object (page, pageSize, search, isActive) → key ổn định.
+    // detail(id) nằm dưới `all` → invalidate ["admin","ads"] làm mới cả danh sách lẫn panel chi tiết.
+    ads: {
+      all: ["admin", "ads"],
+      lists: () => ["admin", "ads", "list"],
+      list: (filter) => ["admin", "ads", "list", filter],
+      detail: (id) => ["admin", "ads", "detail", String(id)],
+    },
+    // Cấu hình lịch phát (Cố định | Ngẫu nhiên): tách khỏi `ads` để sửa 1 quảng cáo không tải lại cấu hình.
+    adScheduleSettings: ["admin", "ad-schedule-settings"],
+    // Đánh giá: danh sách theo đối tượng (phim / show / tập), tách khỏi reply để xoá reply chỉ làm mới đúng phần cần.
+    reviews: {
+      all: ["admin", "reviews"],
+      catalog: (kind) => ["admin", "reviews", "catalog", kind],
+      episodes: (showId) => ["admin", "reviews", "episodes", String(showId)],
+      lists: () => ["admin", "reviews", "list"],
+      list: (target) => ["admin", "reviews", "list", target],
+      repliesOf: (reviewId) => ["admin", "reviews", "replies", String(reviewId)],
+      replies: (reviewId, page) => ["admin", "reviews", "replies", String(reviewId), page],
+    },
+    // Dashboard tổng quan: mỗi nguồn dữ liệu một query riêng → section nào xong trước hiện trước,
+    // lỗi một nguồn không làm trắng cả trang. Nút "Làm mới" chỉ cần invalidate `dashboard.all`.
+    dashboard: {
+      all: ["admin", "dashboard"],
+      movies: ["admin", "dashboard", "movies"],
+      tvShows: ["admin", "dashboard", "tvShows"],
+      movieTotal: ["admin", "dashboard", "movie-total"],
+      tvShowTotal: ["admin", "dashboard", "tvshow-total"],
+      trendingMovies: ["admin", "dashboard", "trending-movies"],
+      trendingShows: ["admin", "dashboard", "trending-shows"],
+      genres: ["admin", "dashboard", "genres"],
+      users: ["admin", "dashboard", "users"],
+      reviews: ["admin", "dashboard", "reviews"],
+      // Thống kê lượt xem: tham số là object nên key ổn định theo từng bộ lọc.
+      viewStats: {
+        all: ["admin", "dashboard", "view-stats"],
+        overview: (params) => ["admin", "dashboard", "view-stats", "overview", params],
+        top: (params) => ["admin", "dashboard", "view-stats", "top", params],
+        genres: (params) => ["admin", "dashboard", "view-stats", "genres", params],
+      },
+    },
+    // Import TMDB: tìm kiếm và preview chỉ đọc, cache theo từ khoá / id.
+    tmdb: {
+      all: ["admin", "tmdb"],
+      search: (kind, query, page) => ["admin", "tmdb", "search", kind, { query, page }],
+      preview: (kind, tmdbId) => ["admin", "tmdb", "preview", kind, String(tmdbId)],
+    },
+    persons: {
+      all: ["admin", "persons"],
+      lists: () => ["admin", "persons", "list"],
+      list: (filter) => ["admin", "persons", "list", filter],
+      detail: (id) => ["admin", "persons", "detail", String(id)],
+      searches: () => ["admin", "persons", "search"],
+      search: (q) => ["admin", "persons", "search", q],
+    },
     // Người dùng: filter là MỘT object (gồm page) → key ổn định, prefetch trang kế dùng đúng key này.
     users: {
       all: ["admin", "users"],

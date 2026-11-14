@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, ImageOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axiosInstance from '../../../config/axios';
-import personService from '../../../services/personService';
+import { useUpdatePerson } from '../../../hooks/useAdminPersons';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 
@@ -22,10 +21,12 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
     placeOfBirth: '',
     profileImages: [], // mảng URL ảnh gallery (PersonImage)
   });
-  const [saving, setSaving] = useState(false);
+  const updatePerson = useUpdatePerson(); // vá cache chi tiết + danh sách, làm mới phía người dùng
+  const saving = updatePerson.isPending;
   const [error, setError] = useState('');
   const toast = useToast();
 
+  // Chỉ khởi tạo form khi mở người khác — cập nhật cache nền không ghi đè phần đang sửa.
   useEffect(() => {
     if (person) {
       setForm({
@@ -38,7 +39,8 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
       });
       setError('');
     }
-  }, [person]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person?.id]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -46,7 +48,6 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
       return;
     }
 
-    setSaving(true);
     setError('');
 
     try {
@@ -61,24 +62,22 @@ export default function PersonEditModal({ person, onClose, onSaved }) {
         profileImages, // gửi luôn -> backend sẽ thay toàn bộ ảnh gallery bằng danh sách này
       };
 
-      await personService.updatePerson(person.id, payload);
-      onSaved?.({
-        ...person,
+      const patch = {
         name: form.name.trim(),
         profileUrl: form.profileUrl?.trim(),
         biography: form.biography?.trim(),
         birthday: form.birthday?.trim(),
         placeOfBirth: form.placeOfBirth?.trim(),
         profileImages,
-      });
+      };
+      await updatePerson.mutateAsync({ id: person.id, payload, patch });
+      onSaved?.({ ...person, ...patch });
       toast.success(`Đã lưu "${form.name.trim()}"`);
       onClose();
     } catch (e) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi lưu';
       setError(msg);
       toast.error(msg);
-    } finally {
-      setSaving(false);
     }
   };
 

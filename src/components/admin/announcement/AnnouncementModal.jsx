@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, Megaphone, Edit3, Link as LinkIcon } from 'lucide-react';
-import notificationService from '../../../services/notificationService';
+import { useBroadcastAnnouncement, useUpdateAnnouncement } from '../../../hooks/useAdminAnnouncements';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 const EMPTY_FORM = {
@@ -90,7 +91,10 @@ function LightTextarea({ label, value, onChange, placeholder, rows = 4, error, r
 
 function AnnouncementModal({ open, onClose, onSaved, item = null }) {
   const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const broadcast = useBroadcastAnnouncement(); // tạo / sửa xong tự cập nhật danh sách + trang Tin tức
+  const updateAnn = useUpdateAnnouncement();
+  const saving = broadcast.isPending || updateAnn.isPending;
   const [error, setError] = useState('');
 
   const isEdit = Boolean(item?.id);
@@ -108,7 +112,8 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
       setForm(EMPTY_FORM);
     }
     setError('');
-  }, [item, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, open]);
 
   const set = (key) => (val) => setForm((prev) => ({ ...prev, [key]: val }));
 
@@ -122,7 +127,6 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
       return;
     }
 
-    setSaving(true);
     setError('');
     try {
       const payload = {
@@ -134,17 +138,19 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
       };
 
       if (isEdit) {
-        await notificationService.adminUpdateNotification(item.id, payload);
+        await updateAnn.mutateAsync({ id: item.id, payload });
+        toast.success(`Đã cập nhật thông báo "${payload.title}"`);
         onSaved?.({ ...item, ...payload });
       } else {
-        await notificationService.broadcastNotification(payload);
+        await broadcast.mutateAsync(payload);
+        toast.success(`Đã phát thông báo "${payload.title}"`);
         onSaved?.();
       }
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi lưu thông báo');
-    } finally {
-      setSaving(false);
+      const msg = err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi lưu thông báo';
+      setError(msg);
+      toast.error(msg);
     }
   };
 

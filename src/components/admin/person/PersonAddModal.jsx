@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, UserPlus, Plus, ImageOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import personService from '../../../services/personService';
+import { useCreatePerson } from '../../../hooks/useAdminPersons';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 
@@ -24,7 +24,8 @@ const EMPTY_FORM = {
  */
 export default function PersonAddModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const createPerson = useCreatePerson(); // tạo xong tự lấy lại danh sách + ô gợi ý
+  const saving = createPerson.isPending;
   const [error, setError] = useState('');
   const toast = useToast();
 
@@ -42,7 +43,6 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
       return;
     }
 
-    setSaving(true);
     setError('');
 
     try {
@@ -56,7 +56,7 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
         profileImages: form.profileImages.map(u => u.trim()).filter(Boolean),
       };
 
-      const res = await personService.createPerson(payload);
+      const res = await createPerson.mutateAsync(payload);
       const newId = res?.data?.id ?? res?.id;
 
       toast.success(`Đã tạo "${payload.name}"`);
@@ -66,8 +66,6 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi tạo mới';
       setError(msg);
       toast.error(msg);
-    } finally {
-      setSaving(false);
     }
   };
 

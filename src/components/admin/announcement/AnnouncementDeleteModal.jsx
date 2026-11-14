@@ -2,26 +2,29 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, Trash2, X } from 'lucide-react';
-import notificationService from '../../../services/notificationService';
+import { useDeleteAnnouncement } from '../../../hooks/useAdminAnnouncements';
+import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../../context/adminTokens';
 
 export default function AnnouncementDeleteModal({ item, onClose, onDeleted }) {
-  const [loading, setLoading] = useState(false);
+  const toast = useToast();
+  const deleteAnn = useDeleteAnnouncement(); // xoá xong tự bỏ khỏi danh sách + làm mới trang Tin tức
+  const loading = deleteAnn.isPending;
   const [error, setError] = useState('');
 
   if (!item) return null;
 
   const handleDelete = async () => {
-    setLoading(true);
     setError('');
     try {
-      await notificationService.adminDeleteNotification(item.id);
+      await deleteAnn.mutateAsync(item.id);
+      toast.success(`Đã xóa thông báo "${item.title}"`);
       onDeleted?.(item.id);
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Có lỗi xảy ra khi xóa thông báo này');
-    } finally {
-      setLoading(false);
+      const msg = err?.response?.data?.message || 'Có lỗi xảy ra khi xóa thông báo này';
+      setError(msg);
+      toast.error(msg);
     }
   };
 

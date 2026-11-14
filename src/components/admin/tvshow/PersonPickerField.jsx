@@ -11,7 +11,9 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Plus, User, GripVertical } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import tvShowService from '../../../services/tvShowService';
+import { queryKeys, STALE } from '../../../config/queryKeys';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
 
 let uidSeq = 0;
@@ -35,27 +37,22 @@ function useDebounced(value, delay = 300) {
  */
 function PersonSearchInput({ placeholder, onPick, excludeIds = [] }) {
   const [query, setQuery]   = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [open, setOpen]     = useState(false);
   const debouncedQuery = useDebounced(query, 300);
   const boxRef = useRef(null);
 
-  useEffect(() => {
-    const q = debouncedQuery.trim();
-    if (q.length < 2) { setResults([]); return; }
-    let cancelled = false;
-    setLoading(true);
-    tvShowService.searchPersons(q)
-      .then(res => {
-        if (cancelled) return;
-        const list = res?.data ?? res ?? [];
-        setResults(Array.isArray(list) ? list : []);
-      })
-      .catch(() => { if (!cancelled) setResults([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [debouncedQuery]);
+  // Cache theo từ khoá (gõ lại cùng từ là có ngay); request cũ bị huỷ khi từ khoá đổi.
+  const term = debouncedQuery.trim();
+  const { data: results = [], isFetching: loading } = useQuery({
+    queryKey: queryKeys.admin.persons.search(term),
+    queryFn: async () => {
+      const res = await tvShowService.searchPersons(term);
+      const list = res?.data ?? res ?? [];
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: term.length >= 2,
+    staleTime: STALE.admin,
+  });
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -72,7 +69,6 @@ function PersonSearchInput({ placeholder, onPick, excludeIds = [] }) {
   const pick = (person) => {
     onPick(person);
     setQuery('');
-    setResults([]);
     setOpen(false);
   };
 

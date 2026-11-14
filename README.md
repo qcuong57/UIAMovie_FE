@@ -127,15 +127,25 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **Security settings** — change password, enable/disable 2FA
 
 ### 🛡️ Admin Dashboard
-- **Stats overview** — total movies, genres, users, trending count
+- **Dashboard** (`AdminDashboard`) — five tabs, only the open tab mounts and fetches (switching back is served from cache); the sticky header shows the last update time and one **Làm mới** button for everything
+  - **Tổng quan**: four cross-domain KPIs (content, users, reviews, views), the view-trend chart and a **Cần xử lý** list (movies / shows missing poster or video, negative reviews) whose rows jump to the related tab
+  - **Nội dung**: KPIs (movies, shows, Premium, items to complete), genre and show-status bars, and Movies / TV Show cards with Mới nhất / Trending / Thiếu dữ liệu tabs
+  - **Người dùng**: KPIs (total, Premium, active in 24 h, signups this month vs. the **same period** of last month), growth chart, recent / active user lists
+  - **Đánh giá**: KPIs, 6-month trend, star distribution, sentiment, recent reviews (with episode labels such as `S1E3`) and most-reviewed titles
+  - **Lượt xem**: segmented filters (day / week / month / quarter / year × all / movie / TV), KPIs with change versus the previous *completed* period, trend, top content and views by genre
+  - Every card shows its own skeleton, an error with **Thử lại**, or an empty state, so one failing endpoint never blanks the page. KPI grids and layouts are responsive (4 → 2 → 1 columns)
 - **Movie management** — search, edit, delete, and manage video files
 - **TV show management** — table with server-side paging, detail panel, edit / add modals (genres, poster, backdrop gallery, cast picker) and a Seasons tab:
   - Each season is an accordion; episodes load on open and share one cache entry with the season edit modal, so adding, editing or deleting an episode (or pressing **Sync tập mới**) updates the list everywhere with no manual reload
   - Per-episode video upload (progress bar, cancel-safe) / delete, HLS preview through `/playback`, and per-episode **subtitles** (upload, AI translate, AI generate from text, set default, delete). Subtitles still processing are polled from the list query itself (no per-row timers)
 - **TMDB import tool** — search TMDB and one-click import with conflict detection
 - **Video upload panel** — drag-and-drop upload to Cloudinary with real-time progress, cancel support, and quality/type selection
-- **Genre CRUD** — create, edit, delete genres with color-coded cards
-- **Review moderation** — browse and delete reviews per film
+- **Genre CRUD** — create, edit, delete genres with color-coded cards; accent-insensitive search, one shared modal for the form and the delete confirmation (locked while a request is running), data and mutations through `useAdminGenres` / `useGenreMutations`
+- **Review moderation** — pick a film / TV show (and optionally one episode), then browse its reviews:
+  - Sort by user, rating, replies or date (click a column header), search by text or user, relative dates with the exact time in a tooltip, `x.x/10` scores
+  - Select several rows (or the whole page) and delete them in one go; a failed delete stays selected so it can be retried
+  - Replies open inline with their own pagination; stat chips hide when they would show 0
+  - A yellow notice appears when a film has more reviews than the 100 loaded, because search, sorting and the average only cover the loaded part
 - **User management** — view details, edit username/avatar, change role, ban / unban with reason, delete. Premium is granted or revoked through the payment endpoints (`adminGrantSubscription` / `adminRevokeSubscription`), not by editing `subscriptionType`
 - **Plans management** (`AdminPlans`, backed by `AdminPlanController`): one page to create and edit Premium plans and to switch sales on and off
   - KPI row (on sale, off / ended, scheduled, trial plans and the "most popular" plan), status filters with counts (**Đang bán / Chưa mở bán / Hết hạn bán / Đã tắt**) and search by name or plan id
@@ -154,9 +164,12 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
   - KPI cards: total revenue (with average order value), **today**, this month (with month-over-month growth, hidden when last month is 0), active Premium users (and how many expire within 7 days), pending orders, and success rate (with failed vs expired counts)
   - Revenue chart by month or by day, revenue by plan, and a filterable order table (status, plan, gateway, e-mail / order-code search, **created-date range**) paged with the shared `AdminPagination`
   - Free-trial orders (`provider: "free"`, 0đ) are not counted in the revenue figures
+  - Data comes from `useAdminRevenue` hooks: every block auto-refreshes (20 s while orders are pending, 60 s otherwise, paused while the tab is hidden, reloaded on return to the tab). A failed background refresh keeps the numbers already on screen instead of showing an error
   - **Export Excel** (`GET /payments/admin/revenue/export`) uses the current status / plan / gateway / date filters (the search box is not applied). With no status selected only successful orders are exported; successful orders are filtered by **paid date**, all others by **created date**; the backend caps the file at 50,000 rows and returns a readable message when it is exceeded
   - **Time zone**: every date and month is Vietnam time (GMT+7). The UI sends plain `yyyy-MM-dd` dates (inclusive of the last day), computes the default year/month in GMT+7 instead of the browser zone, and renders the UTC timestamps the API returns as Vietnam time
 - **Ads management** (`AdminAds`): searchable / filterable ad list, create / edit / delete (video upload to Cloudinary or an external URL, brand image, skip-after seconds, click-through URL) and one-click active / paused toggle
+  - **Data layer**: the list is server-paginated through `useAdminAds` (search is debounced 400 ms and lives in the query key, `keepPreviousData` so paging never flashes, the page is clamped when the last page disappears). Toggle, delete ad, toggle slot and delete slot are mutations in `useAdMutations`; each refreshes the whole `admin.ads` group, so the table, the detail panel and the slot counts never disagree. One `dialog` state (`{ type, ad }`) decides which modal or panel is open
+  - Delete dialogs (`AdDeleteModal`, `AdSlotDeleteModal`) are thin wrappers around the shared `ConfirmDeleteModal` (`components/admin/common`), which also exports `InfoBox`, `WarnBox` and `IrreversibleNote`; `AdStatusBadge` is the one "Đang chạy / Tạm dừng" badge
   - **Schedule mode banner** at the top shows whether playback is **Fixed** or **Random (YouTube-style)** with a one-line summary of the live parameters, and opens the settings dialog
   - **Schedule settings** (`AdScheduleSettingsModal`): switch Fixed ↔ Random and edit every parameter — pre-roll weights (with probability bars), mid-roll interval (% of duration), jitter, minimum gap, end guard, minimum duration, max mid-rolls, post-roll chance. All values come from the server (no defaults hard-coded in the UI); inline validation, an "unsaved changes" guard and **Khôi phục mặc định** (back to `appsettings`). The right-hand **preview** updates automatically (debounced) from the unsaved form via `POST /ads/schedule-preview`: it shows the ad pool, a real sample schedule from the backend algorithm on a timeline (or the fixed schedule when Fixed is selected), and "Tạo lại" draws another random view. Pick **Tất cả hình thức**, **Phim lẻ** or **Tập phim** to preview
   - **Per-ad schedule** (`AdScheduleModal`, two panes): create a Global Slot or a per-content Override on the left; on the right see the ad's existing slots on a timeline, toggle or delete them in place. Scopes come from `adContentScopes.js`: **Tất cả hình thức** (movies + episodes), **Phim lẻ**, **Tập phim** and **Cả bộ phim bộ** (TvShow = every episode of a show). In Random mode the form collapses to just the scope ("Thêm vào kho ngẫu nhiên") and the right pane shows which formats the ad can be drawn for
@@ -253,7 +266,17 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 | `utils/normalizeDetail.js` | DTO → view-model for Movie / TV Info and Watch pages (one place instead of one block per page) |
 | `hooks/useAdminMovies.js` | Admin → Phim: `useAdminMovies` (bảng), `useAdminMovie` (chi tiết, dùng chung DetailPanel / EditModal / VideoUploadPanel), `useAdminGenres`, `usePersonSearch`, và các mutation `useSetMoviePremium` (optimistic), `useUpdateMovie`, `useCreateMovie`, `useDeleteMovie`, `useUploadMovieVideo`, `useDeleteMovieVideo`. Mọi thay đổi gọi `invalidateCatalog` để cache người dùng (`CATALOG_ROOTS`) tải lại |
 | `hooks/useAdminUsers.js` | Admin → Người dùng, **phân trang server**: `useAdminUsers(filter)` (`filter` = page + search + role + subscriptionType nằm trong key, `keepPreviousData`, prefetch trang kế, `AbortSignal`), `useAdminUser` (chi tiết) và các mutation `useUpdateUser`, `useDeleteUser`, `useChangeUserRole`, `useBanUser`, `useUnbanUser`, `useGrantPremium`, `useRevokePremium` (ghi thẳng vào mọi trang đang cache) |
-| `hooks/useAdminTvShows.js` | Admin → TV Show: `useAdminTvShows(filter)` (phân trang server, `keepPreviousData`, prefetch trang kế), `useAdminTvShowDetail`, `useTvShowSeason(showId, seasonNumber, { enabled })` (một cache cho accordion và modal sửa season) và các mutation `useAddEpisode`, `useUpdateEpisode`, `useDeleteEpisode`, `useUpdateSeason`, `useUploadEpisodeVideo`, `useDeleteEpisodeVideo`, `useDeleteTvShowVideo`, `useSyncTvShowEpisodes`. Mutation vá thẳng vào cache season rồi invalidate catalogue người dùng (`CATALOG_ROOTS`) |
+| `hooks/useAdminTvShows.js` | Admin → TV Show: `useAdminTvShows(filter)` (phân trang server, `keepPreviousData`, prefetch trang kế), `useAdminTvShow` (chi tiết), `useTvShowSeason(showId, seasonNumber, { enabled })` (một cache cho accordion và modal sửa season) và các mutation `useAddEpisode`, `useUpdateEpisode`, `useDeleteEpisode`, `useUpdateSeason`, `useUploadEpisodeVideo`, `useDeleteEpisodeVideo`, `useDeleteTvShowVideo`, `useSyncTvShowEpisodes`, `useDeleteTvShow`. Mutation vá thẳng vào cache season rồi invalidate catalogue người dùng (`CATALOG_ROOTS`) |
+| `hooks/useAdminPersons.js` | Admin → Diễn viên & Đạo diễn, **phân trang server**: `useAdminPersons(filter)` (`filter` = page + pageSize + search nằm trong key, `keepPreviousData`, prefetch trang kế), `useAdminPerson` (chi tiết, DetailPanel dùng), và các mutation `useCreatePerson`, `useUpdatePerson` (vá chi tiết + mọi trang danh sách), `useDeletePerson`. Sửa / xoá làm mới ô gợi ý (`admin.persons.search`) và nhóm catalogue người dùng |
+| `hooks/useAdminPlans.js` | Admin → Gói Premium: `useAdminPlans` (mọi gói, kể cả gói đã tắt bán; cùng cache với bộ lọc gói của trang Doanh thu) và các mutation `useCreatePlan`, `useUpdatePlan`, `useSetPlanActive`, `useGrantSubscription`, `useRevokeSubscription`. Sửa gói làm mới `premium.plans` (trang `/premium`); cấp / thu hồi Premium làm mới người dùng admin và KPI doanh thu |
+| `hooks/useAdminReviews.js` | Admin → Đánh giá: `useReviewCatalog(kind)`, `useShowEpisodes` (queryFn xuất riêng là `fetchShowEpisodes` để Dashboard dùng chung cache), `useAdminReviews({ kind, targetId, episodeId })`, `useReviewReplies(reviewId, page)` (phân trang theo reply gốc, giữ trang cũ khi chuyển trang) và `useDeleteReview`, `useDeleteReviews` (xoá hàng loạt, một review lỗi không chặn các review khác), `useDeleteReply` (giảm `replyCount` ngay, lấy lại reply, làm mới điểm phía người dùng) |
+| `hooks/useAdminDashboard.js` | Admin → Dashboard: mỗi nguồn dữ liệu một query riêng (`admin.dashboard.*`, `STALE.admin`) và bốn hook theo section — `useDashboardContent`, `useDashboardUsers`, `useDashboardReviews` (trả thống kê đã tính + `isPending` / `isError` / `refetch`), `useViewOverview` / `useViewTop` / `useViewGenres` (`keepPreviousData`, đổi bộ lọc không nháy skeleton) — cùng `useDashboardRefresh()` → `{ refresh, isRefreshing, updatedAt }` (invalidate `admin.dashboard.all`). Query phim / show / user / review dùng chung giữa các tab nên chỉ gọi API một lần; nhãn tập của review dùng key `admin.reviews.episodes(showId)`, chung cache với trang Đánh giá |
+| `helper/dashboardStats.js` | Các phép tính của Dashboard ở dạng hàm thuần (không React, không API, dễ test): `buildContentStats`, `buildUserStats`, `buildReviewStats`, `summarizeViews`, `buildEpisodeLabelMap`, `pctChange`, `nf`. Hook bọc chúng bằng `useMemo` |
+| `hooks/useAdminAnnouncements.js` | Admin → Thông báo & Lịch bảo trì: `useAdminAnnouncements` (một danh sách, lọc / sắp xếp / phân trang ở client) và `useBroadcastAnnouncement`, `useUpdateAnnouncement`, `useDeleteAnnouncement`. Sửa / xoá vá cache ngay; cả ba làm mới trang Tin tức công khai (`queryKeys.announcements.all`) |
+| `hooks/useAdminTmdb.js` | Admin → Import TMDB: `useTmdbSearch(kind, query, page)` (cache theo từ khoá + trang), `useTmdbPreview(kind, tmdbId)`, `useImportTmdb(kind)` — import xong làm mới bảng phim / TV show, danh sách diễn viên, thể loại và catalogue người dùng; 409 (đã import) do trang tự xử lý |
+| `hooks/useAdminRevenue.js` | Admin → Doanh thu: `useRevenueSummary`, `useRevenueChart` (biểu đồ + doanh thu theo gói chung một kỳ → một query), `useAdminRevenueOrders(filter)` và `useRevenuePlanOptions`. Polling bằng `refetchInterval` do trang truyền vào (20 giây khi còn đơn pending, 60 giây khi không), tự dừng khi tab ẩn, `refetchOnWindowFocus` thay cho handler `visibilitychange`; refetch nền lỗi thì giữ số cũ. Xuất Excel vẫn gọi `paymentService.adminExportRevenue` trực tiếp (tải file, không cache) |
+| `hooks/useAdminGenres.js` | Admin → Thể loại: `useAdminGenres()` (một query `genres.admin`, chuẩn hoá về mảng) và `useGenreMutations()` → `{ save, remove }` (`save` tạo hoặc sửa theo id). Mọi thay đổi làm mới `genres.all` (ô chọn thể loại, trang chủ) và, khi xoá, cả nhóm `CATALOG_ROOTS` cùng bảng phim admin |
+| `hooks/useAdminAds.js` | Admin → Quảng cáo: `useAdminAds({ page, pageSize, search, isActive })` (phân trang server, `keepPreviousData`), `useAdDetail(id, initial)` (panel chi tiết, dùng dòng của bảng làm dữ liệu ban đầu), `useAdScheduleSettings()` (cấu hình lịch phát, key riêng `admin.adScheduleSettings`), `useSetScheduleSettings()`, `useRefreshAds()` và `useAdMutations()` → `{ toggleActive, deleteAd, toggleSlot, deleteSlot }`. Mỗi mutation làm mới cả nhóm `admin.ads.all` nên bảng, panel chi tiết và số slot luôn khớp nhau. Xuất thêm `isRandomSchedule(settings)` |
 | `hooks/useAdminEpisodeSubtitles.js` | Subtitle của tập: `useEpisodeSubtitles(episodeId)` (một query, tự bật `refetchInterval` khi còn subtitle `processing`, giữ danh sách cũ nếu refetch lỗi) và mutation `useUploadEpisodeSubtitle`, `useTranslateEpisodeSubtitle`, `useAiGenerateEpisodeSubtitle`, xoá, đặt mặc định (optimistic, lỗi thì lấy lại từ server) |
 | `hooks/useDebouncedValue.js` | Debounce giá trị ô tìm kiếm; giá trị đã debounce mới đi vào query key |
 | `hooks/useAdminSubtitles.js` | Subtitle của phim; một query tự refetch 3s khi còn subtitle đang xử lý |
@@ -287,6 +310,11 @@ When the signed-in user changes (sign in, sign out, switch account, also from an
 - Writes are mutations with `onMutate` (optimistic), per-item rollback in `onError`, and `invalidateQueries` in `onSettled` only when no other mutation of the same key is running.
 - Navigate with `useNavigate()`, never `window.location.href`: a full reload throws away the Query cache and the in-memory access token.
 - Personal data lives under the `me` root so it is reset automatically on account change.
+- **Announcements keys**: `admin.announcements.list` holds the admin list; every mutation patches it and invalidates the public `announcements.all` so the news page refreshes. The user-side notification bell has no key in `queryKeys` yet — add it to `refreshPublic` in `useAdminAnnouncements.js` if it uses react-query.
+- **Plans, reviews and TMDB keys**: `admin.plans.list` is the single cache of Premium plans, shared by the Plans page and the Revenue plan filter. `admin.reviews.*` splits catalogue → episodes → review list → replies (`repliesOf(reviewId)` is the prefix of `replies(reviewId, page)`), so deleting a reply refreshes only its own replies. `admin.tmdb.*` is read-only (search / preview), the import itself is a mutation that refreshes the admin tables and public catalogue.
+- **Ads & genres keys**: `admin.ads.*` takes ONE filter object (`page`, `pageSize`, `search`, `isActive`); `detail(id)` sits under `admin.ads.all`, so invalidating `admin.ads.all` refreshes the list and every open detail panel. The schedule settings (Fixed / Random) are a separate key, `admin.adScheduleSettings`, so editing one ad never refetches them. `genres.admin` shares the `genres` root with the public picker, so a genre change refreshes both. **Every key used by a query must exist in `queryKeys.js`**: a missing group makes `PersistQueryClientProvider` crash with `Cannot read properties of undefined (reading '0')`.
+- **Dashboard keys** `admin.dashboard.*` (movies, tvShows, totals, trending, genres, users, reviews, `viewStats.{overview,top,genres}(params)`): one query per source, with `viewStats` params as ONE object. `admin.dashboard.all` is the only thing the **Làm mới** button invalidates; queries of tabs that are not open are just marked stale and load when the tab opens. These keys are **not** invalidated by admin movie / show / review mutations, so the Dashboard catches up through `STALE.admin` (30 s) on the next visit; add `invalidateQueries({ queryKey: queryKeys.admin.dashboard.all })` to a mutation if it must be instant. Derived numbers belong in `helper/dashboardStats.js`, never in the component.
+- **Revenue keys** `admin.revenue.*` take an object (period or filter, page included), so every period / filter already viewed reopens instantly from cache. Polling is a `refetchInterval` passed in by the page, not a hand-written `setInterval`.
 - **Admin keys** live under the `admin` root (not in `PUBLIC_QUERY_ROOTS`), so they reset on account change. List filters are ONE object (page included) so prefetching the next page uses the exact key of the visible query. `admin.tvShows.seasons(showId)` is a **prefix** of `season(showId, n)`: invalidate or patch it to hit every season of a show.
 - Admin mutations **patch the cache first** (set / remove the row in every cached page), then call `invalidateCatalog` so the public caches in `CATALOG_ROOTS` reload. Modals initialise their form only when the edited entity changes, never when the cache refreshes, so a background refetch cannot overwrite what the admin is typing.
 - Import `queryKeys` from `config/queryKeys` everywhere (there is no `lib/queryKeys`).
@@ -342,8 +370,13 @@ src/
 │   │   ├── user/       # UserDetailPanel, UserEditModal
 │   │   ├── tvshow/     # TvShowDetailPanel, SeasonEpisodeFields (season / episode modals),
 │   │   │               # EpisodeSubtitlePanel, GenreAndImageFields, PersonPickerField
+│   │   ├── dashboard/  # Admin dashboard: Overview / Content / Users / Reviews / ViewStats sections,
+│   │   │               # Card (loading / error / empty states) + Paginated, StatCard + KpiGrid,
+│   │   │               # ChartComponents (HBarChart, GenreDonut), DashboardPrimitives (skeleton,
+│   │   │               # Segmented, layout CSS), ContentCard, ReviewChartCards, UserChartCards, rows
 │   │   └── ads/        # AdScheduleModal, AdScheduleSettingsModal, AdTimeline,
-│   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal, AdDetailPanel
+│   │                   # adContentScopes, AdCreateModal, AdEditModal, AdDeleteModal,
+│   │                   # AdSlotDeleteModal, AdDetailPanel, AdStatusBadge
 │   ├── common/         # BackButton, Pagination, PageError, DetailPageError, ErrorBoundary,
 │   │                   # AdminPagination, SeeAllButton, Toast
 │   ├── home/           # HeroBanner, GenreSection, MovieRow,
@@ -378,6 +411,11 @@ src/
 │   ├── useFavorites.js # Favorites: read + optimistic toggle
 │   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
 │   ├── useAdminMovies.js / useAdminUsers.js / useAdminTvShows.js # Admin tables + mutations
+│   ├── useAdminPersons.js / useAdminRevenue.js # Admin persons + revenue dashboard
+│   ├── useAdminPlans.js / useAdminReviews.js / useAdminTmdb.js # Admin plans, reviews, TMDB import
+│   ├── useAdminAnnouncements.js # Admin announcements (broadcast / edit / delete)
+│   ├── useAdminGenres.js / useAdminAds.js # Admin genres, ads (list, detail, schedule settings, mutations)
+│   ├── useAdminDashboard.js # Admin dashboard queries + refresh
 │   ├── useAdminSubtitles.js / useAdminEpisodeSubtitles.js # Movie / episode subtitles
 │   ├── useMinimumLoading.js # Minimum LoadingScreen time
 │   └── usePagination.js# Client & server-side pagination hook
@@ -409,7 +447,8 @@ src/
 │   └── queryHelpers.js # unwrapList, unwrapOne, parsePaged, ignoreMissingEndpoint
 │
 ├── helper/
-│   └── format.js       # fmtVnd and other formatters
+│   ├── format.js       # fmtVnd and other formatters
+│   └── dashboardStats.js # Pure dashboard calculations (stats, trends, labels)
 │
 └── services/           # authService, movieService, tvShowService, genreService,
                         # personService, reviewService,
@@ -483,7 +522,7 @@ VITE_API_URL=http://localhost:5000/api
 
 ### As an Admin
 1. Log in with an Admin-role account — you will see an **Admin** link in the navbar
-2. Use the **Dashboard** for a quick system overview
+2. Use the **Dashboard** for a system overview: start on **Tổng quan**, follow **Cần xử lý** to the tab with work to do, switch tabs for content / users / reviews / views, and press **Làm mới** to reload everything
 3. Go to **Movies → TMDB Search** to search and import new films
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
@@ -586,8 +625,9 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
 - [x] ~~Migrate Home, Browse, Search, Favorites, Movie / TV Info + Watch pages, Coming Soon and Announcements to TanStack Query~~ (done)
-- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the remaining admin tables (Movies, Users and TV Shows done: `queryKeys.admin.*`; Dashboard, Genres, Reviews, Persons, Plans, Revenue, Ads still to do)
-- [ ] **Admin TV Show leftovers** — `PersonPickerField` still calls `searchPersons` directly (move it to `usePersonSearch` + `useDebouncedValue`); two `SubtitleEditorModal` versions exist (`shared/SubtitleContentEditor` vs `tvshow/SubtitleEditorModal`), merge them; the subtitle list must return `status` and `errorMessage` because polling no longer uses `getSubtitleStatus`
+- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the remaining admin tables (Movies, Users, TV Shows, Persons, Revenue, Plans, Reviews, TMDB import, Announcements, Genres, Ads and Dashboard done: `queryKeys.admin.*`)
+- [ ] **Admin TV Show / Person leftovers** — `PersonPickerField` now searches through `useQuery` (`admin.persons.search`) but still has its own local debounce and duplicates `usePersonSearch` in `useAdminMovies.js`: reuse the shared hook + `useDebouncedValue`; two `SubtitleEditorModal` versions exist (`shared/SubtitleContentEditor` vs `tvshow/SubtitleEditorModal`), merge them; the subtitle list must return `status` and `errorMessage` because polling no longer uses `getSubtitleStatus`
+- [ ] **Dashboard follow-ups** — the user total is capped at the 500 users fetched (add a count endpoint, like `getTotalCount` for movies / shows); the Dashboard is not yet invalidated by admin movie / show / review / user mutations (see *Dashboard keys*); the tab is local state, not in the URL; episode labels are resolved only for the latest 100 reviews (`LABEL_SCAN_LIMIT`); `UserRow` / `ReviewRow` still use per-row Framer Motion entrances
 - [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
 - [ ] **Smaller home payloads** — the home page still downloads two 100-item lists only to find trailers and artwork. Add backend filters (for example `hasTrailer=true&pageSize=15`) and put the movie / show title and poster inside the review DTO, which removes the per-review `getMovieById` calls
 - [ ] **Prefetch on intent** — Search / Browse already prefetch the next page; still missing: `prefetchQuery(queryKeys.movies.detail(id))` when a card or search result is hovered / focused (`useMovie` / `useTvShow` share the key)
@@ -595,6 +635,8 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Remove the hidden SePay form** from the DOM after submitting it
 - [ ] **Free-plan card copy** (720p, 1 device) is static; align it with what the backend actually enforces
 - [ ] **Admin plans** — show how many users bought each plan; confirm before switching off a plan that is on sale
+- [ ] **Ads modals → mutations** — `AdCreateModal`, `AdEditModal`, `AdScheduleModal` and `AdScheduleSettingsModal` still call `adService` directly and refresh the cache through callbacks (`onCreated` / `onSaved` / `onScheduled`). Move them to `useMutation` (with upload progress for create / edit) and share the duplicated `Field` / `LightInput` atoms between them
+- [ ] **Genres: reuse `ConfirmDeleteModal`** in `DeleteGenreModal` instead of its own markup
 - [ ] **Ads: list Content Overrides** — the per-ad dialog only lists Global Slots; the API has no endpoint to read Overrides back
 - [ ] **Ads: real runtime for the schedule** — the duration sent to the ad API is the TMDB runtime; re-requesting once the video's real duration is known would also cover titles with an empty runtime
 - [ ] **Video Player** — integrate a full-featured HLS player with quality switching

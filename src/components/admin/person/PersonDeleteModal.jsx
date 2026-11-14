@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import personService from '../../../services/personService';
+import { useDeletePerson } from '../../../hooks/useAdminPersons';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 
@@ -13,16 +13,16 @@ import { useToast } from '../common/Toast';
  *   onDeleted – (id) => void   called after successful delete
  */
 export default function PersonDeleteModal({ person, onClose, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const toast = useToast();
+  const deletePerson = useDeletePerson(); // xoá xong tự dọn cache chi tiết + lấy lại danh sách
+  const deleting = deletePerson.isPending;
 
   const handleDelete = async () => {
     if (!person) return;
-    setDeleting(true);
     setError('');
     try {
-      await personService.deletePerson(person.id);
+      await deletePerson.mutateAsync(person.id);
       toast.success(`Đã xóa "${person.name}"`);
       onDeleted?.(person.id);
       onClose();
@@ -30,8 +30,6 @@ export default function PersonDeleteModal({ person, onClose, onDeleted }) {
       const message = e?.response?.data?.message ?? e?.message ?? 'Có lỗi xảy ra khi xóa';
       setError(message);
       toast.error(message);
-    } finally {
-      setDeleting(false);
     }
   };
 

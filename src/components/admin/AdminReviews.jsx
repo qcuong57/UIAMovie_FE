@@ -1,21 +1,45 @@
 // src/pages/admin/AdminReviews.jsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, AlertTriangle, Star, Search, Film, Tv, Eye, EyeOff, BarChart2, MessageSquare, X, ChevronDown, ChevronUp, CornerDownRight, MessageCircle } from 'lucide-react';
-import reviewService from '../../services/reviewService';
-import movieService  from '../../services/movieService';
-import tvShowService from '../../services/tvShowService';
+import { Trash2, AlertTriangle, Star, Search, Film, Tv, Eye, EyeOff, BarChart2, MessageSquare, X, ChevronDown, ChevronUp, CornerDownRight, MessageCircle, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import {
+  useReviewCatalog, useShowEpisodes, useAdminReviews, useReviewReplies,
+  useDeleteReview, useDeleteReviews, useDeleteReply, REPLY_PAGE_SIZE,
+} from '../../hooks/useAdminReviews';
 import { usePagination } from '../../hooks/usePagination';
 import AdminPagination from '../../components/common/AdminPagination';
 import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
 
 const PAGE_SIZE = 12;
-const REPLY_PAGE_SIZE = 10;   // phân trang theo reply gốc (server clamp tối đa 100)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const avg = (arr, key) =>
   arr.length ? (arr.reduce((s, r) => s + (r[key] ?? 0), 0) / arr.length).toFixed(1) : '—';
+
+// "3 giờ trước" — quét nhanh hơn ngày tuyệt đối; giờ đầy đủ nằm trong tooltip
+const timeAgo = (iso) => {
+  if (!iso) return '—';
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (Number.isNaN(sec)) return '—';
+  if (sec < 60) return 'Vừa xong';
+  const min = sec / 60;
+  if (min < 60) return `${Math.floor(min)} phút trước`;
+  const hr = min / 60;
+  if (hr < 24) return `${Math.floor(hr)} giờ trước`;
+  const day = hr / 24;
+  if (day < 30) return `${Math.floor(day)} ngày trước`;
+  if (day < 365) return `${Math.floor(day / 30)} tháng trước`;
+  return `${Math.floor(day / 365)} năm trước`;
+};
+
+// Giá trị so sánh cho từng cột có thể sắp xếp
+const SORTERS = {
+  date:    (r) => new Date(r.createdAt ?? 0).getTime(),
+  rating:  (r) => r.rating ?? 0,
+  replies: (r) => r.replyCount ?? 0,
+  user:    (r) => (r.userName ?? '').toLowerCase(),
+};
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 const StarRow = ({ rating, max = 10 }) => {
@@ -33,15 +57,41 @@ const StarRow = ({ rating, max = 10 }) => {
       ))}
       <span style={{ fontFamily: FONT, fontSize: 12, color: T.gold, fontWeight: 700, marginLeft: 5 }}>
         {Number(rating).toFixed(1)}
+        <span style={{ color: T.textMuted, fontWeight: 500 }}>/{max}</span>
       </span>
     </div>
+  );
+};
+
+// ── Tiêu đề cột sắp xếp được (aria-sort + bàn phím) ───────────────────────────
+const SortTh = ({ label, sortKey, active, dir, onSort }) => {
+  const Icon = !active ? ChevronsUpDown : dir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <th
+      aria-sort={!active ? 'none' : dir === 'asc' ? 'ascending' : 'descending'}
+      style={{ padding: '12px 18px', textAlign: 'left', borderBottom: `1px solid ${T.border}` }}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, padding: 0,
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: active ? T.text : T.textMuted,
+        }}
+      >
+        {label}
+        <Icon size={12} style={{ opacity: active ? 1 : 0.5 }} />
+      </button>
+    </th>
   );
 };
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
 const SkeletonRow = () => (
   <tr>
-    {[160, 80, 260, 70, 80, 36].map((w, i) => (
+    {[16, 160, 80, 260, 70, 80, 36].map((w, i) => (
       <td key={i} style={{ padding: '14px 18px' }}>
         <div style={{
           width: w, height: 13, borderRadius: 6,
@@ -404,36 +454,22 @@ const SearchableDropdown = ({
 
 // ── Reply panel (admin) ───────────────────────────────────────────────────────
 // Hiển thị reply của 1 review: reply gốc + reply con (lồng 1 cấp), phân trang theo reply gốc.
-const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
+const ReplyPanel = ({ reviewId, accentColor }) => {
   const toast = useToast();
-  const [replies,   setReplies]   = useState([]);
-  const [totalRoot, setTotalRoot] = useState(0);
   const [page,      setPage]      = useState(1);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState('');
   const [delReply,  setDelReply]  = useState(null);
   const [deleting,  setDeleting]  = useState(false);
   const [delError,  setDelError]  = useState('');
 
-  const load = useCallback(async (pageNumber) => {
-    setLoading(true);
-    setError('');
-    try {
-      const res  = await reviewService.getReplies(reviewId, pageNumber, REPLY_PAGE_SIZE);
-      const data = res?.data;
-      const incoming = data?.replies ?? [];
-      setTotalRoot(data?.totalRootReplies ?? 0);
-      setReplies([...incoming].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
-      setPage(pageNumber);
-    } catch (e) {
-      console.error(e);
-      setError(e?.response?.data?.message ?? 'Không tải được danh sách trả lời');
-    } finally {
-      setLoading(false);
-    }
-  }, [reviewId]);
-
-  useEffect(() => { load(1); }, [load]);
+  // Phân trang theo reply gốc; chuyển trang giữ trang cũ trong lúc tải, mở lại trang đã xem có ngay từ cache.
+  const repliesQ = useReviewReplies(reviewId, page);
+  const deleteReplyM = useDeleteReply();
+  const replies   = repliesQ.data?.replies ?? [];
+  const totalRoot = repliesQ.data?.totalRoot ?? 0;
+  const loading   = repliesQ.isPending;
+  const error     = repliesQ.isError && !repliesQ.data
+    ? (repliesQ.error?.response?.data?.message ?? 'Không tải được danh sách trả lời')
+    : '';
 
   const roots    = replies.filter(r => !r.parentReplyId);
   const childrenOf = (id) => replies.filter(r => r.parentReplyId === id);
@@ -443,15 +479,14 @@ const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
     if (!delReply) return;
     setDeleting(true); setDelError('');
     try {
-      await reviewService.adminDeleteReply(delReply.id);
       // Xóa reply gốc thì server xóa luôn các reply con
       const isRoot  = !delReply.parentReplyId;
       const removed = isRoot ? [delReply.id, ...childrenOf(delReply.id).map(c => c.id)] : [delReply.id];
-      onRemoved?.(reviewId, removed.length);
+      // Hook giảm replyCount của review và lấy lại danh sách reply; trang hiện tại hết reply gốc thì lùi 1 trang
+      await deleteReplyM.mutateAsync({ replyId: delReply.id, reviewId, removedCount: removed.length });
       setDelReply(null);
-      // Tải lại để số trang/tổng khớp server; nếu trang hiện tại hết reply gốc thì lùi 1 trang
       const rootsLeft = roots.length - (isRoot ? 1 : 0);
-      load(rootsLeft <= 0 && page > 1 ? page - 1 : page);
+      if (rootsLeft <= 0 && page > 1) setPage(page - 1);
       toast.success(isRoot && removed.length > 1
         ? `Đã xóa trả lời và ${removed.length - 1} phản hồi con`
         : 'Xóa trả lời thành công');
@@ -517,7 +552,7 @@ const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
       ) : error ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontFamily: FONT, fontSize: 12.5, color: T.red }}>{error}</span>
-          <button onClick={() => load(1)} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: accentColor, background: 'none', border: 'none', cursor: 'pointer' }}>Thử lại</button>
+          <button onClick={() => repliesQ.refetch()} style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: accentColor, background: 'none', border: 'none', cursor: 'pointer' }}>Thử lại</button>
         </div>
       ) : roots.length === 0 ? (
         <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>Chưa có trả lời nào</p>
@@ -538,7 +573,7 @@ const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
           totalPages={totalPages}
           total={totalRoot}
           pageSize={REPLY_PAGE_SIZE}
-          onPageChange={load}
+          onPageChange={setPage}
           itemLabel="trả lời gốc"
         />
       )}
@@ -620,12 +655,6 @@ const ReplyPanel = ({ reviewId, accentColor, onRemoved }) => {
 export default function AdminReviews() {
   const toast = useToast();
   const [tab,       setTab]       = useState('movie');   // 'movie' | 'tvshow'
-  const [movies,    setMovies]    = useState([]);
-  const [tvShows,   setTvShows]   = useState([]);
-  const [episodes,  setEpisodes]  = useState([]);        // danh sách tập của tvshow đang chọn
-  const [reviews,   setReviews]   = useState([]);
-  const [loading,       setLoading]       = useState(false);
-  const [loadingEps,    setLoadingEps]    = useState(false);
   const [selId,     setSelId]     = useState('');
   const [selEpId,   setSelEpId]   = useState('');        // '' = show-level, guid = episode cụ thể
   const [search,    setSearch]    = useState('');
@@ -633,68 +662,30 @@ export default function AdminReviews() {
   const [deleteReview, setDeleteReview] = useState(null); // full review object for preview
   const [deleting,    setDeleting]    = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const [totalRev,  setTotalRev]  = useState(0);
+  const delReviewM = useDeleteReview();
+  const bulkDeleteM = useDeleteReviews();
+  const [sortKey,  setSortKey]  = useState('date');
+  const [sortDir,  setSortDir]  = useState('desc');
+  const [selected, setSelected] = useState(() => new Set()); // id các review đang được chọn
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState('');
   const [expandedId, setExpandedId] = useState(null);   // review đang mở panel trả lời
 
-  // ── Catalogue loads ─────────────────────────────────────────────
-  useEffect(() => {
-    movieService.getMovies(1, 200).then(res => {
-      const raw = Array.isArray(res) ? res : res?.items ?? res?.movies ?? res?.data?.items ?? res?.data ?? [];
-      setMovies(raw.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '', 'vi')));
-    }).catch(console.error);
-  }, []);
+  // ── Dữ liệu (react-query): catalogue → tập → đánh giá, mỗi tầng một query theo key ──
+  const movies  = useReviewCatalog('movie').data ?? [];
+  const tvShows = useReviewCatalog('tvshow').data ?? [];
 
-  useEffect(() => {
-    tvShowService.getTvShows(1, 200).then(res => {
-      const raw = Array.isArray(res) ? res : res?.items ?? res?.tvShows ?? res?.data?.items ?? res?.data ?? [];
-      setTvShows(raw.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '', 'vi')));
-    }).catch(console.error);
-  }, []);
+  // Đổi tab → bỏ chọn; đổi show → về đánh giá cấp show; đổi đối tượng → đóng panel trả lời
+  useEffect(() => { setSelId(''); setSelEpId(''); setSearch(''); setExpandedId(null); }, [tab]);
+  useEffect(() => { setSelEpId(''); }, [selId]);
+  useEffect(() => { setExpandedId(null); }, [selId, selEpId, tab]);
 
-  // Reset selection when tab switches
-  useEffect(() => { setSelId(''); setSelEpId(''); setEpisodes([]); setReviews([]); setTotalRev(0); setSearch(''); setExpandedId(null); }, [tab]);
-
-  // ── Load episodes khi chọn tvshow ──────────────────────────────
-  useEffect(() => {
-    if (tab !== 'tvshow' || !selId) { setEpisodes([]); setSelEpId(''); return; }
-    setLoadingEps(true);
-    tvShowService.getEpisodesByTvShow(selId).then(res => {
-      // Hỗ trợ nhiều shape trả về từ tvShowService
-      const raw = res?.data?.episodes
-        ?? res?.data?.items
-        ?? res?.data
-        ?? (Array.isArray(res) ? res : []);
-      // Sắp xếp theo season + episode number nếu có
-      const sorted = [...raw].sort((a, b) => {
-        if (a.seasonNumber !== b.seasonNumber) return (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0);
-        return (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0);
-      });
-      setEpisodes(sorted);
-    }).catch(() => setEpisodes([])).finally(() => setLoadingEps(false));
-    setSelEpId('');
-  }, [selId, tab]);
-
-  // ── Fetch reviews ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!selId) { setReviews([]); setTotalRev(0); return; }
-    setExpandedId(null);
-    setLoading(true);
-    let fetcher;
-    if (tab === 'movie') {
-      fetcher = reviewService.getMovieReviews(selId, 1, 100);
-    } else if (selEpId) {
-      fetcher = reviewService.getEpisodeReviews(selEpId, 1, 100);
-    } else {
-      fetcher = reviewService.getTvShowReviews(selId, 1, 100);
-    }
-
-    fetcher.then(res => {
-      const data = res?.data;
-      const list = data?.reviews ?? data?.items ?? (Array.isArray(data) ? data : []);
-      setReviews(list);
-      setTotalRev(data?.totalCount ?? list.length);
-    }).catch(console.error).finally(() => setLoading(false));
-  }, [selId, selEpId, tab]);
+  const { data: episodes = [], isFetching: loadingEps } = useShowEpisodes(selId, { enabled: tab === 'tvshow' });
+  const reviewsQ = useAdminReviews({ kind: tab, targetId: selId, episodeId: tab === 'tvshow' ? selEpId : '' });
+  const reviews  = reviewsQ.data?.reviews ?? [];
+  const totalRev = reviewsQ.data?.totalCount ?? 0;
+  const loading  = !!selId && reviewsQ.isPending;
 
   // ── Filtering / pagination ──────────────────────────────────────
   const filtered = reviews.filter(r => {
@@ -702,8 +693,66 @@ export default function AdminReviews() {
     const q = search.toLowerCase();
     return r.reviewText?.toLowerCase().includes(q) || r.userName?.toLowerCase().includes(q);
   });
-  const pagination  = usePagination({ total: filtered.length, pageSize: PAGE_SIZE });
-  const pageReviews = pagination.paginate(filtered);
+  // Sắp xếp trên BẢN SAO; cùng giá trị thì giữ thứ tự mới nhất trước
+  const sorted = [...filtered].sort((a, b) => {
+    const va = SORTERS[sortKey](a);
+    const vb = SORTERS[sortKey](b);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb, 'vi') : va - vb;
+    return (sortDir === 'asc' ? cmp : -cmp) || SORTERS.date(b) - SORTERS.date(a);
+  });
+  const pagination  = usePagination({ total: sorted.length, pageSize: PAGE_SIZE });
+  const pageReviews = pagination.paginate(sorted);
+
+  // Đổi sắp xếp / tìm kiếm / đối tượng → về trang 1; đổi đối tượng hoặc từ khoá → bỏ chọn
+  useEffect(() => {
+    pagination.setPage?.(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortKey, sortDir, search, selId, selEpId, tab]);
+  useEffect(() => { setSelected(new Set()); }, [search, selId, selEpId, tab]);
+
+  const handleSort = (key) => {
+    if (key === sortKey) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir(key === 'user' ? 'asc' : 'desc'); }
+  };
+
+  // ── Chọn nhiều ──
+  const pageIds = pageReviews.map(r => r.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
+  const somePageSelected = pageIds.some(id => selected.has(id));
+  const toggleOne = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleAllPage = () => setSelected(prev => {
+    const next = new Set(prev);
+    allPageSelected ? pageIds.forEach(id => next.delete(id)) : pageIds.forEach(id => next.add(id));
+    return next;
+  });
+  const selectedReviews = reviews.filter(r => selected.has(r.id));
+  const selectedReplyTotal = selectedReviews.reduce((n, r) => n + (r.replyCount ?? 0), 0);
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    setBulkError('');
+    try {
+      const { deleted, failed } = await bulkDeleteM.mutateAsync([...selected]);
+      setSelected(new Set(failed.map(f => f.id))); // giữ chọn các review xoá lỗi để thử lại
+      setExpandedId(prev => (prev && deleted.includes(prev) ? null : prev));
+      if (failed.length === 0) {
+        setBulkOpen(false);
+        toast.success(`Đã xóa ${deleted.length} đánh giá`);
+      } else {
+        const msg = `Đã xóa ${deleted.length}, thất bại ${failed.length} đánh giá`;
+        setBulkError(msg);
+        toast.error(msg);
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Xóa thất bại, vui lòng thử lại';
+      setBulkError(msg);
+      toast.error(msg);
+    } finally { setBulkDeleting(false); }
+  };
 
   // ── Delete ──────────────────────────────────────────────────────
   const handleDelete = async () => {
@@ -712,9 +761,7 @@ export default function AdminReviews() {
     setDeleting(true);
     setDeleteError('');
     try {
-      await reviewService.adminDeleteReview(id);
-      setReviews(prev => prev.filter(r => r.id !== id));
-      setTotalRev(prev => prev - 1);
+      await delReviewM.mutateAsync(id); // hook bỏ review khỏi cache và làm mới điểm phía người dùng
       setDeleteId(null);
       setDeleteReview(null);
       setExpandedId(prev => (prev === id ? null : prev));
@@ -726,13 +773,6 @@ export default function AdminReviews() {
       toast.error(msg);
     } finally { setDeleting(false); }
   };
-
-  // ── Reply đã bị xóa → cập nhật replyCount của review ────────────
-  const handleRepliesRemoved = useCallback((reviewId, n) => {
-    setReviews(prev => prev.map(r =>
-      r.id === reviewId ? { ...r, replyCount: Math.max(0, (r.replyCount ?? 0) - n) } : r
-    ));
-  }, []);
 
   // ── Derived stats ───────────────────────────────────────────────
   const spoilerCount = reviews.filter(r => r.isSpoiler).length;
@@ -750,23 +790,18 @@ export default function AdminReviews() {
       <div style={{ marginBottom: 22, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <p style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 3, fontFamily: FONT, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-            Quản lý
+            Quản lý đánh giá · {tab === 'movie' ? 'Phim' : 'TV Show'}
           </p>
           <h2 style={{ fontFamily: FONT_TITLE, fontSize: 23, fontWeight: 700, color: T.text, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 8 }}>
-            Đánh giá
-            {selId && (
-              <span style={{ fontSize: 13.5, fontWeight: 500, color: T.textMuted, letterSpacing: 0, fontFamily: FONT }}>
-                · {selectedTitle}
-                {selEpId && (() => {
-                  const ep = episodes.find(e => e.id === selEpId);
-                  if (!ep) return null;
-                  const sNum = ep.seasonNumber != null ? `S${ep.seasonNumber}` : '';
-                  const eNum = ep.episodeNumber != null ? `E${ep.episodeNumber}` : '';
-                  const prefix = sNum && eNum ? ` · ${sNum}${eNum}` : '';
-                  return <span style={{ color: '#7C3AED' }}>{prefix}</span>;
-                })()}
-              </span>
-            )}
+            {selId ? selectedTitle : (tab === 'movie' ? 'Chọn phim để kiểm duyệt' : 'Chọn TV show để kiểm duyệt')}
+            {selId && selEpId && (() => {
+              const ep = episodes.find(e => e.id === selEpId);
+              if (!ep) return null;
+              const sNum = ep.seasonNumber != null ? `S${ep.seasonNumber}` : '';
+              const eNum = ep.episodeNumber != null ? `E${ep.episodeNumber}` : '';
+              const prefix = sNum && eNum ? `${sNum}${eNum}` : '';
+              return prefix ? <span style={{ fontSize: 13.5, fontWeight: 600, color: '#7C3AED', letterSpacing: 0, fontFamily: FONT }}>· {prefix}</span> : null;
+            })()}
           </h2>
         </div>
 
@@ -854,14 +889,20 @@ export default function AdminReviews() {
         {selId && !loading && reviews.length > 0 && (
           <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-            <StatChip icon={MessageSquare} label={selEpId ? 'Đánh giá tập này' : 'Tổng đánh giá'} value={totalRev}        accent={accentColor} />
-            <StatChip icon={BarChart2}    label="Đang hiển thị"                                    value={filtered.length} accent={accentColor} />
-            <StatChip icon={Star}         label="Điểm trung bình"                                  value={avgRating}       accent={T.gold}      />
-            <StatChip icon={CornerDownRight} label="Lượt trả lời"                                   value={totalReplies}    accent={accentColor} />
-            <StatChip icon={EyeOff}       label="Có spoiler"                                        value={spoilerCount}    accent={T.red}       />
+            <StatChip icon={MessageSquare} label={selEpId ? 'Đánh giá tập này' : 'Tổng đánh giá'} value={totalRev}  accent={accentColor} />
+            <StatChip icon={Star}          label="Điểm trung bình"                                  value={avgRating} accent={T.gold}      />
+            {search.trim() && <StatChip icon={BarChart2} label="Khớp tìm kiếm" value={filtered.length} accent={accentColor} />}
+            {totalReplies > 0 && <StatChip icon={CornerDownRight} label="Lượt trả lời" value={totalReplies} accent={accentColor} />}
+            {spoilerCount > 0 && <StatChip icon={EyeOff} label="Có spoiler" value={spoilerCount} accent={T.red} />}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {selId && !loading && totalRev > reviews.length && (
+        <p style={{ fontFamily: FONT, fontSize: 12, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 9, padding: '8px 12px', margin: '-8px 0 16px' }}>
+          Mới tải {reviews.length}/{totalRev} đánh giá — tìm kiếm, sắp xếp và điểm trung bình chỉ áp dụng cho phần đã tải.
+        </p>
+      )}
 
       {/* ── Empty state ── */}
       {!selId && (
@@ -889,8 +930,8 @@ export default function AdminReviews() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: T.surfaceAlt }}>
-                {['Người dùng', 'Đánh giá', 'Nội dung', 'Trả lời', 'Ngày', ''].map(h => (
-                  <th key={h} style={{ padding: '12px 18px', textAlign: 'left', fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>{h}</th>
+                {['', 'Người dùng', 'Đánh giá', 'Nội dung', 'Trả lời', 'Ngày', ''].map((h, i) => (
+                  <th key={i} style={{ padding: '12px 18px', textAlign: 'left', fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -906,6 +947,34 @@ export default function AdminReviews() {
         <motion.div key={`table-${tab}-${selId}`}
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}
           style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
+          {selected.size > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
+              background: accentColor + '12', borderBottom: `1px solid ${T.border}`,
+            }}>
+              <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.text }}>
+                Đã chọn {selected.size} đánh giá
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelected(new Set())}
+                style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: T.textSub, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Bỏ chọn
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBulkError(''); setBulkOpen(true); }}
+                style={{
+                  marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', borderRadius: 8, background: '#DC2626', border: '1px solid transparent',
+                  color: 'white', fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <Trash2 size={13} /> Xóa {selected.size} đánh giá
+              </button>
+            </div>
+          )}
           {filtered.length === 0 ? (
             <div style={{ padding: '60px 0', textAlign: 'center' }}>
               <Search size={24} color={T.textMuted} style={{ margin: '0 auto 10px', opacity: 0.35 }} />
@@ -915,14 +984,22 @@ export default function AdminReviews() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: T.surfaceAlt }}>
-                  {['Người dùng', 'Đánh giá', 'Nội dung', 'Trả lời', 'Ngày', ''].map(h => (
-                    <th key={h} style={{
-                      padding: '12px 18px', textAlign: 'left',
-                      fontFamily: FONT, fontSize: 11, fontWeight: 600,
-                      color: T.textMuted, letterSpacing: '0.06em',
-                      textTransform: 'uppercase', borderBottom: `1px solid ${T.border}`,
-                    }}>{h}</th>
-                  ))}
+                  <th style={{ padding: '12px 0 12px 18px', width: 18, borderBottom: `1px solid ${T.border}` }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Chọn tất cả đánh giá trong trang"
+                      checked={allPageSelected}
+                      ref={el => { if (el) el.indeterminate = somePageSelected && !allPageSelected; }}
+                      onChange={toggleAllPage}
+                      style={{ accentColor, cursor: 'pointer', width: 15, height: 15 }}
+                    />
+                  </th>
+                  <SortTh label="Người dùng" sortKey="user"    active={sortKey === 'user'}    dir={sortDir} onSort={handleSort} />
+                  <SortTh label="Đánh giá"   sortKey="rating"  active={sortKey === 'rating'}  dir={sortDir} onSort={handleSort} />
+                  <th style={{ padding: '12px 18px', textAlign: 'left', fontFamily: FONT, fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>Nội dung</th>
+                  <SortTh label="Trả lời"    sortKey="replies" active={sortKey === 'replies'} dir={sortDir} onSort={handleSort} />
+                  <SortTh label="Ngày"       sortKey="date"    active={sortKey === 'date'}    dir={sortDir} onSort={handleSort} />
+                  <th style={{ borderBottom: `1px solid ${T.border}` }} />
                 </tr>
               </thead>
               <tbody>
@@ -932,10 +1009,21 @@ export default function AdminReviews() {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.025 }}
-                    style={{ borderBottom: `1px solid ${T.border}`, transition: 'background 0.12s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    style={{ borderBottom: `1px solid ${T.border}`, transition: 'background 0.12s', background: selected.has(r.id) ? accentColor + '0D' : 'transparent' }}
+                    onMouseEnter={e => e.currentTarget.style.background = selected.has(r.id) ? accentColor + '16' : T.surfaceHov}
+                    onMouseLeave={e => e.currentTarget.style.background = selected.has(r.id) ? accentColor + '0D' : 'transparent'}
                   >
+                    {/* Select */}
+                    <td style={{ padding: '13px 0 13px 18px', width: 18 }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Chọn đánh giá của ${r.userName ?? 'người dùng'}`}
+                        checked={selected.has(r.id)}
+                        onChange={() => toggleOne(r.id)}
+                        style={{ accentColor, cursor: 'pointer', width: 15, height: 15 }}
+                      />
+                    </td>
+
                     {/* User */}
                     <td style={{ padding: '13px 18px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -988,6 +1076,7 @@ export default function AdminReviews() {
                         <button
                           onClick={() => setExpandedId(prev => (prev === r.id ? null : r.id))}
                           title={expandedId === r.id ? 'Ẩn trả lời' : 'Xem trả lời'}
+                          aria-expanded={expandedId === r.id}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
@@ -1009,8 +1098,11 @@ export default function AdminReviews() {
 
                     {/* Date */}
                     <td style={{ padding: '13px 18px', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>
-                        {r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '—'}
+                      <span
+                        title={r.createdAt ? new Date(r.createdAt).toLocaleString('vi-VN') : undefined}
+                        style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}
+                      >
+                        {timeAgo(r.createdAt)}
                       </span>
                     </td>
 
@@ -1019,15 +1111,16 @@ export default function AdminReviews() {
                       <button
                         onClick={() => { setDeleteReview(r); setDeleteId(r.id); setDeleteError(''); }}
                         title="Xóa đánh giá"
+                        aria-label="Xóa đánh giá"
                         style={{
                           width: 32, height: 32, borderRadius: 9,
-                          background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.16)',
-                          cursor: 'pointer', color: T.red,
+                          background: T.surface, border: `1px solid ${T.border}`,
+                          cursor: 'pointer', color: T.textMuted,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           transition: 'all 0.15s',
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.transform = 'scale(1)'; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'; e.currentTarget.style.color = T.red; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMuted; }}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1035,11 +1128,10 @@ export default function AdminReviews() {
                   </motion.tr>
                   {expandedId === r.id && (
                     <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                      <td colSpan={6} style={{ padding: 0 }}>
+                      <td colSpan={7} style={{ padding: 0 }}>
                         <ReplyPanel
                           reviewId={r.id}
                           accentColor={accentColor}
-                          onRemoved={handleRepliesRemoved}
                         />
                       </td>
                     </tr>
@@ -1052,7 +1144,7 @@ export default function AdminReviews() {
         </motion.div>
       )}
 
-      {!loading && selId && filtered.length > PAGE_SIZE && (
+      {!loading && selId && sorted.length > PAGE_SIZE && (
         <AdminPagination {...pagination.props} itemLabel="đánh giá" />
       )}
 
@@ -1174,6 +1266,70 @@ export default function AdminReviews() {
                     ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang xóa...</>
                     : <><Trash2 size={13} /> Xóa đánh giá</>
                   }
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Bulk delete confirm modal ── */}
+      <AnimatePresence>
+        {bulkOpen && (
+          <>
+            <motion.div
+              key="bulk-backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!bulkDeleting) setBulkOpen(false); }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
+            />
+            <motion.div
+              key="bulk-modal"
+              role="dialog" aria-modal="true" aria-label="Xác nhận xóa nhiều đánh giá"
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+              style={{
+                position: 'fixed', inset: 0, margin: 'auto', width: 440, height: 'fit-content', zIndex: 300,
+                background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadowLg,
+                display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden',
+              }}
+            >
+              <div style={{ padding: '18px 20px', borderBottom: `1px solid ${T.border}` }}>
+                <p style={{ fontSize: 11, color: T.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 600 }}>Đánh giá</p>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0, fontFamily: FONT_TITLE }}>Xóa {selected.size} đánh giá?</h2>
+              </div>
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 14px', borderRadius: 10, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  <AlertTriangle size={15} color={T.red} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontFamily: FONT, fontSize: 13, color: '#991B1B', lineHeight: 1.6, margin: 0 }}>
+                    Hành động này <strong>không thể hoàn tác</strong>.
+                    {selectedReplyTotal > 0 && <> Kèm <strong>{selectedReplyTotal} trả lời</strong> của các đánh giá này.</>}
+                  </p>
+                </div>
+                {bulkError && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', fontFamily: FONT, fontSize: 12.5, color: T.red }}>
+                    {bulkError}
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  onClick={() => setBulkOpen(false)}
+                  disabled={bulkDeleting}
+                  style={{ padding: '8px 16px', borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: bulkDeleting ? 'not-allowed' : 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub, opacity: bulkDeleting ? 0.6 : 1 }}
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  style={{ padding: '8px 18px', borderRadius: 8, background: bulkDeleting ? 'rgba(220,38,38,0.5)' : '#DC2626', border: '1px solid transparent', cursor: bulkDeleting ? 'not-allowed' : 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  {bulkDeleting
+                    ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} /> Đang xóa...</>
+                    : <><Trash2 size={13} /> Xóa {selected.size} đánh giá</>}
                 </button>
               </div>
             </motion.div>

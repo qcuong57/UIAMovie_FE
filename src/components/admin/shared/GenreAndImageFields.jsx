@@ -2,9 +2,10 @@
 // Ô chọn thể loại (multi-select) và gallery ảnh backdrop, dùng chung cho
 // MovieAddModal & MovieEditModal.
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload, X, ImageOff, Youtube, FileVideo, Trash2 } from 'lucide-react';
 import movieService from '../../../services/movieService';
+import { useGenreOptions, useUploadAdminImage } from '../../../hooks/useAdminUploads';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
 
 // ── Chọn thể loại ────────────────────────────────────────────────────────────
@@ -14,22 +15,9 @@ import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
  *   onChange – (nextArray) => void
  */
 export function GenrePickerField({ value = [], onChange }) {
-  const [genres, setGenres]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    movieService.getGenres()
-      .then(res => {
-        if (cancelled) return;
-        const list = res?.data ?? res ?? [];
-        setGenres(Array.isArray(list) ? list : []);
-      })
-      .catch(() => { if (!cancelled) setError('Không tải được danh sách thể loại'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+  // Thể loại cache một lần cho mọi form: mở Thêm / Sửa lần sau không phải chờ tải lại.
+  const { data: genres = [], isPending: loading, isError } = useGenreOptions(movieService);
+  const error = isError ? 'Không tải được danh sách thể loại' : '';
 
   const toggle = (id) => {
     onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id]);
@@ -96,23 +84,21 @@ export function GenrePickerField({ value = [], onChange }) {
  *   onChange  – (nextUrl) => void
  */
 export function PosterField({ label, imageType = 'poster', value = '', onChange }) {
-  const [uploading, setUploading] = useState(false);
+  const uploadImage = useUploadAdminImage(movieService);
+  const uploading = uploadImage.isPending;
   const [uploadErr, setUploadErr] = useState('');
   const fileRef = useRef();
 
   const handleFile = async (file) => {
     if (!file) return;
-    setUploading(true);
     setUploadErr('');
     try {
-      const res = await movieService.uploadImage(file, imageType);
-      const url = res?.data?.url ?? res?.url;
+      const url = await uploadImage.mutateAsync({ file, imageType });
       if (url) onChange(url);
       else setUploadErr('Không nhận được URL từ server');
     } catch (e) {
       setUploadErr(e?.response?.data?.message ?? e?.message ?? 'Upload ảnh thất bại');
     } finally {
-      setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
   };
@@ -178,7 +164,8 @@ const nextBdUid = () => `bd_${Date.now()}_${bdUidSeq++}`;
  *   onChange – (nextArray) => void
  */
 export function BackdropGalleryField({ value = [], onChange }) {
-  const [uploading, setUploading] = useState(false);
+  const uploadImage = useUploadAdminImage(movieService);
+  const uploading = uploadImage.isPending;
   const [uploadErr, setUploadErr] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [urlErr, setUrlErr] = useState('');
@@ -186,13 +173,11 @@ export function BackdropGalleryField({ value = [], onChange }) {
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
     setUploadErr('');
     try {
       const uploaded = [];
       for (const file of Array.from(files)) {
-        const res = await movieService.uploadImage(file, 'backdrop');
-        const url = res?.data?.url ?? res?.url;
+        const url = await uploadImage.mutateAsync({ file, imageType: 'backdrop' });
         if (url) uploaded.push({ uid: nextBdUid(), url });
       }
       if (uploaded.length) onChange([...value, ...uploaded]);
@@ -200,7 +185,6 @@ export function BackdropGalleryField({ value = [], onChange }) {
     } catch (e) {
       setUploadErr(e?.response?.data?.message ?? e?.message ?? 'Upload ảnh thất bại');
     } finally {
-      setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
   };

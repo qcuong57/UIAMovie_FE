@@ -1,113 +1,137 @@
 // src/components/admin/dashboard/Card.jsx
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { T, ACCENT, FONT_BODY as FONT, FONT_TITLE } from '../../../context/adminTokens';
-import { Empty, GhostBtn } from './DashboardPrimitives';
+import React, { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { T, ACCENT, FONT_BODY as FONT, FONT_TITLE } from "../../../context/adminTokens";
+import { BlockSkeleton, Empty, ErrorState, GhostBtn } from "./DashboardPrimitives";
 
-// ── Section Card / Panel ───────────────────────────────────────────────────────
-export const Card = ({ title, subtitle, action, children, style, noPad, tabs, activeTab, onTabChange }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 8 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: 0.1, duration: 0.25 }}
-    style={{
-      background: T.surface, borderRadius: 16,
-      border: `1px solid ${T.border}`,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      ...style,
-    }}
-  >
-    {/* Header */}
-    {(title || action) && (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 20px',
-        borderBottom: tabs ? 'none' : `1px solid ${T.border}`,
-        gap: 10, flexShrink: 0,
-      }}>
-        <div>
-          <span style={{
-            fontFamily: FONT_TITLE, fontSize: 13.5, fontWeight: 700,
-            color: T.text, letterSpacing: '-0.01em', display: 'block',
-          }}>
-            {title}
-          </span>
-          {subtitle && (
-            <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>{subtitle}</span>
-          )}
-        </div>
-        {action && !tabs && <div style={{ flexShrink: 0 }}>{action}</div>}
-      </div>
-    )}
+/**
+ * Khung thẻ dùng chung. Tự xử lý 3 trạng thái để section không phải lặp `loading ? <Spin/> : ...`:
+ *   loading → skeleton · error → thông báo + "Thử lại" · isEmpty → trạng thái rỗng · còn lại → children.
+ * Thẻ có `tabs` thì `activeTab`/`onTabChange` do component cha giữ.
+ */
+export const Card = ({
+  title, subtitle, action, tabs, activeTab, onTabChange,
+  loading, error, onRetry, isEmpty, emptyText, skeletonRows = 4,
+  style, children,
+}) => {
+  let body = children;
+  if (loading) body = <BlockSkeleton rows={skeletonRows} />;
+  else if (error) body = <ErrorState onRetry={onRetry} />;
+  else if (isEmpty) body = <Empty text={emptyText} />;
 
-    {/* Tab bar */}
-    {tabs && (
-      <div style={{
-        display: 'flex', gap: 0, padding: '0 20px',
-        borderBottom: `1px solid ${T.border}`, flexShrink: 0,
-        overflowX: 'auto',
-      }}>
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => onTabChange(tab.key)}
-            style={{
-              fontFamily: FONT, fontSize: 13,
-              fontWeight: activeTab === tab.key ? 700 : 400,
-              color: activeTab === tab.key ? ACCENT : T.textMuted,
-              background: 'none', border: 'none', cursor: 'pointer',
-              padding: '11px 18px',
-              borderBottom: `2.5px solid ${activeTab === tab.key ? ACCENT : 'transparent'}`,
-              marginBottom: -1, transition: 'all 0.14s',
-              display: 'flex', alignItems: 'center', gap: 6,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {tab.label}
-            {tab.count != null && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, fontFamily: FONT,
-                background: activeTab === tab.key ? T.accentLight : T.bg,
-                color: activeTab === tab.key ? ACCENT : T.textMuted,
-                padding: '1px 6px', borderRadius: 99,
-              }}>
-                {tab.count}
-              </span>
+  return (
+    <section
+      style={{
+        background: T.surface, borderRadius: 12, border: `1px solid ${T.border}`,
+        display: "flex", flexDirection: "column", overflow: "hidden", ...style,
+      }}
+    >
+      {(title || action) && (
+        <header style={{
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 12, padding: "14px 20px 0",
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{
+              fontFamily: FONT_TITLE, fontSize: 14, fontWeight: 700, color: T.text,
+              letterSpacing: "-0.01em", margin: 0,
+            }}>
+              {title}
+            </h3>
+            {subtitle && (
+              <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.4 }}>
+                {subtitle}
+              </p>
             )}
-          </button>
-        ))}
+          </div>
+          {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+        </header>
+      )}
+
+      {tabs && (
+        <div
+          role="tablist"
+          className="dash-scroll-x"
+          style={{ display: "flex", padding: "6px 20px 0", borderBottom: `1px solid ${T.border}` }}
+        >
+          {tabs.map((tab) => {
+            const on = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className="dash-focus"
+                onClick={() => onTabChange(tab.key)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+                  fontFamily: FONT, fontSize: 13, fontWeight: on ? 600 : 500,
+                  color: on ? ACCENT : T.textMuted,
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "9px 14px 10px", marginBottom: -1,
+                  borderBottom: `2px solid ${on ? ACCENT : "transparent"}`,
+                  transition: "color .13s, border-color .13s",
+                }}
+              >
+                {tab.label}
+                {tab.count != null && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600,
+                    background: on ? T.accentLight : T.bg, color: on ? ACCENT : T.textMuted,
+                    padding: "0 7px", borderRadius: 99, lineHeight: "18px",
+                  }}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div role={tabs ? "tabpanel" : undefined} style={{ padding: tabs ? "6px 20px 14px" : "14px 20px 18px", flex: 1 }}>
+        {body}
       </div>
-    )}
+    </section>
+  );
+};
 
-    {/* Body */}
-    <div style={noPad ? { flex: 1 } : { padding: '16px 20px', flex: 1 }}>
-      {children}
-    </div>
-  </motion.div>
-);
-
-// ── Paginated List ─────────────────────────────────────────────────────────────
-export const Paginated = ({ items, pageSize = 6, renderItem }) => {
+/**
+ * Danh sách phân trang phía client.
+ * renderItem(item, indexInPage, absoluteIndex): chỉ số tuyệt đối dùng cho thứ hạng (#1, #2…),
+ * chỉ số trong trang dùng cho animation — tránh phải `indexOf` trên cả danh sách.
+ * Nên đặt `key` theo tab ở nơi gọi để về trang 1 khi đổi tab.
+ */
+export const Paginated = ({ items, pageSize = 6, renderItem, emptyText }) => {
   const [page, setPage] = useState(0);
-  if (!items?.length) return <Empty />;
-  const totalPages = Math.ceil(items.length / pageSize);
-  const slice = items.slice(page * pageSize, page * pageSize + pageSize);
+  if (!items.length) return <Empty text={emptyText} />;
+
+  const pages = Math.ceil(items.length / pageSize);
+  const current = Math.min(page, pages - 1);
+  const start = current * pageSize;
+  const end = Math.min(start + pageSize, items.length);
 
   return (
     <div>
-      {slice.map(renderItem)}
-      {totalPages > 1 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 8, paddingTop: 12,
-        }}>
-          <GhostBtn onClick={() => setPage(p => Math.max(0, p - 1))}>‹</GhostBtn>
-          <span style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, minWidth: 60, textAlign: 'center' }}>
-            {page + 1} / {totalPages}
+      {items.slice(start, end).map((item, i) => renderItem(item, i, start + i))}
+      {pages > 1 && (
+        <nav
+          aria-label="Phân trang"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12 }}
+        >
+          <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+            {start + 1}–{end} / {items.length}
           </span>
-          <GhostBtn onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}>›</GhostBtn>
-        </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <GhostBtn label="Trang trước" disabled={current === 0} onClick={() => setPage(current - 1)} style={{ padding: "5px 8px" }}>
+              <ChevronLeft size={15} />
+            </GhostBtn>
+            <GhostBtn label="Trang sau" disabled={current === pages - 1} onClick={() => setPage(current + 1)} style={{ padding: "5px 8px" }}>
+              <ChevronRight size={15} />
+            </GhostBtn>
+          </div>
+        </nav>
       )}
     </div>
   );

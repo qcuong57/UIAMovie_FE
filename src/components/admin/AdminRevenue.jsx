@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   BarChart,
@@ -26,7 +27,14 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import paymentService from "../../services/paymentService";
+import paymentService from "../../services/paymentService"; // còn dùng cho adminExportRevenue (tải file, không cache)
+import {
+  useRevenueSummary,
+  useRevenueChart,
+  useAdminRevenueOrders,
+  useRevenuePlanOptions,
+} from "../../hooks/useAdminRevenue";
+import { queryKeys } from "../../config/queryKeys";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { useToast } from "./common/Toast";
 import {
@@ -46,7 +54,6 @@ import AdminPagination from "../../components/common/AdminPagination";
 const PAGE_SIZE = 15;
 const POLL_MS = 20_000; // tự làm mới khi còn đơn pending
 const IDLE_POLL_MS = 60_000; // không còn đơn pending: vẫn kiểm tra thưa để thấy đơn mới
-const STALE_MS = 15_000; // quay lại tab sau ngần này thì tải lại
 const PLAN_COLORS = [ACCENT, ACCENT2, ACCENT3, ACCENT4];
 
 const STATUS = {
@@ -606,50 +613,21 @@ export default function AdminRevenue() {
   const curYear = now.getUTCFullYear();
   const YEARS = Array.from({ length: 5 }, (_, i) => curYear - i);
 
-  // Summary
-  const [summary, setSummary] = useState(null);
-  const [sumLoading, setSumLoading] = useState(true);
-  const [sumError, setSumError] = useState(false);
+  const qc = useQueryClient();
 
   // Chart + by-plan (chung một kỳ)
   const [groupBy, setGroupBy] = useState("month");
   const [year, setYear] = useState(curYear);
   const [month, setMonth] = useState(now.getUTCMonth() + 1);
   const [metric, setMetric] = useState("revenue");
-  const [chart, setChart] = useState(null);
-  const [byPlan, setByPlan] = useState([]);
-  const [chartLoading, setChartLoading] = useState(true);
-  const [chartError, setChartError] = useState(false);
 
   // Orders
-  const [orders, setOrders] = useState([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [ordLoading, setOrdLoading] = useState(true);
-  const [ordError, setOrdError] = useState(false);
   const [fStatus, setFStatus] = useState("");
   const [fPlan, setFPlan] = useState("");
   const [fProvider, setFProvider] = useState("");
   // Danh sách gói cho bộ lọc: lấy động từ admin (kể cả gói đã tắt bán vẫn có đơn cũ)
-  const [planOptions, setPlanOptions] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    paymentService
-      .adminGetPlans()
-      .then((list) => {
-        if (!alive || !Array.isArray(list)) return;
-        setPlanOptions(
-          list.map((p) => ({
-            value: p.planId,
-            label: p.isActive ? p.name : `${p.name} (đã tắt)`,
-          })),
-        );
-      })
-      .catch((e) => console.error(e)); // không chặn trang: bộ lọc gói chỉ trống
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const { data: planOptions = [] } = useRevenuePlanOptions();
   const [searchInput, setSearchInput] = useState("");
   const [fSearch, setFSearch] = useState("");
   const [dateFrom, setDateFrom] = useState(""); // yyyy-MM-dd, ngày VN, lọc theo ngày tạo
@@ -657,121 +635,63 @@ export default function AdminRevenue() {
   const [exporting, setExporting] = useState(false);
   const ordersRef = useRef(null);
 
-  // ── Summary ────────────────────────────────────────────────────────────────
-  const lastRefreshRef = useRef(Date.now());
-  const loadSummary = useCallback(
-    async (silent = false) => {
-      lastRefreshRef.current = Date.now();
-      try {
-        setSummary(await paymentService.adminGetRevenueSummary());
-        setSumError(false);
-      } catch (e) {
-        // Làm mới ngầm thất bại: giữ số cũ, không báo lỗi liên tục mỗi chu kỳ
-        if (silent) return;
-        setSumError(true);
-        report(e, "Không tải được tổng quan doanh thu");
-      } finally {
-        setSumLoading(false);
-      }
-    },
-    [report],
+  // ── Dữ liệu (react-query) ──────────────────────────────────────────────────
+  // Còn đơn pending → 20 giây/lần (IPN có thể tới sau redirect vài giây); không còn → 60 giây/lần.
+  // Đơn pending chuyển thành công làm đổi cả KPI, bảng, biểu đồ và doanh thu theo gói nên cả ba cùng poll.
+  const summaryQ = useRevenueSummary({
+    refetchInterval: (q) =>
+      q.state.data?.pendingOrders ? POLL_MS : IDLE_POLL_MS,
+  });
+  const summary = summaryQ.data ?? null;
+  const pending = summary?.pendingOrders ?? 0; // banner "đơn đang chờ cổng thanh toán"
+  const pollMs = pending ? POLL_MS : IDLE_POLL_MS;
+  // Refetch nền lỗi thì vẫn còn dữ liệu cũ → chỉ coi là lỗi khi chưa có gì để hiện.
+  const sumLoading = summaryQ.isPending;
+  const sumError = summaryQ.isError && !summary;
+
+  const chartQ = useRevenueChart(
+    { groupBy, year, month, range: buildRange(groupBy, year, month) },
+    { refetchInterval: pollMs },
   );
+  const chart = chartQ.data?.chart ?? null;
+  const byPlan = chartQ.data?.byPlan ?? [];
+  const chartLoading = chartQ.isPending;
+  const chartError = chartQ.isError && !chartQ.data;
 
-  useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
-
-  // ── Chart + by-plan (bỏ qua kết quả của request cũ khi đổi kỳ nhanh) ─────────
-  // `silent` = làm mới ngầm (polling): không bật spinner, lỗi thì giữ dữ liệu cũ.
-  // Request ngầm không được chen vào lúc đang tải thật (đổi kỳ) để khỏi làm kẹt spinner hay hiện sai kỳ.
-  const chartReq = useRef(0);
-  const chartBusy = useRef(false);
-  const loadChart = useCallback(
-    async (silent = false) => {
-      if (silent && chartBusy.current) return;
-      const id = ++chartReq.current;
-      if (!silent) {
-        chartBusy.current = true;
-        setChartLoading(true);
-      }
-      try {
-        const params =
-          groupBy === "day" ? { groupBy, year, month } : { groupBy, year };
-        const [c, p] = await Promise.all([
-          paymentService.adminGetRevenueChart(params),
-          paymentService.adminGetRevenueByPlan(
-            buildRange(groupBy, year, month),
-          ),
-        ]);
-        if (id !== chartReq.current) return;
-        setChart(c);
-        setByPlan(Array.isArray(p) ? p : []);
-        setChartError(false);
-      } catch (e) {
-        if (id !== chartReq.current || silent) return;
-        setChartError(true);
-        report(e, "Không tải được biểu đồ doanh thu");
-      } finally {
-        if (id === chartReq.current) {
-          chartBusy.current = false;
-          setChartLoading(false);
-        }
-      }
+  const ordersQ = useAdminRevenueOrders(
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      status: fStatus,
+      planId: fPlan,
+      provider: fProvider,
+      search: fSearch,
+      from: dateFrom,
+      to: dateTo,
     },
-    [groupBy, year, month, report],
+    { refetchInterval: pollMs },
   );
+  const orders = ordersQ.data?.items ?? [];
+  const total = ordersQ.data?.totalCount ?? 0;
+  const ordLoading = ordersQ.isPending;
+  const ordError = ordersQ.isError && !ordersQ.data;
 
-  const loadChartRef = useRef(loadChart);
-  loadChartRef.current = loadChart;
+  // Báo lỗi một lần cho mỗi lần tải thất bại khi chưa có dữ liệu (polling nền lỗi thì im lặng)
   useEffect(() => {
-    loadChart();
-  }, [loadChart]);
-
-  // ── Orders ─────────────────────────────────────────────────────────────────
-  const ordReq = useRef(0);
-  const ordBusy = useRef(false);
-  const loadOrders = useCallback(
-    async (silent = false) => {
-      if (silent && ordBusy.current) return;
-      const id = ++ordReq.current;
-      if (!silent) {
-        ordBusy.current = true;
-        setOrdLoading(true);
-      }
-      try {
-        const res = await paymentService.adminGetOrders({
-          page,
-          pageSize: PAGE_SIZE,
-          ...(fStatus && { status: fStatus }),
-          ...(fPlan && { planId: fPlan }),
-          ...(fProvider && { provider: fProvider }),
-          ...(fSearch && { search: fSearch }),
-          ...(dateFrom && { from: dateFrom }),
-          ...(dateTo && { to: dateTo }),
-        });
-        if (id !== ordReq.current) return;
-        setOrders(res?.items ?? []);
-        setTotal(res?.totalCount ?? 0);
-        setOrdError(false);
-      } catch (e) {
-        if (id !== ordReq.current || silent) return; // làm mới ngầm lỗi: giữ bảng cũ
-        setOrdError(true);
-        report(e, "Không tải được danh sách đơn hàng");
-      } finally {
-        if (id === ordReq.current) {
-          ordBusy.current = false;
-          setOrdLoading(false);
-        }
-      }
-    },
-    [page, fStatus, fPlan, fProvider, fSearch, dateFrom, dateTo, report],
-  );
-
-  const loadOrdersRef = useRef(loadOrders);
-  loadOrdersRef.current = loadOrders;
+    if (sumError)
+      report(summaryQ.error, "Không tải được tổng quan doanh thu");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryQ.errorUpdatedAt, sumError]);
   useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+    if (chartError)
+      report(chartQ.error, "Không tải được biểu đồ doanh thu");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartQ.errorUpdatedAt, chartError]);
+  useEffect(() => {
+    if (ordError)
+      report(ordersQ.error, "Không tải được danh sách đơn hàng");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordersQ.errorUpdatedAt, ordError]);
 
   // Tìm kiếm có debounce, không cần bấm Enter
   useEffect(() => {
@@ -785,42 +705,9 @@ export default function AdminRevenue() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Làm mới ngầm cả KPI, bảng, biểu đồ và doanh thu theo gói (đơn pending chuyển thành công
-  // làm đổi tất cả các khối này, không riêng KPI và bảng).
-  const refreshSilent = useCallback(() => {
-    loadSummary(true);
-    loadOrdersRef.current(true);
-    loadChartRef.current(true);
-  }, [loadSummary]);
-
-  // Còn đơn pending → 20 giây/lần (IPN có thể tới sau redirect vài giây); không còn → 60 giây/lần.
-  const pending = summary?.pendingOrders ?? 0;
-  useEffect(() => {
-    const t = setInterval(
-      () => {
-        if (!document.hidden) refreshSilent();
-      },
-      pending ? POLL_MS : IDLE_POLL_MS,
-    );
-    return () => clearInterval(t);
-  }, [pending, refreshSilent]);
-
-  // Quay lại tab sau một lúc → tải lại ngay thay vì chờ chu kỳ kế tiếp
-  useEffect(() => {
-    const onVisible = () => {
-      if (!document.hidden && Date.now() - lastRefreshRef.current > STALE_MS)
-        refreshSilent();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [refreshSilent]);
-
   // ── Actions ────────────────────────────────────────────────────────────────
-  const refreshAll = () => {
-    loadSummary();
-    loadOrders();
-    loadChart();
-  };
+  const refreshAll = () =>
+    qc.invalidateQueries({ queryKey: queryKeys.admin.revenue.all });
 
   const setFilter = (setter) => (v) => {
     setter(v);
@@ -1033,7 +920,7 @@ export default function AdminRevenue() {
         <Card>
           <ErrorBox
             text="Không tải được tổng quan."
-            onRetry={() => loadSummary()}
+            onRetry={() => summaryQ.refetch()}
           />
         </Card>
       ) : (
@@ -1169,7 +1056,7 @@ export default function AdminRevenue() {
           ) : chartError ? (
             <ErrorBox
               text="Không tải được biểu đồ."
-              onRetry={() => loadChart()}
+              onRetry={() => chartQ.refetch()}
             />
           ) : !hasChartActivity ? (
             <Empty text="Chưa có doanh thu trong kỳ" />
@@ -1479,7 +1366,7 @@ export default function AdminRevenue() {
           ) : ordError ? (
             <ErrorBox
               text="Không tải được danh sách đơn hàng."
-              onRetry={() => loadOrders()}
+              onRetry={() => ordersQ.refetch()}
             />
           ) : orders.length === 0 ? (
             <Empty

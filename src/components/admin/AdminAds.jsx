@@ -1,5 +1,12 @@
 // src/components/admin/AdminAds.jsx
-import React, { useState, useEffect, useCallback } from "react";
+// ─────────────────────────────────────────────────────────────────────────────
+// Quản lý quảng cáo. Cùng khuôn với AdminRevenue / AdminGenres:
+//   - dữ liệu qua react-query (useAdminAds, useAdScheduleSettings); không tự giữ danh sách trong state;
+//   - mọi modal / panel gom vào một biến `dialog` ({ type, ad });
+//   - sau khi tạo / sửa / xoá / đổi lịch chỉ cần refresh() (invalidate nhóm admin.ads).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -9,16 +16,21 @@ import {
   Pencil,
   Trash2,
   Play,
-  ToggleLeft,
-  ToggleRight,
   Clock,
   Link,
-  AlertCircle,
   MonitorPlay,
   CalendarRange,
   Shuffle,
 } from "lucide-react";
-import adService from "../../services/adService";
+import {
+  useAdminAds,
+  useAdMutations,
+  useAdScheduleSettings,
+  useRefreshAds,
+  useSetScheduleSettings,
+  isRandomSchedule,
+} from "../../hooks/useAdminAds";
+import { getApiErrorMessage } from "../../utils/apiError";
 import { useToast } from "./common/Toast";
 import {
   T,
@@ -27,8 +39,8 @@ import {
   ADMIN_GOOGLE_FONTS,
 } from "../../context/adminTokens";
 import { fmtDuration } from "../../helper/format";
-import { usePagination } from "../../hooks/usePagination";
 import AdminPagination from "../common/AdminPagination";
+import AdStatusBadge from "./ads/AdStatusBadge";
 import AdCreateModal from "./ads/AdCreateModal";
 import AdEditModal from "./ads/AdEditModal";
 import AdDeleteModal from "./ads/AdDeleteModal";
@@ -36,57 +48,49 @@ import AdDetailPanel from "./ads/AdDetailPanel";
 import AdScheduleModal from "./ads/AdScheduleModal";
 import AdScheduleSettingsModal from "./ads/AdScheduleSettingsModal";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const PAGE_SIZE = 15;
+const SEARCH_DEBOUNCE_MS = 400;
 
-// ── Spinner ───────────────────────────────────────────────────────────────────
+const FILTER_OPTS = [
+  { label: "Tất cả", value: undefined },
+  { label: "Đang chạy", value: true },
+  { label: "Tạm dừng", value: false },
+];
+
+const COLUMNS = [
+  { label: "Quảng cáo" },
+  { label: "Thời lượng", width: 110 },
+  { label: "Bỏ qua sau", width: 100 },
+  { label: "Trạng thái", width: 130 },
+  { label: "Lịch phát", width: 100 },
+  { label: "Click URL", width: 160 },
+  { label: "", width: 170 },
+];
+
+const CSS = `
+  @keyframes ad-spin { to { transform: rotate(360deg); } }
+  .ad-row { transition: background 0.1s; }
+  .ad-row:hover { background: ${T.surfaceHov}; }
+`;
+
+// ── Small components ──────────────────────────────────────────────────────────
+
 const Spinner = () => (
-  <>
-    <div
-      style={{
-        width: 26,
-        height: 26,
-        borderRadius: "50%",
-        border: `2.5px solid ${T.accentLight}`,
-        borderTopColor: T.accent,
-        animation: "spin 0.75s linear infinite",
-        margin: "0 auto",
-      }}
-    />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-  </>
-);
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-const StatusBadge = ({ isActive }) => (
-  <span
+  <div
     style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 5,
-      padding: "3px 9px",
-      borderRadius: 20,
-      background: isActive ? "#F0FDF4" : T.surfaceAlt,
-      border: `1px solid ${isActive ? "rgba(22,163,74,0.25)" : T.border}`,
-      fontFamily: FONT,
-      fontSize: 11.5,
-      fontWeight: 700,
-      color: isActive ? "#16A34A" : T.textMuted,
+      width: 26,
+      height: 26,
+      borderRadius: "50%",
+      border: `2.5px solid ${T.accentLight}`,
+      borderTopColor: T.accent,
+      animation: "ad-spin 0.75s linear infinite",
+      margin: "0 auto",
     }}
-  >
-    <span
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: isActive ? "#16A34A" : T.textMuted,
-        flexShrink: 0,
-      }}
-    />
-    {isActive ? "Đang chạy" : "Tạm dừng"}
-  </span>
+  />
 );
 
-// ── Th ────────────────────────────────────────────────────────────────────────
 const Th = ({ children, width }) => (
   <th
     style={{
@@ -108,47 +112,38 @@ const Th = ({ children, width }) => (
   </th>
 );
 
-// ── ActionBtn ─────────────────────────────────────────────────────────────────
-function ActionBtn({ children, color, bg, border, title, onClick, disabled }) {
-  return (
-    <motion.button
-      whileHover={{ scale: disabled ? 1 : 1.08 }}
-      whileTap={{ scale: disabled ? 1 : 0.92 }}
-      onClick={onClick}
-      title={title}
-      disabled={disabled}
-      style={{
-        width: 30,
-        height: 30,
-        borderRadius: 7,
-        background: bg,
-        border: `1px solid ${border}`,
-        cursor: disabled ? "not-allowed" : "pointer",
-        color,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "filter 0.15s",
-        opacity: disabled ? 0.5 : 1,
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled) e.currentTarget.style.filter = "brightness(0.93)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.filter = "brightness(1)";
-      }}
-    >
-      {children}
-    </motion.button>
-  );
-}
+const ActionBtn = ({ children, color, bg, border, title, onClick }) => (
+  <motion.button
+    type="button"
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.92 }}
+    onClick={onClick}
+    title={title}
+    aria-label={title}
+    style={{
+      width: 30,
+      height: 30,
+      borderRadius: 7,
+      background: bg,
+      border: `1px solid ${border}`,
+      color,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+  >
+    {children}
+  </motion.button>
+);
 
-// ── GhostBtn ──────────────────────────────────────────────────────────────────
-const GhostBtn = ({ onClick, children, accent, icon: Icon }) => {
+const GhostBtn = ({ onClick, children, accent, icon: Icon, disabled }) => {
   const [hov, setHov] = useState(false);
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -163,7 +158,8 @@ const GhostBtn = ({ onClick, children, accent, icon: Icon }) => {
         border: `1px solid ${accent ? T.accent : hov ? T.borderMed : T.border}`,
         borderRadius: 9,
         padding: "8px 16px",
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.6 : 1,
         outline: "none",
         transition: "all 0.13s",
         whiteSpace: "nowrap",
@@ -175,13 +171,20 @@ const GhostBtn = ({ onClick, children, accent, icon: Icon }) => {
   );
 };
 
-// ── Banner chế độ lịch phát ───────────────────────────────────────────────────
+const Muted = ({ children }) => (
+  <span style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>
+    {children}
+  </span>
+);
+
+/** Banner chế độ lịch phát (Cố định / Ngẫu nhiên) */
 const ScheduleModeBanner = ({ settings, onConfigure }) => {
-  const isRandom = settings.mode === 1 || settings.mode === "Random";
+  const random = isRandomSchedule(settings);
   const weights = settings.preRollWeights ?? [];
-  const wSum = weights.reduce((a, w) => a + w, 0);
-  const avgPre = wSum > 0 ? weights.reduce((a, w, i) => a + i * w, 0) / wSum : 0;
-  const summary = isRandom
+  const weightSum = weights.reduce((a, w) => a + w, 0);
+  const avgPre =
+    weightSum > 0 ? weights.reduce((a, w, i) => a + i * w, 0) / weightSum : 0;
+  const summary = random
     ? `Pre-roll TB ~${avgPre.toFixed(1)} ad · mid-roll mỗi ~${Math.round(settings.midRollIntervalRatio * 100)}% thời lượng (tối đa ${settings.maxMidRolls}) · post-roll ${Math.round(settings.postRollChance * 100)}%`
     : "Phát đúng Global Slot / Override đã gắn cho từng quảng cáo";
   return (
@@ -194,8 +197,8 @@ const ScheduleModeBanner = ({ settings, onConfigure }) => {
         padding: "12px 16px",
         marginBottom: 18,
         borderRadius: 12,
-        background: isRandom ? T.accentLight : T.surface,
-        border: `1px solid ${isRandom ? `${T.accent}44` : T.border}`,
+        background: random ? T.accentLight : T.surface,
+        border: `1px solid ${random ? `${T.accent}44` : T.border}`,
       }}
     >
       <div
@@ -204,115 +207,425 @@ const ScheduleModeBanner = ({ settings, onConfigure }) => {
           height: 34,
           borderRadius: 9,
           flexShrink: 0,
-          background: isRandom ? T.accent : T.surfaceAlt,
+          background: random ? T.accent : T.surfaceAlt,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Shuffle size={16} color={isRandom ? "#fff" : T.textMuted} />
+        <Shuffle size={16} color={random ? "#fff" : T.textMuted} />
       </div>
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
-        <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 700, color: T.text, margin: 0 }}>
-          Chế độ lịch phát: {isRandom ? "Ngẫu nhiên (kiểu YouTube)" : "Cố định"}
+        <p
+          style={{
+            fontFamily: FONT,
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: T.text,
+            margin: 0,
+          }}
+        >
+          Chế độ lịch phát: {random ? "Ngẫu nhiên (kiểu YouTube)" : "Cố định"}
         </p>
-        <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, margin: "2px 0 0" }}>{summary}</p>
+        <p
+          style={{
+            fontFamily: FONT,
+            fontSize: 12,
+            color: T.textMuted,
+            margin: "2px 0 0",
+          }}
+        >
+          {summary}
+        </p>
       </div>
-      <GhostBtn onClick={onConfigure} accent={!isRandom} icon={Shuffle}>
+      <GhostBtn onClick={onConfigure} accent={!random} icon={Shuffle}>
         Cấu hình lịch phát
       </GhostBtn>
     </div>
   );
 };
 
+const FilterTabs = ({ value, onChange }) => (
+  <div
+    style={{
+      display: "flex",
+      gap: 4,
+      background: T.surfaceAlt,
+      borderRadius: 10,
+      padding: 3,
+      border: `1px solid ${T.border}`,
+    }}
+  >
+    {FILTER_OPTS.map((opt) => {
+      const on = value === opt.value;
+      return (
+        <button
+          key={String(opt.value)}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          style={{
+            padding: "5px 14px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            fontFamily: FONT,
+            fontSize: 12.5,
+            fontWeight: on ? 700 : 500,
+            background: on ? T.surface : "transparent",
+            color: on ? T.text : T.textSub,
+            boxShadow: on ? T.shadow : "none",
+            transition: "all 0.15s",
+          }}
+        >
+          {opt.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+// ── Row ───────────────────────────────────────────────────────────────────────
+
+const AdRow = memo(function AdRow({ ad, index, toggling, onToggle, onOpen }) {
+  const slotCount = ad.globalSlotCount;
+  return (
+    <motion.tr
+      className="ad-row"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: Math.min(index, 12) * 0.025 }}
+      style={{ borderBottom: `1px solid ${T.border}` }}
+    >
+      {/* Tên + ảnh nhãn hiệu */}
+      <td style={{ padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            title={ad.brandImageUrl ? "Ảnh nhãn hiệu" : undefined}
+            style={{
+              width: 56,
+              height: 36,
+              borderRadius: 7,
+              overflow: "hidden",
+              flexShrink: 0,
+              background: ad.brandImageUrl
+                ? "#fff"
+                : `linear-gradient(135deg, ${T.accentLight}, ${T.surfaceAlt})`,
+              border: `1px solid ${T.border}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {ad.brandImageUrl ? (
+              <img
+                src={ad.brandImageUrl}
+                alt=""
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  padding: 4,
+                  boxSizing: "border-box",
+                }}
+              />
+            ) : (
+              <Play size={14} color={T.accent} style={{ opacity: 0.7 }} />
+            )}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <p
+              title={ad.title}
+              style={{
+                fontFamily: FONT,
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: T.text,
+                margin: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 280,
+              }}
+            >
+              {ad.title}
+            </p>
+            <p
+              style={{
+                fontFamily: FONT,
+                fontSize: 11,
+                color: T.textMuted,
+                margin: "2px 0 0",
+              }}
+            >
+              ID: {ad.id?.slice(0, 8)}…
+            </p>
+          </div>
+        </div>
+      </td>
+
+      {/* Thời lượng */}
+      <td style={{ padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <Clock size={12} color={T.textMuted} />
+          <span
+            style={{
+              fontFamily: FONT,
+              fontSize: 13,
+              color: T.textSub,
+              fontWeight: 600,
+            }}
+          >
+            {fmtDuration(ad.durationSeconds)}
+          </span>
+        </div>
+      </td>
+
+      {/* Skip */}
+      <td style={{ padding: "12px 16px" }}>
+        {ad.skipAfterSeconds != null ? (
+          <span style={{ fontFamily: FONT, fontSize: 13, color: T.textSub }}>
+            sau {ad.skipAfterSeconds}s
+          </span>
+        ) : (
+          <Muted>Không skip</Muted>
+        )}
+      </td>
+
+      {/* Trạng thái (bấm để bật / tắt) */}
+      <td style={{ padding: "12px 16px" }}>
+        <button
+          type="button"
+          onClick={() => onToggle(ad)}
+          disabled={toggling}
+          title={ad.isActive ? "Bấm để tạm dừng" : "Bấm để kích hoạt"}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: toggling ? "wait" : "pointer",
+            opacity: toggling ? 0.6 : 1,
+          }}
+        >
+          <AdStatusBadge isActive={ad.isActive} />
+        </button>
+      </td>
+
+      {/* Số global slot */}
+      <td style={{ padding: "12px 16px" }}>
+        {slotCount > 0 ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontFamily: FONT,
+              fontSize: 13,
+              color: T.textSub,
+              fontWeight: 600,
+            }}
+          >
+            <CalendarRange size={12} color={T.accent} />
+            {slotCount}
+          </span>
+        ) : (
+          <Muted>—</Muted>
+        )}
+      </td>
+
+      {/* Click URL */}
+      <td style={{ padding: "12px 16px", maxWidth: 160 }}>
+        {ad.clickThroughUrl ? (
+          <a
+            href={ad.clickThroughUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={ad.clickThroughUrl}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontFamily: FONT,
+              fontSize: 11.5,
+              color: T.blue,
+              textDecoration: "none",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 140,
+            }}
+          >
+            <Link size={11} style={{ flexShrink: 0 }} />
+            {ad.clickThroughUrl.replace(/^https?:\/\//, "")}
+          </a>
+        ) : (
+          <Muted>—</Muted>
+        )}
+      </td>
+
+      {/* Thao tác */}
+      <td style={{ padding: "12px 16px" }}>
+        <div style={{ display: "flex", gap: 5 }}>
+          <ActionBtn
+            color={T.textSub}
+            bg={T.surfaceAlt}
+            border={T.border}
+            title="Xem chi tiết"
+            onClick={() => onOpen("detail", ad)}
+          >
+            <Eye size={13} />
+          </ActionBtn>
+          <ActionBtn
+            color={T.accent}
+            bg={T.accentLight}
+            border={`${T.accent}33`}
+            title="Gắn lịch phát"
+            onClick={() => onOpen("schedule", ad)}
+          >
+            <CalendarRange size={13} />
+          </ActionBtn>
+          <ActionBtn
+            color={T.blue}
+            bg="rgba(37,99,235,0.07)"
+            border="rgba(37,99,235,0.2)"
+            title="Chỉnh sửa"
+            onClick={() => onOpen("edit", ad)}
+          >
+            <Pencil size={13} />
+          </ActionBtn>
+          <ActionBtn
+            color={T.red}
+            bg="#FEF2F2"
+            border="rgba(220,38,38,0.2)"
+            title="Xóa"
+            onClick={() => onOpen("delete", ad)}
+          >
+            <Trash2 size={13} />
+          </ActionBtn>
+        </div>
+      </td>
+    </motion.tr>
+  );
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminAds() {
-  const [ads, setAds] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // Bộ lọc
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [filterActive, setFilterActive] = useState(undefined); // undefined=all, true, false
+  const [filterActive, setFilterActive] = useState(undefined); // undefined = tất cả
   const [page, setPage] = useState(1);
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [editAd, setEditAd] = useState(null);
-  const [deleteAd, setDeleteAd] = useState(null);
-  const [detailAd, setDetailAd] = useState(null);
-  const [scheduleAd, setScheduleAd] = useState(null);
-  const [togglingId, setTogglingId] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [schedSettings, setSchedSettings] = useState(null); // cấu hình lịch phát (Fixed | Random)
-  const toast = useToast();
-
-  const fetchAds = useCallback(
-    async (pg = page) => {
-      setLoading(true);
-      try {
-        const res = await adService.getAds({
-          page: pg,
-          pageSize: PAGE_SIZE,
-          search: search.trim(),
-          isActive: filterActive,
-        });
-        const items = Array.isArray(res)
-          ? res
-          : (res?.items ?? res?.data?.items ?? []);
-        const tot = res?.total ?? res?.data?.total ?? items.length;
-        setAds(items);
-        setTotal(tot);
-      } catch (e) {
-        console.error(e);
-        toast.error("Không tải được danh sách quảng cáo");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [page, search, filterActive],
+  // null | { type: "create" | "edit" | "delete" | "detail" | "schedule" | "settings", ad?: Ad }
+  const [dialog, setDialog] = useState(null);
+  const openDialog = useCallback(
+    (type, ad = null) => setDialog({ type, ad }),
+    [],
   );
+  const closeDialog = useCallback(() => setDialog(null), []);
 
-  // Một effect duy nhất: fetchAds đổi identity khi page/search/filter đổi.
-  // Đổi search/filter đã setPage(1) trong handler nên không bị fetch đôi.
+  // ── Dữ liệu ────────────────────────────────────────────────────────────────
+  const refresh = useRefreshAds();
+  const setScheduleSettings = useSetScheduleSettings();
+  const { toggleActive } = useAdMutations();
+  const adsQ = useAdminAds({
+    page,
+    pageSize: PAGE_SIZE,
+    search,
+    isActive: filterActive,
+  });
+  const { data: schedSettings } = useAdScheduleSettings();
+
+  const ads = adsQ.data?.items ?? [];
+  const total = adsQ.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const loading = adsQ.isPending;
+  const loadError = adsQ.isError && !adsQ.data; // refetch nền lỗi thì giữ dữ liệu cũ
+  const togglingId = toggleActive.isPending ? toggleActive.variables?.id : null;
+
+  // Báo lỗi một lần cho mỗi lần tải thất bại khi chưa có dữ liệu
   useEffect(() => {
-    fetchAds();
-  }, [fetchAds]);
-
-  // Cấu hình lịch phát hiện tại → banner đầu trang
-  useEffect(() => {
-    adService.getScheduleSettings().then(setSchedSettings).catch(() => setSchedSettings(null));
-  }, []);
-
-  const handleToggleActive = async (ad) => {
-    setTogglingId(ad.id);
-    try {
-      await adService.updateAd(ad.id, { isActive: !ad.isActive });
-      setAds((prev) =>
-        prev.map((a) => (a.id === ad.id ? { ...a, isActive: !a.isActive } : a)),
+    if (loadError) {
+      console.error(adsQ.error);
+      toastRef.current?.error?.(
+        getApiErrorMessage(adsQ.error, "Không tải được danh sách quảng cáo"),
       );
-      toast.success(
-        ad.isActive ? `Đã tạm dừng "${ad.title}"` : `Đã kích hoạt "${ad.title}"`,
-      );
-    } catch (e) {
-      console.error(e);
-      toast.error("Không thể đổi trạng thái quảng cáo");
-    } finally {
-      setTogglingId(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adsQ.errorUpdatedAt, loadError]);
+
+  // Tìm kiếm có debounce
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const v = searchInput.trim();
+      setSearch((prev) => {
+        if (prev !== v) setPage(1);
+        return v;
+      });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Xoá bớt khiến trang hiện tại vượt quá → lùi về trang cuối
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const changeFilter = (value) => {
+    setFilterActive(value);
+    setPage(1);
   };
 
-  const FILTER_OPTS = [
-    { label: "Tất cả", value: undefined },
-    { label: "Đang chạy", value: true },
-    { label: "Tạm dừng", value: false },
-  ];
+  const handleToggleActive = useCallback(
+    async (ad) => {
+      try {
+        await toggleActive.mutateAsync(ad);
+        toastRef.current?.success?.(
+          ad.isActive
+            ? `Đã tạm dừng "${ad.title}"`
+            : `Đã kích hoạt "${ad.title}"`,
+        );
+      } catch (e) {
+        console.error(e);
+        toastRef.current?.error?.(
+          getApiErrorMessage(e, "Không thể đổi trạng thái quảng cáo"),
+        );
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toggleActive.mutateAsync],
+  );
+
+  const handleCreated = () => {
+    closeDialog();
+    setPage(1);
+    refresh();
+  };
+
+  const handleSaved = () => {
+    closeDialog();
+    refresh();
+  };
+
+  const handleDeleted = () => {
+    closeDialog();
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const dialogAd = (type) => (dialog?.type === type ? dialog.ad : null);
 
   return (
     <div style={{ padding: 28, fontFamily: FONT }}>
       <style>{ADMIN_GOOGLE_FONTS}</style>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{CSS}</style>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -327,11 +640,11 @@ export default function AdminAds() {
           <h2
             style={{
               fontFamily: FONT_TITLE,
-              fontSize: 22,
-              fontWeight: 700,
+              fontSize: 24,
+              fontWeight: 800,
               color: T.text,
               margin: 0,
-              letterSpacing: "-0.02em",
+              letterSpacing: "-0.03em",
             }}
           >
             Quảng cáo
@@ -341,28 +654,34 @@ export default function AdminAds() {
               fontFamily: FONT,
               fontSize: 13,
               color: T.textMuted,
-              marginTop: 4,
+              margin: "4px 0 0",
             }}
           >
             Quản lý video quảng cáo và lịch phát trên nội dung
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <GhostBtn onClick={() => fetchAds()} icon={RefreshCw}>
+          <GhostBtn
+            onClick={refresh}
+            icon={RefreshCw}
+            disabled={adsQ.isFetching}
+          >
             Làm mới
           </GhostBtn>
-          <GhostBtn onClick={() => setShowCreate(true)} accent icon={Plus}>
+          <GhostBtn onClick={() => openDialog("create")} accent icon={Plus}>
             Thêm quảng cáo
           </GhostBtn>
         </div>
       </div>
 
-      {/* ── Chế độ lịch phát (Fixed / Random) ── */}
       {schedSettings && (
-        <ScheduleModeBanner settings={schedSettings} onConfigure={() => setShowSettings(true)} />
+        <ScheduleModeBanner
+          settings={schedSettings}
+          onConfigure={() => openDialog("settings")}
+        />
       )}
 
-      {/* ── Toolbar ── */}
+      {/* Toolbar */}
       <div
         style={{
           display: "flex",
@@ -372,7 +691,6 @@ export default function AdminAds() {
           alignItems: "center",
         }}
       >
-        {/* Search */}
         <div style={{ position: "relative", flex: "1 1 240px", minWidth: 180 }}>
           <Search
             size={14}
@@ -386,12 +704,10 @@ export default function AdminAds() {
             }}
           />
           <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Tìm theo tên quảng cáo..."
+            aria-label="Tìm quảng cáo"
             style={{
               width: "100%",
               height: 38,
@@ -406,63 +722,31 @@ export default function AdminAds() {
               boxSizing: "border-box",
               transition: "border-color 0.15s",
             }}
-            onFocus={(e) => (e.target.style.borderColor = T.borderFocus)}
-            onBlur={(e) => (e.target.style.borderColor = T.border)}
+            onFocus={(e) => {
+              e.target.style.borderColor = T.borderFocus;
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = T.border;
+            }}
           />
         </div>
 
-        {/* Status filter */}
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            background: T.surfaceAlt,
-            borderRadius: 10,
-            padding: 3,
-            border: `1px solid ${T.border}`,
-          }}
-        >
-          {FILTER_OPTS.map((opt) => (
-            <button
-              key={String(opt.value)}
-              onClick={() => {
-                setFilterActive(opt.value);
-                setPage(1);
-              }}
-              style={{
-                padding: "5px 14px",
-                borderRadius: 8,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: FONT,
-                fontSize: 12.5,
-                fontWeight: filterActive === opt.value ? 700 : 500,
-                background:
-                  filterActive === opt.value ? T.surface : "transparent",
-                color: filterActive === opt.value ? T.text : T.textSub,
-                boxShadow: filterActive === opt.value ? T.shadow : "none",
-                transition: "all 0.15s",
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <FilterTabs value={filterActive} onChange={changeFilter} />
 
         <p
           style={{
             fontFamily: FONT,
             fontSize: 12.5,
             color: T.textMuted,
-            marginLeft: "auto",
+            margin: "0 0 0 auto",
             whiteSpace: "nowrap",
           }}
         >
-          {total} quảng cáo
+          {total.toLocaleString("vi-VN")} quảng cáo
         </p>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div
         style={{
           background: T.surface,
@@ -478,36 +762,46 @@ export default function AdminAds() {
           >
             <thead>
               <tr>
-                <Th>Quảng cáo</Th>
-                <Th width={110}>Thời lượng</Th>
-                <Th width={100}>Bỏ qua sau</Th>
-                <Th width={130}>Trạng thái</Th>
-                <Th width={100}>Lịch phát</Th>
-                <Th width={160}>Click URL</Th>
-                <th
-                  style={{
-                    padding: "11px 16px",
-                    borderBottom: `1px solid ${T.border}`,
-                    background: T.surfaceAlt,
-                    width: 170,
-                  }}
-                />
+                {COLUMNS.map((c, i) => (
+                  <Th key={i} width={c.width}>
+                    {c.label}
+                  </Th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={COLUMNS.length}
                     style={{ padding: "64px 0", textAlign: "center" }}
                   >
                     <Spinner />
                   </td>
                 </tr>
+              ) : loadError ? (
+                <tr>
+                  <td
+                    colSpan={COLUMNS.length}
+                    style={{ padding: "48px 0", textAlign: "center" }}
+                  >
+                    <p
+                      style={{
+                        fontFamily: FONT,
+                        fontSize: 13,
+                        color: T.red,
+                        margin: "0 0 12px",
+                      }}
+                    >
+                      Không tải được danh sách quảng cáo.
+                    </p>
+                    <GhostBtn onClick={() => adsQ.refetch()}>Thử lại</GhostBtn>
+                  </td>
+                </tr>
               ) : ads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={COLUMNS.length}
                     style={{ padding: "56px 0", textAlign: "center" }}
                   >
                     <MonitorPlay
@@ -524,375 +818,92 @@ export default function AdminAds() {
                         fontFamily: FONT,
                         fontSize: 13,
                         color: T.textMuted,
+                        margin: 0,
                       }}
                     >
-                      Chưa có quảng cáo nào
+                      {search || filterActive !== undefined
+                        ? "Không có quảng cáo nào khớp bộ lọc"
+                        : "Chưa có quảng cáo nào"}
                     </p>
                   </td>
                 </tr>
               ) : (
                 ads.map((ad, i) => (
-                  <motion.tr
+                  <AdRow
                     key={ad.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.025 }}
-                    style={{
-                      borderBottom: `1px solid ${T.border}`,
-                      transition: "background 0.1s",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = T.surfaceHov)
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = "transparent")
-                    }
-                  >
-                    {/* Ad name + thumbnail */}
-                    <td style={{ padding: "12px 16px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 12,
-                        }}
-                      >
-                        {/* Ảnh nhãn hiệu (fallback: icon video) */}
-                        <div
-                          title={ad.brandImageUrl ? "Ảnh nhãn hiệu" : undefined}
-                          style={{
-                            width: 56,
-                            height: 36,
-                            borderRadius: 7,
-                            overflow: "hidden",
-                            flexShrink: 0,
-                            background: ad.brandImageUrl
-                              ? "#fff"
-                              : `linear-gradient(135deg, ${T.accentLight}, ${T.surfaceAlt})`,
-                            border: `1px solid ${T.border}`,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          {ad.brandImageUrl ? (
-                            <img
-                              src={ad.brandImageUrl}
-                              alt=""
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "contain",
-                                padding: 4,
-                                boxSizing: "border-box",
-                              }}
-                            />
-                          ) : (
-                            <Play
-                              size={14}
-                              color={T.accent}
-                              style={{ opacity: 0.7 }}
-                            />
-                          )}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <p
-                            style={{
-                              fontFamily: FONT,
-                              fontSize: 13.5,
-                              fontWeight: 600,
-                              color: T.text,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              maxWidth: 280,
-                            }}
-                          >
-                            {ad.title}
-                          </p>
-                          <p
-                            style={{
-                              fontFamily: FONT,
-                              fontSize: 11,
-                              color: T.textMuted,
-                              marginTop: 2,
-                            }}
-                          >
-                            ID: {ad.id?.slice(0, 8)}…
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Duration */}
-                    <td style={{ padding: "12px 16px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                        }}
-                      >
-                        <Clock size={12} color={T.textMuted} />
-                        <span
-                          style={{
-                            fontFamily: FONT,
-                            fontSize: 13,
-                            color: T.textSub,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {fmtDuration(ad.durationSeconds)}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Skip after */}
-                    <td style={{ padding: "12px 16px" }}>
-                      {ad.skipAfterSeconds != null ? (
-                        <span
-                          style={{
-                            fontFamily: FONT,
-                            fontSize: 13,
-                            color: T.textSub,
-                          }}
-                        >
-                          sau {ad.skipAfterSeconds}s
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontFamily: FONT,
-                            fontSize: 13,
-                            color: T.textMuted,
-                          }}
-                        >
-                          Không skip
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Status + toggle */}
-                    <td style={{ padding: "12px 16px" }}>
-                      <button
-                        onClick={() => handleToggleActive(ad)}
-                        disabled={togglingId === ad.id}
-                        title={
-                          ad.isActive ? "Bấm để tạm dừng" : "Bấm để kích hoạt"
-                        }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: togglingId === ad.id ? "wait" : "pointer",
-                          padding: 0,
-                          opacity: togglingId === ad.id ? 0.6 : 1,
-                        }}
-                      >
-                        <StatusBadge isActive={ad.isActive} />
-                      </button>
-                    </td>
-
-                    {/* Global slot count */}
-                    <td style={{ padding: "12px 16px" }}>
-                      {ad.globalSlotCount != null ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 5,
-                            fontFamily: FONT,
-                            fontSize: 13,
-                            color: ad.globalSlotCount > 0 ? T.textSub : T.textMuted,
-                            fontWeight: ad.globalSlotCount > 0 ? 600 : 400,
-                          }}
-                        >
-                          <CalendarRange
-                            size={12}
-                            color={ad.globalSlotCount > 0 ? T.accent : T.textMuted}
-                          />
-                          {ad.globalSlotCount > 0 ? ad.globalSlotCount : "—"}
-                        </span>
-                      ) : (
-                        <span style={{ color: T.textMuted, fontSize: 13 }}>—</span>
-                      )}
-                    </td>
-
-                    {/* Click URL */}
-                    <td style={{ padding: "12px 16px", maxWidth: 160 }}>
-                      {ad.clickThroughUrl ? (
-                        <a
-                          href={ad.clickThroughUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                            fontFamily: FONT,
-                            fontSize: 11.5,
-                            color: T.blue,
-                            textDecoration: "none",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            maxWidth: 140,
-                          }}
-                        >
-                          <Link size={11} style={{ flexShrink: 0 }} />
-                          {ad.clickThroughUrl.replace(/^https?:\/\//, "")}
-                        </a>
-                      ) : (
-                        <span style={{ color: T.textMuted, fontSize: 13 }}>
-                          —
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "flex", gap: 5 }}>
-                        <ActionBtn
-                          color={T.textSub}
-                          bg={T.surfaceAlt}
-                          border={T.border}
-                          title="Xem chi tiết"
-                          onClick={() => setDetailAd(ad)}
-                        >
-                          <Eye size={13} />
-                        </ActionBtn>
-                        <ActionBtn
-                          color={T.accent}
-                          bg={T.accentLight}
-                          border={`${T.accent}33`}
-                          title="Gắn lịch phát"
-                          onClick={() => setScheduleAd(ad)}
-                        >
-                          <CalendarRange size={13} />
-                        </ActionBtn>
-                        <ActionBtn
-                          color={T.blue}
-                          bg="rgba(37,99,235,0.07)"
-                          border="rgba(37,99,235,0.2)"
-                          title="Chỉnh sửa"
-                          onClick={() => setEditAd(ad)}
-                        >
-                          <Pencil size={13} />
-                        </ActionBtn>
-                        <ActionBtn
-                          color={T.red}
-                          bg="#FEF2F2"
-                          border="rgba(220,38,38,0.2)"
-                          title="Xóa"
-                          onClick={() => setDeleteAd(ad)}
-                        >
-                          <Trash2 size={13} />
-                        </ActionBtn>
-                      </div>
-                    </td>
-                  </motion.tr>
+                    ad={ad}
+                    index={i}
+                    toggling={togglingId === ad.id}
+                    onToggle={handleToggleActive}
+                    onOpen={openDialog}
+                  />
                 ))
               )}
             </tbody>
           </table>
         </div>
+
+        {!loading && !loadError && totalPages > 1 && (
+          <div
+            style={{
+              borderTop: `1px solid ${T.border}`,
+              padding: "0 18px 16px",
+            }}
+          >
+            <AdminPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              itemLabel="quảng cáo"
+              isFetching={adsQ.isFetching}
+            />
+          </div>
+        )}
       </div>
 
-      {/* ── Pagination ── */}
-      {total > PAGE_SIZE && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 6,
-            marginTop: 18,
-          }}
-        >
-          {Array.from(
-            { length: Math.ceil(total / PAGE_SIZE) },
-            (_, i) => i + 1,
-          ).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                border: `1px solid ${page === p ? T.accent : T.border}`,
-                background: page === p ? T.accent : T.surface,
-                color: page === p ? "#fff" : T.textSub,
-                fontFamily: FONT,
-                fontSize: 13,
-                fontWeight: page === p ? 700 : 500,
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── Modals / panels ── */}
+      {/* Modals / panels */}
       <AdCreateModal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={() => {
-          setShowCreate(false);
-          if (page === 1) fetchAds(1);
-          else setPage(1);
-        }}
+        open={dialog?.type === "create"}
+        onClose={closeDialog}
+        onCreated={handleCreated}
       />
 
       <AdEditModal
-        ad={editAd}
-        onClose={() => setEditAd(null)}
-        onSaved={(updated, opts) => {
-          setAds((prev) =>
-            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)),
-          );
-          setEditAd(null);
-          if (opts?.reload) fetchAds(page); // upload file mới → lấy URL do server sinh
-        }}
+        ad={dialogAd("edit")}
+        onClose={closeDialog}
+        onSaved={handleSaved}
       />
 
       <AdDeleteModal
-        ad={deleteAd}
-        onClose={() => setDeleteAd(null)}
-        onDeleted={(id) => {
-          setAds((prev) => prev.filter((a) => a.id !== id));
-          setTotal((t) => t - 1);
-          setDeleteAd(null);
-        }}
+        ad={dialogAd("delete")}
+        onClose={closeDialog}
+        onDeleted={handleDeleted}
       />
 
       <AdScheduleModal
-        ad={scheduleAd}
-        open={!!scheduleAd}
-        onClose={() => setScheduleAd(null)}
-        onScheduled={() => fetchAds(page)}
-        onOpenSettings={() => {
-          setScheduleAd(null);
-          setShowSettings(true);
-        }}
+        ad={dialogAd("schedule")}
+        open={dialog?.type === "schedule"}
+        onClose={closeDialog}
+        onScheduled={refresh}
+        onOpenSettings={() => openDialog("settings")}
       />
 
       <AdScheduleSettingsModal
-        open={showSettings}
-        onClose={() => setShowSettings(false)}
-        onSaved={setSchedSettings}
+        open={dialog?.type === "settings"}
+        onClose={closeDialog}
+        onSaved={setScheduleSettings}
       />
 
       <AnimatePresence>
-        {detailAd && (
-          <>
+        {dialog?.type === "detail" && (
+          <React.Fragment key="detail">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setDetailAd(null)}
+              onClick={closeDialog}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -902,14 +913,12 @@ export default function AdminAds() {
               }}
             />
             <AdDetailPanel
-              ad={detailAd}
-              onClose={() => setDetailAd(null)}
-              onEdit={(a) => {
-                setDetailAd(null);
-                setEditAd(a);
-              }}
+              ad={dialog.ad}
+              onClose={closeDialog}
+              onEdit={(ad) => openDialog("edit", ad)}
+              onSchedule={(ad) => openDialog("schedule", ad)}
             />
-          </>
+          </React.Fragment>
         )}
       </AnimatePresence>
     </div>

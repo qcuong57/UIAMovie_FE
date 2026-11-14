@@ -14,9 +14,12 @@
 //   - Cấp Premium thủ công: expiredAt BẮT BUỘC và ở tương lai; gói chọn được cả gói đã tắt bán.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import paymentService from '../../services/paymentService';
+import {
+  useAdminPlans, useCreatePlan, useUpdatePlan, useSetPlanActive,
+  useGrantSubscription, useRevokeSubscription,
+} from '../../hooks/useAdminPlans';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { useToast } from './common/Toast';
 import {
@@ -405,6 +408,8 @@ function PlanFormModal({ open, plan, onClose, onSaved, toast }) {
   const isEdit = !!plan;
   const [f, setF] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
+  const createPlan = useCreatePlan();
+  const updatePlan = useUpdatePlan();
   const [saving, setSaving] = useState(false);
   const [showErr, setShowErr] = useState(false);
 
@@ -440,8 +445,8 @@ function PlanFormModal({ open, plan, onClose, onSaved, toast }) {
     setSaving(true);
     try {
       const dto = formToDto(f, isEdit);
-      if (isEdit) await paymentService.adminUpdatePlan(plan.id, dto);
-      else await paymentService.adminCreatePlan(dto);
+      if (isEdit) await updatePlan.mutateAsync({ id: plan.id, dto });
+      else await createPlan.mutateAsync(dto);
       toast?.success?.(isEdit ? 'Đã cập nhật gói' : 'Đã tạo gói mới');
       onSaved();
     } catch (e) {
@@ -556,6 +561,8 @@ function GrantModal({ open, plans, onClose, onDone, toast }) {
   const [userId, setUserId] = useState('');
   const [planId, setPlanId] = useState('');
   const [expiry, setExpiry] = useState('');
+  const grantSub = useGrantSubscription();
+  const revokeSub = useRevokeSubscription();
   const [busy, setBusy] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
@@ -575,7 +582,7 @@ function GrantModal({ open, plans, onClose, onDone, toast }) {
     setBusy(true);
     try {
       // Hết hạn vào cuối ngày đã chọn theo giờ VN
-      await paymentService.adminGrantSubscription({
+      await grantSub.mutateAsync({
         userId: userId.trim(), planId, expiredAt: new Date(`${expiry}T23:59:59+07:00`).toISOString(),
       });
       toast?.success?.('Đã cấp Premium');
@@ -588,7 +595,7 @@ function GrantModal({ open, plans, onClose, onDone, toast }) {
   const revoke = async () => {
     setBusy(true);
     try {
-      await paymentService.adminRevokeSubscription(userId.trim());
+      await revokeSub.mutateAsync(userId.trim());
       toast?.success?.('Đã thu hồi Premium');
       onDone();
     } catch (e) {
@@ -746,9 +753,12 @@ export default function AdminPlans() {
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  // Một cache gói dùng chung với bộ lọc gói của trang Doanh thu; lỗi refetch nền giữ danh sách cũ.
+  const plansQ = useAdminPlans();
+  const plans = plansQ.data ?? [];
+  const loading = plansQ.isPending;
+  const error = plansQ.isError && !plansQ.data;
+  const setPlanActive = useSetPlanActive();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -756,24 +766,10 @@ export default function AdminPlans() {
   const [grantOpen, setGrantOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await paymentService.adminGetPlans();
-      setPlans(Array.isArray(res) ? res : []);
-      setError(false);
-    } catch (e) {
-      console.error(e);
-      if (!silent) {
-        setError(true);
-        toastRef.current?.error?.(getApiErrorMessage(e, 'Không tải được danh sách gói'));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (error) toastRef.current?.error?.(getApiErrorMessage(plansQ.error, 'Không tải được danh sách gói'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansQ.errorUpdatedAt, error]);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (p) => { setEditing(p); setFormOpen(true); };
@@ -781,9 +777,8 @@ export default function AdminPlans() {
   const toggleActive = async (p, v) => {
     setBusyId(p.id);
     try {
-      await paymentService.adminSetPlanActive(p.id, v);
+      await setPlanActive.mutateAsync({ id: p.id, isActive: v });
       toastRef.current?.success?.(v ? `Đã bật bán “${p.name}”` : `Đã tắt bán “${p.name}”`);
-      await load(true);
     } catch (e) {
       toastRef.current?.error?.(getApiErrorMessage(e, 'Không thể đổi trạng thái gói'));
     } finally {
@@ -825,7 +820,7 @@ export default function AdminPlans() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Btn onClick={() => load()}>Làm mới</Btn>
+          <Btn onClick={() => plansQ.refetch()}>Làm mới</Btn>
           <Btn onClick={() => setGrantOpen(true)} disabled={plans.length === 0}>Cấp / thu hồi Premium</Btn>
           <Btn primary onClick={openCreate}>+ Tạo gói mới</Btn>
         </div>
@@ -859,7 +854,7 @@ export default function AdminPlans() {
           {loading ? <Spinner /> : error ? (
             <div style={{ textAlign: 'center', padding: '36px 0' }}>
               <p style={{ fontFamily: FONT, fontSize: 13, color: T.red, margin: '0 0 12px' }}>Không tải được danh sách gói.</p>
-              <Btn onClick={() => load()}>Thử lại</Btn>
+              <Btn onClick={() => plansQ.refetch()}>Thử lại</Btn>
             </div>
           ) : plans.length === 0 ? (
             <div style={{ textAlign: 'center' }}>
@@ -881,7 +876,7 @@ export default function AdminPlans() {
       <PlanFormModal
         open={formOpen} plan={editing} toast={toast}
         onClose={() => setFormOpen(false)}
-        onSaved={() => { setFormOpen(false); load(true); }}
+        onSaved={() => setFormOpen(false)}
       />
       <GrantModal
         open={grantOpen} plans={plans} toast={toast}

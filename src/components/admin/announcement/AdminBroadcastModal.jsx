@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Edit3,
 } from "lucide-react";
-import notificationService from "../../../services/notificationService";
+import { useBroadcastAnnouncement, useUpdateAnnouncement } from "../../../hooks/useAdminAnnouncements";
+import { useToast } from "../common/Toast";
 import { T, FONT_BODY as FONT, FONT_TITLE } from "../../../context/adminTokens";
 
 export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editItem = null }) {
@@ -22,7 +23,10 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
     linkUrl: "",
     type: "admin_announcement",
   });
-  const [loading, setLoading] = useState(false);
+  const toast = useToast();
+  const broadcast = useBroadcastAnnouncement();
+  const updateAnn = useUpdateAnnouncement();
+  const loading = broadcast.isPending || updateAnn.isPending;
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
@@ -46,7 +50,8 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
     }
     setError("");
     setSuccess(false);
-  }, [editItem, isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editItem?.id, isOpen]);
 
   if (!isOpen) return null;
 
@@ -58,7 +63,6 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
     }
 
     try {
-      setLoading(true);
       setError("");
 
       const payload = {
@@ -71,12 +75,13 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
 
       if (editItem?.id) {
         // Cập nhật thông báo đã có
-        await notificationService.adminUpdateNotification(editItem.id, payload);
+        await updateAnn.mutateAsync({ id: editItem.id, payload });
       } else {
         // Tạo và phát thông báo mới
-        await notificationService.broadcastNotification(payload);
+        await broadcast.mutateAsync(payload);
       }
 
+      toast.success(editItem ? `Đã cập nhật thông báo "${payload.title}"` : `Đã phát thông báo "${payload.title}"`);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -84,9 +89,9 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
         onClose();
       }, 700);
     } catch (err) {
-      setError(err?.response?.data?.message || "Có lỗi xảy ra trong quá trình lưu thông báo.");
-    } finally {
-      setLoading(false);
+      const msg = err?.response?.data?.message || "Có lỗi xảy ra trong quá trình lưu thông báo.";
+      setError(msg);
+      toast.error(msg);
     }
   };
 

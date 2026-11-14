@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Calendar, MapPin, Image as ImageIcon, Pencil, Trash2, Hash } from 'lucide-react';
-import personService from '../../../services/personService';
+import { useAdminPerson } from '../../../hooks/useAdminPersons';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 
 /**
@@ -13,43 +13,21 @@ import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../c
  *   onDelete  – (person) => void   optional, mở PersonDeleteModal với person đã load đầy đủ
  */
 export default function PersonDetailPanel({ personId, onClose, onEdit, onDelete }) {
-  const [person, setPerson] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Chi tiết lấy qua cache: mở lại cùng người là có ngay, sửa xong tự cập nhật.
+  const { data: person = null, isPending, error: queryError } = useAdminPerson(personId);
+  const loading = !!personId && isPending;
+  const error = queryError
+    ? (queryError?.response?.data?.message ?? queryError?.message ?? 'Không thể tải thông tin')
+    : '';
   const [imgErr, setImgErr] = useState(false);
   const [activeImage, setActiveImage] = useState(null);
 
+  // Chọn lại ảnh chính khi mở người khác (không reset khi cache đổi nền)
   useEffect(() => {
-    if (!personId) {
-      setPerson(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError('');
     setImgErr(false);
-    setActiveImage(null);
-
-    personService
-      .getPersonById(personId)
-      .then(res => {
-        if (cancelled) return;
-        const data = res?.data ?? res;
-        setPerson(data);
-        setActiveImage(data?.profileUrl ?? data?.profileImages?.[0] ?? null);
-      })
-      .catch(e => {
-        if (cancelled) return;
-        setError(e?.response?.data?.message ?? e?.message ?? 'Không thể tải thông tin');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [personId]);
+    setActiveImage(person?.profileUrl ?? person?.profileImages?.[0] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personId, person?.id]);
 
   const open = !!personId;
 

@@ -2,14 +2,14 @@
 // Panel slide-in dùng chung cho AdminMovies & AdminTvShows
 // 2 tab: 🎬 Phim | 📺 TV Show — mỗi tab có search theo tên + nhập ID riêng
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, Check, Star, Copy, Film, Tv, X, Hash,
   Users, Image, Layers, PlayCircle, ChevronDown, ChevronUp,
   Eye, AlertCircle, Clock
 } from 'lucide-react';
-import axiosInstance from '../../config/axios';
+import { useTmdbSearch, useTmdbPreview, useImportTmdb } from '../../hooks/useAdminTmdb';
 import { T, FONT_BODY as FONT } from '../../context/adminTokens';
 
 const COUNTRY_FLAG = { US:'🇺🇸', KR:'🇰🇷', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -99,20 +99,13 @@ const ImportResultDetail = ({ result, isMovie }) => {
 // ── Preview Panel ─────────────────────────────────────────────────────────────
 // Hiện thị dữ liệu TMDB trước khi import — giúp biết backend trả về gì
 const PreviewPanel = ({ tmdbId, isMovie, onClose }) => {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-
-  React.useEffect(() => {
-    const endpoint = isMovie ? `/movies/tmdb/${tmdbId}` : `/tvshows/tmdb/${tmdbId}`;
-    axiosInstance.get(endpoint)
-      .then(res => {
-        const envelope = res?.data ?? res;
-        setData(envelope?.data ?? envelope);
-      })
-      .catch(e => setError(e?.response?.data?.message ?? 'Không thể tải preview'))
-      .finally(() => setLoading(false));
-  }, [tmdbId, isMovie]);
+  // Preview cache theo id: mở lại cùng phim / show là có ngay
+  const previewQ = useTmdbPreview(isMovie ? 'movie' : 'tv', tmdbId);
+  const data    = previewQ.data ?? null;
+  const loading = previewQ.isPending;
+  const error   = previewQ.isError
+    ? (previewQ.error?.response?.data?.message ?? 'Không thể tải preview')
+    : null;
 
   return (
     <div style={{
@@ -428,11 +421,8 @@ const TmdbCard = ({ item, isMovie, onImport, importing, imported, importResult, 
 const TabContent = ({ isMovie, onImported }) => {
   const [subTab,          setSubTab]          = useState('search');
   const [query,           setQuery]           = useState('');
-  const [results,         setResults]         = useState([]);
-  const [totalPages,      setTotalPages]      = useState(0);
-  const [totalRes,        setTotalRes]        = useState(0);
+  const [debouncedQuery,  setDebouncedQuery]  = useState('');
   const [tmdbPage,        setTmdbPage]        = useState(1);
-  const [searching,       setSearching]       = useState(false);
   const [importing,       setImporting]       = useState({});
   const [imported,        setImported]        = useState({});
   const [importResult,    setImportResult]    = useState({}); // { [tmdbId]: resultData }
@@ -442,39 +432,27 @@ const TabContent = ({ isMovie, onImported }) => {
   const [manualMsg,       setManualMsg]       = useState(null);
   const [manualResult,    setManualResult]    = useState(null);
 
-  const searchEndpoint = isMovie ? '/movies/tmdb/search' : '/tvshows/tmdb/search';
-  const importEndpoint = isMovie
-    ? (id) => `/movies/tmdb/${id}/import`
-    : (id) => `/tvshows/tmdb/${id}/import`;
+  const kind = isMovie ? 'movie' : 'tv';
+  const importTmdb = useImportTmdb(kind);
 
   const accent      = T.accent;
   const accentLight = T.accentLight;
   const accentText  = T.accentText;
 
-  const doSearch = useCallback(async (q, p = 1) => {
-    if (!q.trim()) return;
-    setSearching(true);
-    try {
-      const res  = await axiosInstance.get(`${searchEndpoint}?query=${encodeURIComponent(q)}&page=${p}`);
-      const data = res?.data ?? res;
-      setResults(data?.results ?? []);
-      setTotalPages(data?.totalPages ?? 0);
-      setTotalRes(data?.totalResults ?? 0);
-      setTmdbPage(p);
-    } catch (e) { console.error(e); }
-    finally { setSearching(false); }
-  }, [searchEndpoint]);
+  // Tìm kiếm có debounce (trước đây gọi API mỗi phím gõ); kết quả cache theo từ khoá + trang.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => clearTimeout(t);
+  }, [query]);
+  const searchQ    = useTmdbSearch(kind, debouncedQuery, tmdbPage);
+  const results    = debouncedQuery ? (searchQ.data?.results ?? []) : [];
+  const totalPages = debouncedQuery ? (searchQ.data?.totalPages ?? 0) : 0;
+  const totalRes   = debouncedQuery ? (searchQ.data?.totalResults ?? 0) : 0;
+  const searching  = !!query.trim() && (searchQ.isFetching || query.trim() !== debouncedQuery);
 
   const handleQueryChange = (q) => {
     setQuery(q);
-    if (q.trim()) doSearch(q, 1);
-    else { setResults([]); setTotalPages(0); setTotalRes(0); }
-  };
-
-  // Parse response data từ BE — lấy castCount, imageCount, seasonCount, episodeCount
-  const parseImportResult = (responseData) => {
-    const envelope = responseData?.data ?? responseData;
-    return envelope ?? null;
+    setTmdbPage(1);
   };
 
   const doImport = async (tmdbId) => {
@@ -482,8 +460,7 @@ const TabContent = ({ isMovie, onImported }) => {
     setImportMsg(p => ({ ...p, [tmdbId]: null }));
     setImportResult(p => ({ ...p, [tmdbId]: null }));
     try {
-      const res     = await axiosInstance.post(importEndpoint(tmdbId));
-      const result  = parseImportResult(res?.data);
+      const result  = await importTmdb.mutateAsync(tmdbId);
       setImported(p => ({ ...p, [tmdbId]: true }));
       setImportResult(p => ({ ...p, [tmdbId]: result }));
       setImportMsg(p => ({ ...p, [tmdbId]: { type: 'success', text: '✓ Import thành công' } }));
@@ -510,8 +487,7 @@ const TabContent = ({ isMovie, onImported }) => {
     setManualMsg(null);
     setManualResult(null);
     try {
-      const res    = await axiosInstance.post(importEndpoint(tmdbId));
-      const result = parseImportResult(res?.data);
+      const result = await importTmdb.mutateAsync(tmdbId);
       setManualResult(result);
       setManualMsg({ type: 'success', text: '✓ Import thành công' });
       setManualId('');
@@ -596,12 +572,12 @@ const TabContent = ({ isMovie, onImported }) => {
                 </div>
                 {totalPages > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, gap: 8 }}>
-                    <button disabled={tmdbPage <= 1} onClick={() => doSearch(query, tmdbPage - 1)}
+                    <button disabled={tmdbPage <= 1} onClick={() => setTmdbPage(p => p - 1)}
                       style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: tmdbPage <= 1 ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5, color: T.textSub, opacity: tmdbPage <= 1 ? 0.4 : 1 }}>
                       ← Trước
                     </button>
                     <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, display: 'flex', alignItems: 'center' }}>{tmdbPage} / {totalPages}</span>
-                    <button disabled={tmdbPage >= totalPages} onClick={() => doSearch(query, tmdbPage + 1)}
+                    <button disabled={tmdbPage >= totalPages} onClick={() => setTmdbPage(p => p + 1)}
                       style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: tmdbPage >= totalPages ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5, color: T.textSub, opacity: tmdbPage >= totalPages ? 0.4 : 1 }}>
                       Sau →
                     </button>

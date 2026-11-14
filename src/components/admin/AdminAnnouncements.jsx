@@ -1,5 +1,5 @@
 // src/components/admin/AdminAnnouncements.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Trash2,
@@ -12,7 +12,8 @@ import {
   Megaphone,
   ExternalLink,
 } from 'lucide-react';
-import notificationService from '../../services/notificationService';
+import { useAdminAnnouncements } from '../../hooks/useAdminAnnouncements';
+import { useToast } from './common/Toast';
 import AnnouncementModal from './announcement/AnnouncementModal';
 import AnnouncementDeleteModal from './announcement/AnnouncementDeleteModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
@@ -115,9 +116,6 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
 }
 
 export default function AdminAnnouncements() {
-  const [allAnnouncements, setAllAnnouncements] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
@@ -130,24 +128,21 @@ export default function AdminAnnouncements() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  const fetchAnnouncements = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await notificationService.getPublicAnnouncements(1, 200);
-      const raw = Array.isArray(res) ? res : res?.items ?? res?.data?.items ?? [];
-      setAllAnnouncements(raw);
-    } catch (e) {
-      console.error('[AdminAnnouncements] fetch failed:', e);
-    } finally {
-      setLoading(false);
+  // Danh sách lấy qua cache: thêm / sửa / xoá ở modal tự cập nhật, không cần onSaved / onDeleted thủ công.
+  const toast = useToast();
+  const listQ = useAdminAnnouncements();
+  const allAnnouncements = listQ.data ?? [];
+  const loading = listQ.isPending;
+  // Báo lỗi một lần cho mỗi lần tải thất bại khi chưa có dữ liệu (refetch nền lỗi thì giữ danh sách cũ, im lặng)
+  useEffect(() => {
+    if (listQ.isError && !listQ.data) {
+      toast.error(listQ.error?.response?.data?.message ?? listQ.error?.message ?? 'Không tải được danh sách thông báo');
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listQ.errorUpdatedAt]);
 
-  useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
-
-  useEffect(() => {
+  // Lọc + sắp xếp trên BẢN SAO, tính lại khi dữ liệu hoặc bộ lọc đổi
+  const filtered = useMemo(() => {
     let list = [...allAnnouncements];
 
     if (search.trim()) {
@@ -168,10 +163,11 @@ export default function AdminAnnouncements() {
       }
       return 0;
     });
-
-    setFiltered(list);
-    setPage(1);
+    return list;
   }, [allAnnouncements, search, sortBy, sortDir]);
+
+  // Chỉ về trang 1 khi đổi bộ lọc / sắp xếp (refetch nền không nhảy trang đang xem)
+  useEffect(() => { setPage(1); }, [search, sortBy, sortDir]);
 
   const handleSort = (key) => {
     if (sortBy === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -182,6 +178,8 @@ export default function AdminAnnouncements() {
   };
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  // Xoá hết bản tin ở trang cuối → lùi về trang cuối còn dữ liệu
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
@@ -214,7 +212,7 @@ export default function AdminAnnouncements() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <GhostBtn onClick={fetchAnnouncements}>
+          <GhostBtn onClick={() => listQ.refetch()}>
             <RefreshCw size={14} /> Tải lại
           </GhostBtn>
           <GhostBtn
@@ -519,14 +517,12 @@ export default function AdminAnnouncements() {
           setModalOpen(false);
           setEditingItem(null);
         }}
-        onSaved={fetchAnnouncements}
       />
 
       {/* Modal Xác nhận Xóa */}
       <AnnouncementDeleteModal
         item={deleteItem}
         onClose={() => setDeleteItem(null)}
-        onDeleted={(id) => setAllAnnouncements((prev) => prev.filter((a) => a.id !== id))}
       />
     </div>
   );
