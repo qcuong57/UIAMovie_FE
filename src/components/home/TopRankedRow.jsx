@@ -9,6 +9,7 @@ import { C, FONT_DISPLAY, FONT_BEBAS } from "../../context/homeTokens";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import MovieCard from "../movie/MovieCard";
+import SectionBadge from "./SectionBadge";
 
 const PER_PAGE = 5;
 const TOP_N = 10;
@@ -199,8 +200,12 @@ const RankedMovieItem = ({
 // ══════════════════════════════════════════════════════════════════════════════
 export default function TopRankedRow({
   title = "Top 10 Thịnh Hành",
+  badgeText = "Thịnh hành",
   movies = [],
   tvShows = [],
+  // Danh sách ĐÃ SẮP THỨ TỰ sẵn (vd: bộ sưu tập do admin chọn). Khi truyền: giữ đúng thứ tự này,
+  // không tự gọi API trending và không sắp lại theo điểm / rating.
+  items,
   isFavorited,
   onFavoriteToggle,
 }) {
@@ -212,7 +217,7 @@ export default function TopRankedRow({
 
   // Trang cha không truyền props → tự gọi cả 2 API trending (phim + TV show), một bên lỗi vẫn hiện bên kia
   useEffect(() => {
-    if (movies.length > 0 || tvShows.length > 0) return;
+    if (items?.length || movies.length > 0 || tvShows.length > 0) return;
     let isMounted = true;
 
     Promise.allSettled([
@@ -231,10 +236,25 @@ export default function TopRankedRow({
     return () => {
       isMounted = false;
     };
-  }, [movies.length, tvShows.length]);
+  }, [items, movies.length, tvShows.length]);
 
   // Xếp hạng chung phim + TV show theo điểm trending của BE (cùng công thức nên so sánh được)
   const top10 = useMemo(() => {
+    // Thứ tự do người gọi quyết định (admin kéo thả) → chỉ khử trùng lặp + cắt TOP_N
+    if (items?.length) {
+      const seen = new Set();
+      return items
+        .filter(Boolean)
+        .map((x) => tag(x, Boolean(x.isTvShow)))
+        .filter((x) => {
+          const key = `${x.isTvShow ? "tv" : "movie"}:${x.id}`;
+          if (!x.id || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, TOP_N);
+    }
+
     const fromApi = trendingItems.length > 0;
     const raw = fromApi
       ? trendingItems
@@ -253,7 +273,7 @@ export default function TopRankedRow({
     // nếu quá ít mục có view thật thì giữ cả danh sách để row không trống.
     const scored = sorted.filter((x) => (x.trendingScore ?? 0) > 0);
     return (fromApi && scored.length >= MIN_SCORED ? scored : sorted).slice(0, TOP_N);
-  }, [trendingItems, movies, tvShows]);
+  }, [items, trendingItems, movies, tvShows]);
 
   const pages = Math.ceil(top10.length / PER_PAGE_RESP) || 1;
   const canLeft = page > 0;
@@ -319,7 +339,9 @@ export default function TopRankedRow({
           >
             {title}
           </h2>
-          <Flame size={18} color={C.accent} />
+          {!isMobile && (
+            <SectionBadge icon={Flame} text={badgeText} color={C.accent} />
+          )}
 
           {/* Dots Indicator */}
           <div

@@ -67,6 +67,11 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **Country-based rows** — KR 🇰🇷 / CN 🇨🇳 / US 🇺🇸 / JP 🇯🇵 with per-country accent colors
 - **"For You" recommendations** — genre-frequency engine based on personal watch history
 - **Newly Released** & **Highly Rated** movie rows with smooth carousel navigation
+- **Admin-curated collections ("Bộ sưu tập")**: below the fixed rows, `HomeSections` renders whatever `GET /home-sections` returns. Admins pick the title, subtitle, content, order, **layout**, accent colour and a display schedule, and the home page follows. Nothing is hard-coded
+  - An empty or failed response renders nothing and the page keeps working; a section with no items is skipped; an unknown layout key (older frontend) falls back to `carousel`
+  - **13 layouts** (see [Home section layouts](#home-section-layouts))
+  - **Trailer previews** (`billboard`, `trailer`): YouTube (muted autoplay iframe) first, then an uploaded video, otherwise a still image. Desktop only, off with `prefers-reduced-motion`
+  - **Per-section `config`**: `accent` (`#RRGGBB`), `columns` / `rows` (`grid`, `list`), `numbered` (`list`), `reverse` (`mosaic`)
 - **Fast, staged loading**: only the trending list blocks the first paint (it feeds the Hero). Everything else streams in as it arrives; the two 100-item lists used below the fold load after the Hero, and each country row loads only when it is about to scroll into view
 - **Instant return visits**: every section is cached (see [State Management](#-state-management--data-fetching)), so coming back to `/` renders immediately and refreshes in the background
 
@@ -174,6 +179,17 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
   - **Schedule settings** (`AdScheduleSettingsModal`): switch Fixed ↔ Random and edit every parameter — pre-roll weights (with probability bars), mid-roll interval (% of duration), jitter, minimum gap, end guard, minimum duration, max mid-rolls, post-roll chance. All values come from the server (no defaults hard-coded in the UI); inline validation, an "unsaved changes" guard and **Khôi phục mặc định** (back to `appsettings`). The right-hand **preview** updates automatically (debounced) from the unsaved form via `POST /ads/schedule-preview`: it shows the ad pool, a real sample schedule from the backend algorithm on a timeline (or the fixed schedule when Fixed is selected), and "Tạo lại" draws another random view. Pick **Tất cả hình thức**, **Phim lẻ** or **Tập phim** to preview
   - **Per-ad schedule** (`AdScheduleModal`, two panes): create a Global Slot or a per-content Override on the left; on the right see the ad's existing slots on a timeline, toggle or delete them in place. Scopes come from `adContentScopes.js`: **Tất cả hình thức** (movies + episodes), **Phim lẻ**, **Tập phim** and **Cả bộ phim bộ** (TvShow = every episode of a show). In Random mode the form collapses to just the scope ("Thêm vào kho ngẫu nhiên") and the right pane shows which formats the ad can be drawn for
   - `AdTimeline` is the shared timeline component used by both dialogs
+- **Collections** (`AdminHomeSections`, "Bộ sưu tập") — build the home page without code:
+  - **List** with drag-and-drop ordering (drag handle only, so buttons and switches are never dragged by accident), status filters with counts (**Đang hiển thị / Hẹn giờ / Tắt · hết hạn · trống**) and search. While a filter or search is active, drag-and-drop is switched off so a partial list can never be reordered by mistake
+  - **Real status per row**: live, scheduled (shows start time), expired, off, or *empty* (a Manual section without items is not shown on the home page). Rows warn "chỉ hiện N" when a layout shows fewer items than are selected
+  - **Create / edit drawer** (Esc / backdrop close asks before discarding unsaved changes):
+    - title, subtitle (desktop only)
+    - **layout picker** with an SVG thumbnail and a hint per layout, plus layout-specific options (grid columns × rows, list columns × rows + numbering, mosaic side)
+    - **accent colour**: default, 24 presets in 6 groups, or any colour (`#RRGGBB`); `ranked` always uses its fixed colour
+    - **content source**: *Manual* (search movies / TV shows, drag to reorder, items beyond the layout limit are dimmed and marked "Không hiển thị") or *Auto* (rule `trending / latest / top_rated / genre / upcoming / year / country`, with a genre, year or ISO country parameter, content type all / movie / TV, item count capped at the layout limit)
+    - **schedule**: optional start / end (`datetime-local`, converted to ISO) and an on / off switch
+  - Delete goes through the shared `ConfirmDeleteModal`; the films inside are **not** deleted, and the dialog suggests switching the section off instead
+  - Dropdown options (layouts, auto rules and their parameter kind, content types, `maxManualItems`, `layoutLimits`) come from `GET /admin/home-sections/meta`; local tables are only Vietnamese labels and a fallback
 - Collapsible sidebar navigation
 
 ### 📱 Responsive Design
@@ -203,6 +219,7 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 | **External Data** | TMDB API (via backend proxy) |
 | **Media Storage** | Cloudinary (video upload) |
 | **Video playback** | HTML5 `<video>` + hls.js (MSE) with single-video ad insertion (`useAdManager`) |
+| **Trailer previews** | YouTube nocookie iframe (`postMessage` control) or an uploaded video (home collections) |
 
 ---
 
@@ -223,7 +240,64 @@ UIA Movie is built around a **dark cinema aesthetic** — deep blacks, subtle gr
 - Modals: spring-based scale-in from center
 - **List pages share one pattern** (Favorites, Browse, Search): `LoadingScreen` with a minimum duration on entry → `AnimatePresence mode="wait"` between skeleton / empty / grid → cards enter with a capped stagger (`min(i × 0.02, 0.25)s`) and leave with a short fade + scale
 - Hover, focus and entrance effects of dense lists (search results) are plain CSS (`transform` / `opacity` only) and respect `prefers-reduced-motion`
+- **Home collections** reuse `HOME_EASE` (`HomeReveal`) and `MOTION` (`motionConfig`) through `shared/motionPresets.js`; no layout invents its own easing
 - Sidebar: animated width collapse (220px ↔ 64px)
+
+### Home section layouts
+
+`src/components/home/sections/`
+
+```
+sections/
+├── HomeSections.jsx        # registry: layout key → { component, reveal }
+├── layouts/                # ONE FILE PER LAYOUT (file name = layout name)
+│   ├── CarouselSection, GridSection, ListSection, TrailerSection
+│   ├── RankedSection, UpcomingLayout
+│   └── BannerSection, HeroSection, SpotlightSection, MosaicSection,
+│       AccordionSection, BillboardSection, SplitSection
+└── shared/
+    ├── SectionHeading.jsx  # title with accent bar + subtitle badge (same as MovieRow)
+    ├── PagerButtons.jsx    # round prev / next buttons (same as CountryMovieRows)
+    ├── Cover.jsx           # image that fills its frame, title text when there is none
+    ├── Badges.jsx          # Rating, PremiumTag
+    ├── TrailerPlayer.jsx   # YouTube / uploaded trailer, hasTrailer, TRAILER_FILL
+    ├── LayoutStyles.jsx    # shared CSS (focus ring, row hover, hidden scrollbar), var --hsl-accent
+    ├── layoutUtils.js      # clamp, accentOf, withAlpha, keyOf, imgOf, metaOf, clampLines
+    └── motionPresets.js    # useTextMotion, useRailMotion, CSS_EASE (HOME_EASE + MOTION only)
+```
+
+| Group | Layout | Look | Max items shown |
+|---|---|---|---|
+| Rows / grids | `carousel` | reuses `MovieRow` | – |
+| | `grid` | paged grid (3–6 cols × 1–3 rows), round pager + dots; horizontal scroll on mobile | – |
+| | `list` | dense multi-column list (1–3 cols × 3–6 rows), optional rank numbers; 1 column on mobile | cols × rows |
+| | `trailer` | backdrop cards; hovering 500 ms plays the trailer (desktop) | – |
+| Ranked / upcoming | `ranked` | reuses `TopRankedRow`, keeps the admin's order | 10 |
+| | `upcoming` | backdrop cards with a release-date countdown (reuses `UpcomingSection`) | – |
+| Featured | `banner` | wide backdrop row with scroll arrows | – |
+| | `hero` | one big block, auto-advances every 6 s, pauses on hover; no trailer | 5 |
+| | `spotlight` | big stage + floating poster + thumbnail dock; no auto-advance (hover / tap / ← →) | 8 |
+| | `mosaic` | 1 large + up to 4 small tiles, `reverse` puts the large one on the right | 5 |
+| | `accordion` | hovered panel expands (poster → backdrop + info); poster cards on mobile | 6 |
+| | `billboard` | cinematic rotating banner with trailer (see below) | 5 |
+| | `split` | large frame + list on the right (a strip under the frame on mobile) | 6 |
+
+The "max items" column mirrors `LAYOUT_LIMIT` in `AdminHomeSections.jsx`; the backend's `/meta` (`layoutLimits`) takes priority when present.
+
+**Billboard** (Netflix / Apple TV+ style)
+- Cross-fading cover (the new film fades in *over* the old one, so there is never a black gap), two-layer scrim, white CTA, description collapses while the trailer plays
+- Segmented progress bar doubles as the auto-advance timer (8 s, or 20 s when the film has a trailer); click a segment to jump
+- Pauses on hover / focus and when the banner is scrolled out of view (`useInView`); "Next" card (desktop) and chip strip (mobile); swipe on touch, ← → on keyboard
+- Trailer starts after 1.8 s, desktop only, never with reduced motion
+
+**Trailer audio**: `TrailerPlayer` keeps muted / volume out of the `src`, so changing the volume never reloads the trailer. The YouTube iframe always starts with `mute=1` (so autoplay works), then receives `mute` / `unMute` / `setVolume` through `postMessage`. The iframe stays transparent until the player reports playing / buffering, so YouTube's play button and spinner never show. Uploaded videos set `video.muted` / `video.volume` directly. Billboard exposes a mute button plus a volume slider.
+
+**Data shape**: the backend sends `HomeSectionDTO` with `items[].content` (`HomeContentCardDTO`). `utils/normalizeHomeCard.js` turns it into the card shape the whole site uses (`normalizeHomeCard`, `normalizeHomeSection`) and exports `contentPath(item)` (`/movie/:id` or `/tvshow/:id`). It must keep `trailerKey` and `trailerVideoUrl`, otherwise `billboard` / `trailer` fall back to still images.
+
+**Add a layout**
+1. Create `layouts/XxxSection.jsx` (receives `{ section }`, uses `shared/`)
+2. Add one line to `HOME_LAYOUTS` in `HomeSections.jsx`
+3. Add the key to `HomeSectionConstants.Layouts` (backend), then to `LAYOUT_INFO` and `LayoutThumb` (and `LAYOUT_LIMIT` / `LAYOUT_NOTE` / `ACCENT_LAYOUTS` if needed) in `AdminHomeSections.jsx`
 
 ### Scroll & Navigation UX
 - Horizontal scroll rows with **fade edge masks** and **ghost nav arrows** (appear on row hover)
@@ -239,7 +313,7 @@ The rule of thumb: **who owns the data decides where it lives.**
 
 | Kind of state | Owner | Examples |
 |---|---|---|
-| **Server state** (comes from the API, can go stale, shared by many screens) | **TanStack Query** | trending / latest lists, genres, country rows, home reviews, AI recommendations, favorites, watch history, plans |
+| **Server state** (comes from the API, can go stale, shared by many screens) | **TanStack Query** | trending / latest lists, genres, country rows, home reviews, home collections, AI recommendations, favorites, watch history, plans |
 | **Auth session** (needed *outside* React, by the Axios interceptor) | `tokenStore` + `sessionStore`, read in components with `useSyncExternalStore` | access token (memory), display profile, cross-tab sign-out |
 | **Local UI state** (one component or a small subtree) | `useState` / `useReducer` | hover, carousel page, open dialog, form fields |
 | **Shared UI state** (a few distant components, changes rarely) | React Context | design tokens, toast |
@@ -257,9 +331,11 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 | `config/queryClient.js` | The single `QueryClient`: defaults (`staleTime` 1 min, `gcTime` 10 min, no retry on 4xx, one retry on network/5xx, mutations never retry), global error hook (`QueryCache` / `MutationCache` `onError`, a place to plug Sentry), and the **session ↔ cache sync** |
 | `config/queryKeys.js` | The only place query keys are defined (`queryKeys.*`), the `STALE` presets and `PUBLIC_QUERY_ROOTS` |
 | `hooks/useHomeQueries.js` | Home data hooks: trending, top / latest TV, latest movies, genres, watch history (+ optimistic delete) |
+| `hooks/useHomeSections.js` | Public home collections: one query for `GET /home-sections` under `queryKeys.home.sections` (`STALE.medium`). The key sits under the `home` root, which is in `PUBLIC_QUERY_ROOTS` **and** `CATALOG_ROOTS`: it is not reset on account change and reloads when an admin edits a movie. Items go through `normalizeHomeSection`; `HomeSections` renders nothing while loading or on error |
 | `hooks/useCountryRows.js` | One query per country row, enabled only when the row is near the viewport |
 | `hooks/useFavorites.js` | Favorites: read (`useIsFavorite`, `useFavorites`) and write (`useFavoriteToggle`, `useFavoriteActions`, optimistic) |
 | `utils/normalizeMedia.js` | The only `normalizeMovie` / `normalizeTvShow` (components must not define their own) |
+| `utils/normalizeHomeCard.js` | `HomeContentCardDTO` → site card shape (`normalizeHomeCard`), `normalizeHomeSection` (items normalised, `config` always an object) and `contentPath`. Keeps `trailerKey` / `trailerVideoUrl` |
 | `utils/queryHelpers.js` | `unwrapList` (unwraps every response shape the backend uses) and `ignoreMissingEndpoint` |
 | `hooks/useMediaDetail.js` | `useMovie` / `useTvShow`: the Info page and the Watch page of the same title share one cache entry (`queryKeys.movies.detail` / `tvShows.detail`) |
 | `hooks/useMinimumLoading.js` | Keeps the entry `LoadingScreen` visible for a minimum time so it never flashes |
@@ -277,6 +353,7 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 | `hooks/useAdminRevenue.js` | Admin → Doanh thu: `useRevenueSummary`, `useRevenueChart` (biểu đồ + doanh thu theo gói chung một kỳ → một query), `useAdminRevenueOrders(filter)` và `useRevenuePlanOptions`. Polling bằng `refetchInterval` do trang truyền vào (20 giây khi còn đơn pending, 60 giây khi không), tự dừng khi tab ẩn, `refetchOnWindowFocus` thay cho handler `visibilitychange`; refetch nền lỗi thì giữ số cũ. Xuất Excel vẫn gọi `paymentService.adminExportRevenue` trực tiếp (tải file, không cache) |
 | `hooks/useAdminGenres.js` | Admin → Thể loại: `useAdminGenres()` (một query `genres.admin`, chuẩn hoá về mảng) và `useGenreMutations()` → `{ save, remove }` (`save` tạo hoặc sửa theo id). Mọi thay đổi làm mới `genres.all` (ô chọn thể loại, trang chủ) và, khi xoá, cả nhóm `CATALOG_ROOTS` cùng bảng phim admin |
 | `hooks/useAdminAds.js` | Admin → Quảng cáo: `useAdminAds({ page, pageSize, search, isActive })` (phân trang server, `keepPreviousData`), `useAdDetail(id, initial)` (panel chi tiết, dùng dòng của bảng làm dữ liệu ban đầu), `useAdScheduleSettings()` (cấu hình lịch phát, key riêng `admin.adScheduleSettings`), `useSetScheduleSettings()`, `useRefreshAds()` và `useAdMutations()` → `{ toggleActive, deleteAd, toggleSlot, deleteSlot }`. Mỗi mutation làm mới cả nhóm `admin.ads.all` nên bảng, panel chi tiết và số slot luôn khớp nhau. Xuất thêm `isRandomSchedule(settings)` |
+| `hooks/useAdminHomeSections.js` | Admin → Bộ sưu tập: `useAdminHomeSections` (mọi khối, kể cả tắt / hết hạn), `useHomeSectionMeta` (layout, auto rule, giới hạn; `STALE.static`), `useContentSearch(kind, term)` (bật từ 2 ký tự, cache theo từ khoá) và các mutation `useSaveHomeSection` (tạo / sửa theo `id`), `useDeleteHomeSection`, `useSetHomeSectionActive` (optimistic, lỗi thì hoàn lại), `useReorderHomeSections` (optimistic, lỗi thì hoàn lại). Mọi thay đổi làm mới `admin.homeSections.all` **và** `home.sections` (trang chủ công khai) |
 | `hooks/useAdminEpisodeSubtitles.js` | Subtitle của tập: `useEpisodeSubtitles(episodeId)` (một query, tự bật `refetchInterval` khi còn subtitle `processing`, giữ danh sách cũ nếu refetch lỗi) và mutation `useUploadEpisodeSubtitle`, `useTranslateEpisodeSubtitle`, `useAiGenerateEpisodeSubtitle`, xoá, đặt mặc định (optimistic, lỗi thì lấy lại từ server) |
 | `hooks/useDebouncedValue.js` | Debounce giá trị ô tìm kiếm; giá trị đã debounce mới đi vào query key |
 | `hooks/useAdminSubtitles.js` | Subtitle của phim; một query tự refetch 3s khi còn subtitle đang xử lý |
@@ -286,8 +363,8 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 
 | Preset | Time | Used for |
 |---|---|---|
-| `static` | 60 min | genres, rarely changing lookups |
-| `medium` | 5 min | country rows, home reviews |
+| `static` | 60 min | genres, rarely changing lookups, home-collection `/meta` |
+| `medium` | 5 min | country rows, home reviews, home collections |
 | `list` | 2 min | home movie / TV lists, Browse and Search pages, movie / TV detail |
 | `user` | 1 min | favorites, watch history (also refetched on window focus, so another tab's changes show up) |
 | `Infinity` (per day) | 24 h | AI recommendations (key includes user id + day), persisted to `localStorage` |
@@ -313,6 +390,7 @@ When the signed-in user changes (sign in, sign out, switch account, also from an
 - **Announcements keys**: `admin.announcements.list` holds the admin list; every mutation patches it and invalidates the public `announcements.all` so the news page refreshes. The user-side notification bell has no key in `queryKeys` yet — add it to `refreshPublic` in `useAdminAnnouncements.js` if it uses react-query.
 - **Plans, reviews and TMDB keys**: `admin.plans.list` is the single cache of Premium plans, shared by the Plans page and the Revenue plan filter. `admin.reviews.*` splits catalogue → episodes → review list → replies (`repliesOf(reviewId)` is the prefix of `replies(reviewId, page)`), so deleting a reply refreshes only its own replies. `admin.tmdb.*` is read-only (search / preview), the import itself is a mutation that refreshes the admin tables and public catalogue.
 - **Ads & genres keys**: `admin.ads.*` takes ONE filter object (`page`, `pageSize`, `search`, `isActive`); `detail(id)` sits under `admin.ads.all`, so invalidating `admin.ads.all` refreshes the list and every open detail panel. The schedule settings (Fixed / Random) are a separate key, `admin.adScheduleSettings`, so editing one ad never refetches them. `genres.admin` shares the `genres` root with the public picker, so a genre change refreshes both. **Every key used by a query must exist in `queryKeys.js`**: a missing group makes `PersistQueryClientProvider` crash with `Cannot read properties of undefined (reading '0')`.
+- **Home collections keys**: `admin.homeSections.{all, list, meta, search(kind, term)}` plus the public `home.sections`. Save, delete, toggle and reorder invalidate both, so the home page follows the admin. The list page keeps a local copy (`order`) only so drag-and-drop feels instant; it is re-synced from the query whenever new data arrives.
 - **Dashboard keys** `admin.dashboard.*` (movies, tvShows, totals, trending, genres, users, reviews, `viewStats.{overview,top,genres}(params)`): one query per source, with `viewStats` params as ONE object. `admin.dashboard.all` is the only thing the **Làm mới** button invalidates; queries of tabs that are not open are just marked stale and load when the tab opens. These keys are **not** invalidated by admin movie / show / review mutations, so the Dashboard catches up through `STALE.admin` (30 s) on the next visit; add `invalidateQueries({ queryKey: queryKeys.admin.dashboard.all })` to a mutation if it must be instant. Derived numbers belong in `helper/dashboardStats.js`, never in the component.
 - **Revenue keys** `admin.revenue.*` take an object (period or filter, page included), so every period / filter already viewed reopens instantly from cache. Polling is a `refetchInterval` passed in by the page, not a hand-written `setInterval`.
 - **Admin keys** live under the `admin` root (not in `PUBLIC_QUERY_ROOTS`), so they reset on account change. List filters are ONE object (page included) so prefetching the next page uses the exact key of the visible query. `admin.tvShows.seasons(showId)` is a **prefix** of `season(showId, n)`: invalidate or patch it to hit every season of a show.
@@ -356,6 +434,7 @@ Base URL: http://localhost:5000/api/
 | `userService.js` | Own profile, change password, and admin user CRUD / role / ban / unban |
 | `paymentService.js` | **Plans:** `getPlans` (with eligibility when signed in). **Checkout:** `createOrder` (returns `paymentMethod` `redirect` / `form_post` / `none`), `redirectToPayment` (VNPay redirect / SePay form post). **User:** `getSubscriptionStatus` (`planId`, `planName`), `getPaymentHistory`, `getOrderByCode`, `cancelMySubscription`, `isPremium`. **Admin plans:** `adminGetPlans`, `adminCreatePlan`, `adminUpdatePlan`, `adminSetPlanActive`. **Admin subscriptions:** `adminGrantSubscription`, `adminRevokeSubscription`. **Admin revenue:** `adminGetRevenueSummary`, `adminGetRevenueChart`, `adminGetRevenueByPlan`, `adminGetOrders`, `adminExportRevenue` (Blob download) |
 | `adService.js` | Ad CRUD, global slots / overrides, `getAdsForContent(type, id, durationSeconds)` for the player, admin `getScheduleSettings` / `updateScheduleSettings` / `previewSchedule` |
+| `homeSectionService.js` | Maps 1-to-1 with `HomeSectionsController`. **Public:** `getPublic` (`GET /home-sections`, sorted by `SortOrder`, items already resolved). **Admin** (`/admin/home-sections`): `adminGetAll`, `adminGetMeta` (`layouts`, `autoRules`, `contentTypes`, `autoContentTypes`, `maxManualItems`), `adminGetById`, `adminCreate` (201 `{ id }`), `adminUpdate` (204), `adminDelete`, `adminReorder` (`{ sectionIds }`), `adminSetActive` (`{ isActive }`) |
 
 ---
 
@@ -366,6 +445,8 @@ src/
 ├── components/
 │   ├── admin/          # Admin-only panels, modals, tables
 │   │   ├── AdminPlans.jsx  # Premium plan management + manual grant / revoke
+│   │   ├── AdminHomeSections.jsx # Collections: list (drag & drop), create / edit drawer, delete dialog
+│   │   ├── common/     # ConfirmDeleteModal (+ InfoBox, WarnBox, IrreversibleNote), Toast
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
 │   │   ├── user/       # UserDetailPanel, UserEditModal
 │   │   ├── tvshow/     # TvShowDetailPanel, SeasonEpisodeFields (season / episode modals),
@@ -379,8 +460,13 @@ src/
 │   │                   # AdSlotDeleteModal, AdDetailPanel, AdStatusBadge
 │   ├── common/         # BackButton, Pagination, PageError, DetailPageError, ErrorBoundary,
 │   │                   # AdminPagination, SeeAllButton, Toast
-│   ├── home/           # HeroBanner, GenreSection, MovieRow,
-│   │   │               # TopRankedRow, CountryMovieRows, TrendingSection
+│   ├── home/           # HeroBanner, GenreSection, MovieRow, TopRankedRow,
+│   │   │               # CountryMovieRows, TrendingSection, UpcomingSection, SectionBadge
+│   │   └── sections/   # Admin-curated collections
+│   │       ├── HomeSections.jsx   # registry: layout key → component + reveal variant
+│   │       ├── layouts/           # one file per layout (13)
+│   │       └── shared/            # SectionHeading, PagerButtons, Cover, Badges, TrailerPlayer,
+│   │                              # LayoutStyles, layoutUtils, motionPresets
 │   ├── layout/         # Navbar, MobileBottomNav, Footer
 │   ├── movie/          # MovieCard, MovieCarousel, PersonScrollRow
 │   ├── player/         # VideoPlayer (shared shell) + controls
@@ -400,13 +486,14 @@ src/
 │
 ├── context/
 │   ├── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
-│   └── adminTokens.js  # Admin design tokens (AdminPagination, AdminRevenue, AdminPlans)
+│   └── adminTokens.js  # Admin design tokens (AdminPagination, AdminRevenue, AdminPlans, AdminHomeSections)
 │
 ├── hooks/
 │   ├── useIsMobile.js  # Responsive breakpoint hook
 │   ├── useAdManager.js # Pre/mid/post-roll playback on the single <video>
 │   ├── useStoredUser.js# Subscribes to sessionStore
 │   ├── useHomeQueries.js # Home queries + watch-history mutation (TanStack Query)
+│   ├── useHomeSections.js # Public admin-curated collections
 │   ├── useCountryRows.js # Per-country rows, loaded when near the viewport
 │   ├── useFavorites.js # Favorites: read + optimistic toggle
 │   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
@@ -415,6 +502,7 @@ src/
 │   ├── useAdminPlans.js / useAdminReviews.js / useAdminTmdb.js # Admin plans, reviews, TMDB import
 │   ├── useAdminAnnouncements.js # Admin announcements (broadcast / edit / delete)
 │   ├── useAdminGenres.js / useAdminAds.js # Admin genres, ads (list, detail, schedule settings, mutations)
+│   ├── useAdminHomeSections.js # Admin collections (list, meta, content search, save / delete / toggle / reorder)
 │   ├── useAdminDashboard.js # Admin dashboard queries + refresh
 │   ├── useAdminSubtitles.js / useAdminEpisodeSubtitles.js # Movie / episode subtitles
 │   ├── useMinimumLoading.js # Minimum LoadingScreen time
@@ -422,7 +510,9 @@ src/
 │
 ├── motion-configs/
 │   ├── transitions.js  # Framer Motion timing presets
-│   └── variants.js     # Reusable animation variants
+│   ├── variants.js     # Reusable animation variants
+│   ├── HomeReveal.jsx  # Scroll reveal wrapper + HOME_EASE for the home page
+│   └── motionConfig.js # MOTION durations / staggers
 │
 ├── pages/
 │   ├── admin/          # AdminPage, AdminDashboard, AdminMovies,
@@ -443,6 +533,7 @@ src/
 │   ├── validators.js   # validateUsername (shared by register + profile)
 │   ├── normalizeMedia.js # normalizeMovie / normalizeTvShow / mediaKey
 │   ├── normalizeDetail.js # Detail DTO → view-model (Info + Watch pages)
+│   ├── normalizeHomeCard.js # Home collection DTO → card shape, contentPath
 │   ├── authRedirect.js # postLoginPath
 │   └── queryHelpers.js # unwrapList, unwrapOne, parsePaged, ignoreMissingEndpoint
 │
@@ -452,7 +543,7 @@ src/
 │
 └── services/           # authService, movieService, tvShowService, genreService,
                         # personService, reviewService,
-                        # userService, paymentService, adService
+                        # userService, paymentService, adService, homeSectionService
 ```
 
 ---
@@ -510,7 +601,7 @@ VITE_API_URL=http://localhost:5000/api
 
 ### As a Regular User
 1. Navigate to `/welcome` — register or log in
-2. Browse the home feed — trending, by country, top-rated, personalized rows
+2. Browse the home feed — trending, by country, top-rated, personalized rows, plus the collections the admin has curated
 3. Click any movie to open the **detail page** — read info, watch trailer, write a review
 4. Use the **Search** page to find movies or actors with advanced filters
 5. Manage your **Favorites** and review your **Watch History** from the navbar
@@ -530,6 +621,7 @@ VITE_API_URL=http://localhost:5000/api
 6. Open **Plans** to create Premium plans (price, duration, features, sale window, purchase limit, e-mail domains), preview the card, mark one as "most popular", and switch plans on or off. Use **Cấp / thu hồi Premium** to grant or revoke Premium for a user by ID. The page needs at least one plan on sale before `/premium` shows anything to buy
 7. Open **Ads** to manage ad videos. Use the schedule banner → **Cấu hình lịch phát** to pick Fixed or Random mode, tune the parameters and check them with the preview. Attach ads to **Global Slots** (calendar icon on each row) — in Random mode these slots are the pool the scheduler draws from
 8. Open **Revenue** to see KPIs, the revenue chart and the order list; filter by status / plan / gateway / date and press **Xuất Excel** for an accounting-ready `.xlsx`
+9. Open **Bộ sưu tập** to build the home page: **Thêm bộ sưu tập**, pick a layout from the thumbnails, set title / subtitle / accent colour, then either pick movies and TV shows by hand (drag to order) or choose an automatic rule. Optionally set a schedule, save, and drag the rows to change the order on the home page. Use `ranked` or numbered lists only when the order really is a ranking. For `billboard` choose films with a backdrop, a description and a trailer (the trailer only auto-plays on desktop)
 
 ---
 
@@ -616,6 +708,7 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 | 🎬 Movie Detail | ![Detail](.github/screenshots/detail.png) |
 | 👤 Login / Register | ![Auth](.github/screenshots/auth.png) |
 | 🛡️ Admin Dashboard | ![Admin](.github/screenshots/admin.png) |
+| 🗂️ Admin Collections | ![Collections](.github/screenshots/collections.png) |
 
 ---
 
@@ -625,7 +718,7 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Payment history page** — show the `provider: "free"` (free trial) and `cancelled` ("Đã thay thế") statuses properly
 - [ ] **Checkout dialog accessibility** — focus trap and return focus to the plan button on close
 - [x] ~~Migrate Home, Browse, Search, Favorites, Movie / TV Info + Watch pages, Coming Soon and Announcements to TanStack Query~~ (done)
-- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the remaining admin tables (Movies, Users, TV Shows, Persons, Revenue, Plans, Reviews, TMDB import, Announcements, Genres, Ads and Dashboard done: `queryKeys.admin.*`)
+- [ ] **Migrate the remaining screens to TanStack Query**: the `/premium` plans and subscription-status module-level caches (`queryKeys.premium.*`, invalidated on cancel / create-order), Watch History page (reuse `queryKeys.me.*`) and the remaining admin tables (Movies, Users, TV Shows, Persons, Revenue, Plans, Reviews, TMDB import, Announcements, Genres, Ads, Collections and Dashboard done: `queryKeys.admin.*`)
 - [ ] **Admin TV Show / Person leftovers** — `PersonPickerField` now searches through `useQuery` (`admin.persons.search`) but still has its own local debounce and duplicates `usePersonSearch` in `useAdminMovies.js`: reuse the shared hook + `useDebouncedValue`; two `SubtitleEditorModal` versions exist (`shared/SubtitleContentEditor` vs `tvshow/SubtitleEditorModal`), merge them; the subtitle list must return `status` and `errorMessage` because polling no longer uses `getSubtitleStatus`
 - [ ] **Dashboard follow-ups** — the user total is capped at the 500 users fetched (add a count endpoint, like `getTotalCount` for movies / shows); the Dashboard is not yet invalidated by admin movie / show / review / user mutations (see *Dashboard keys*); the tab is local state, not in the URL; episode labels are resolved only for the latest 100 reviews (`LABEL_SCAN_LIMIT`); `UserRow` / `ReviewRow` still use per-row Framer Motion entrances
 - [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
@@ -639,6 +732,12 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Genres: reuse `ConfirmDeleteModal`** in `DeleteGenreModal` instead of its own markup
 - [ ] **Ads: list Content Overrides** — the per-ad dialog only lists Global Slots; the API has no endpoint to read Overrides back
 - [ ] **Ads: real runtime for the schedule** — the duration sent to the ad API is the TMDB runtime; re-requesting once the video's real duration is known would also cover titles with an empty runtime
+- [ ] **Home collections: remove the old layout files** — `HomeSectionLayouts.jsx`, `HomeSectionLayoutsExtra.jsx`, `HomeSectionLayoutsMore.jsx` and `HomeContentCard.jsx` are superseded by `layouts/` + `shared/` and no longer used by the registry
+- [ ] **Admin collections: `upcoming` is missing from `LAYOUT_INFO` / `LayoutThumb`** — the layout renders on the home page but has no name, description or thumbnail in the picker (it falls back to a generic shape and its raw key)
+- [ ] **Admin collections: drop the duplicated state** — `order` copies the query result; relying on `useReorderHomeSections`' optimistic cache update alone would remove it. Also reuse `useDebouncedValue` instead of the local `useDebounced`, and share `Field` / `Btn` / `Switch` with the other admin pages
+- [ ] **Admin collections: single source for layout limits** — `LAYOUT_LIMIT` duplicates the backend `layoutLimits`; rely on `/meta` only
+- [ ] **Trailer layouts** — mount the iframe only while the block is in view (Billboard already pauses via `useInView`; `trailer` cards do not), and pause when the tab is hidden
+- [ ] **Home collections: tests** — Vitest for `layoutUtils` (`clamp`, `withAlpha`, `keyOf`), `normalizeHomeSection`, the unknown-layout fallback in `HomeSections`, and the `formFromSection` ↔ DTO round trip in the admin drawer
 - [ ] **Video Player** — integrate a full-featured HLS player with quality switching
 - [ ] **Watchlist / Continue Watching** — resume from last position with progress bar
 - [ ] **Notifications** — real-time alerts for new releases or admin actions

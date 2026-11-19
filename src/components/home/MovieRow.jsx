@@ -2,9 +2,10 @@
 // ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
 import React, { useRef, useState, useEffect } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MovieCard from "../movie/MovieCard";
+import SectionBadge from "./SectionBadge";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 
 export default function MovieRow({
@@ -97,48 +98,19 @@ export default function MovieRow({
 
           {/* Badge pill — chỉ desktop, chỉ khi có badge prop */}
           {badge && !isMobile && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: `${accentColor || C.accent}18`,
-                border: `1px solid ${accentColor || C.accent}50`,
-                borderRadius: 999,
-                padding: "3px 10px",
-              }}
-            >
-              <badge.icon
-                size={10}
-                color={accentColor || C.accent}
-                strokeWidth={2.5}
-              />
-              <span
-                style={{
-                  fontFamily: FONT_BODY,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: accentColor || C.accent,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {badge.text}
-              </span>
-            </div>
+            <SectionBadge
+              icon={badge.icon}
+              text={badge.text}
+              color={accentColor || C.accent}
+            />
           )}
 
           {subtitle && !isMobile && (
-            <span
-              style={{
-                fontFamily: FONT_BODY,
-                fontSize: 12,
-                color: "rgba(255,255,255,0.28)",
-                letterSpacing: "0.02em",
-              }}
-            >
-              {subtitle}
-            </span>
+            <SectionBadge
+              icon={Sparkles}
+              text={subtitle}
+              color={accentColor || C.accent}
+            />
           )}
         </div>
       </div>

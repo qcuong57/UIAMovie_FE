@@ -19,6 +19,7 @@ import {
   MonitorPlay,
   Megaphone,
   Crown,
+  Layers,
 } from "lucide-react";
 import authService from "../../services/authService";
 
@@ -34,6 +35,7 @@ import AnnouncementModal from "../admin/announcement/AdminBroadcastModal";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "collections", label: "Bộ sưu tập", icon: Layers },
   { key: "revenue", label: "Doanh thu", icon: DollarSign },
   { key: "plans", label: "Gói Premium", icon: Crown },
   { key: "ads", label: "Quảng cáo", icon: MonitorPlay },
@@ -120,6 +122,7 @@ const NavItem = ({ item, active, collapsed, onClick }) => {
 const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
   const TAB_LABELS = {
     dashboard: "Dashboard",
+    collections: "Quản lý Bộ sưu tập phim",
     movies: "Quản lý Phim",
     tvshows: "Quản lý TV Shows",
     announcements: "Quản lý Thông báo & Tin tức",

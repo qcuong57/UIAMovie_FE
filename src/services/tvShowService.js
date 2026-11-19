@@ -837,7 +837,11 @@ const tvShowService = {
    */
   syncNewEpisodes: async (tvShowId) => {
     try {
-      const response = await axiosInstance.post(`/tvshows/${tvShowId}/sync`);
+      // Backend có thể retry TMDB tới ~60s → timeout FE phải dài hơn, nếu không
+      // axios sẽ tự huỷ trước và admin chỉ thấy lỗi chung chung.
+      const response = await axiosInstance.post(`/tvshows/${tvShowId}/sync`, null, {
+        timeout: 90 * 1000,
+      });
       const envelope = response.data ?? response;
       return envelope?.data ?? envelope;
     } catch (error) {

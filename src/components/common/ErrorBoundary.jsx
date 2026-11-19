@@ -3,16 +3,11 @@
 // Không bắt: lỗi trong event handler, setTimeout, hay request thất bại — các lỗi đó đã được
 // React Query / từng trang tự xử lý (PageError + onRetry).
 // Dùng 2 tầng: quanh <Outlet /> (Navbar còn nguyên) và quanh toàn app (lưới an toàn cuối).
+//
+// Mỗi lần crash sinh 1 errorId: hiện cho người dùng + gắn vào báo cáo lỗi → support/dev tra đúng 1 sự cố.
 import React from "react";
 import PageError from "./PageError";
-
-const DEFAULT_MESSAGE = "Trang gặp sự cố ngoài ý muốn. Bạn thử tải lại hoặc quay về trang chủ nhé.";
-
-// Lỗi tải chunk (lazy route) sau khi deploy: file hash cũ không còn trên server → import() thất bại.
-// Cách xử lý đúng là tải lại trang để lấy index.html + chunk mới.
-const CHUNK_ERROR_RE =
-  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Loading chunk [\w-]+ failed|ChunkLoadError|Unable to preload CSS/i;
-const isChunkError = (e) => CHUNK_ERROR_RE.test(`${e?.name ?? ""} ${e?.message ?? ""}`);
+import { isChunkError, createErrorId } from "../../utils/errorKind";
 
 const RELOAD_KEY = "chunk-reload-at";
 const RELOAD_COOLDOWN_MS = 10_000;
@@ -36,38 +31,38 @@ const reloadPage = () => window.location.reload();
 const goHome = () => window.location.assign("/");
 
 export default class ErrorBoundary extends React.Component {
-  state = { error: null };
+  state = { error: null, errorId: null };
 
   static getDerivedStateFromError(error) {
-    return { error };
+    return { error, errorId: createErrorId() };
   }
 
   componentDidCatch(error, info) {
     if (isChunkError(error) && autoReloadOnce()) return;
-    if (import.meta.env.DEV) console.error("[ErrorBoundary]", error, info?.componentStack);
-    // TODO(prod): Sentry.captureException(error, { extra: { componentStack: info?.componentStack } });
+    if (import.meta.env.DEV) console.error("[ErrorBoundary]", this.state.errorId, error, info?.componentStack);
+    // Hook báo cáo (Sentry, v.v.): luôn gắn errorId để khớp với mã người dùng nhìn thấy.
+    // TODO(prod): Sentry.captureException(error, { tags: { errorId: this.state.errorId }, extra: { componentStack: info?.componentStack, url: location.href } });
+    this.props.onError?.(error, { errorId: this.state.errorId, componentStack: info?.componentStack });
   }
 
   componentDidUpdate(prevProps) {
     // Đổi resetKey (vd. đổi route) → thoát khỏi trạng thái lỗi
     if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
-      this.setState({ error: null });
+      this.setState({ error: null, errorId: null });
     }
   }
 
-  reset = () => this.setState({ error: null });
+  reset = () => this.setState({ error: null, errorId: null });
 
   render() {
-    const { error } = this.state;
+    const { error, errorId } = this.state;
     if (!error) return this.props.children;
 
     if (isChunkError(error)) {
       return (
         <PageError
-          title="Có bản cập nhật mới"
-          message="Phiên bản trang đã thay đổi nên không tải được nội dung. Hãy tải lại trang để tiếp tục."
+          kind="update"
           onRetry={reloadPage}
-          retryLabel="Tải lại trang"
           secondaryLabel="Về trang chủ"
           onSecondary={goHome}
         />
@@ -76,11 +71,11 @@ export default class ErrorBoundary extends React.Component {
 
     return (
       <PageError
-        title="Rất tiếc!"
-        // Dev: hiện nguyên nhân để sửa nhanh; production: chỉ hiện câu thân thiện
-        message={import.meta.env.DEV && error?.message ? error.message : DEFAULT_MESSAGE}
+        kind="crash"
+        errorId={errorId}
+        // Dev: hiện nguyên nhân để sửa nhanh; production: chỉ hiện câu thân thiện + mã tham chiếu
+        details={import.meta.env.DEV ? `${error?.message ?? ""}\n\n${error?.stack ?? ""}` : undefined}
         onRetry={this.reset}
-        retryLabel="Thử lại"
         secondaryLabel="Về trang chủ"
         onSecondary={goHome}
       />

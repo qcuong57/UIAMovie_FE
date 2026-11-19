@@ -1,13 +1,18 @@
 // src/pages/home/HomePage.jsx
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, CalendarDays, Tv } from "lucide-react";
+import {
+  Star,
+  CalendarDays,
+  Tv,
+  Crown,
+  Timer,
+  History,
+  Flame,
+  Heart,
+} from "lucide-react";
+import UpcomingSection from "../../components/home/UpcomingSection";
 import HeroBanner from "../../components/layout/HeroBanner";
 import Footer from "../../components/layout/Footer";
 import authService from "../../services/authService";
@@ -48,7 +53,9 @@ import TrailerShowcaseSection from "../../components/home/TrailerShowcaseSection
 import UserReviewsSection from "../../components/home/UserReviewsSection";
 import RecommendSection from "../../components/home/RecommendSection";
 import HomeReveal, { HOME_EASE } from "../../motion-configs/HomeReveal";
+import HomeSections from "../../components/home/sections/HomeSections";
 import { LoadingScreen } from "../../components/ui";
+import { useHomeSections } from "../../hooks/useHomeSections";
 
 const EMPTY = [];
 
@@ -67,7 +74,10 @@ const buildForYouFallback = (allItems, watchHistory, highlyRated) => {
   // Khoá gồm cả loại (phim / TV show) để id trùng nhau giữa hai loại không bị nhầm
   const watchedIds = new Set(
     watchHistory.map((h) =>
-      mediaKey({ isTvShow: Boolean(h.isTvShow), id: h.isTvShow ? h.tvShowId : h.movieId }),
+      mediaKey({
+        isTvShow: Boolean(h.isTvShow),
+        id: h.isTvShow ? h.tvShowId : h.movieId,
+      }),
     ),
   );
   const top10Ids = new Set(highlyRated.slice(0, 10).map(mediaKey));
@@ -195,6 +205,9 @@ export default function HomePage() {
   const latestMoviesQ = useLatestMovies(lowPriority);
   const latestTvQ = useLatestTvShows(lowPriority);
   const historyQ = useWatchHistory();
+  // Các khối admin cấu hình: gọi ngay khi trang mount (song song với trending) để HomeSections
+  // đọc từ cache, không phải đợi loading screen tắt mới bắt đầu gọi API.
+  const homeSectionsQ = useHomeSections();
   const { mutate: removeHistory } = useRemoveWatchHistory();
 
   const movies = trendingQ.data ?? EMPTY;
@@ -214,7 +227,9 @@ export default function HomePage() {
   }, []);
 
   // Chỉ phim thịnh hành là bắt buộc (HeroBanner); các phần còn lại tải xong tới đâu hiện tới đó
-  const loading = trendingQ.isLoading || !minLoadingDone;
+  // Chờ cả khối admin để chúng hiện cùng lúc với các hàng khác, không chen vào làm trang bị đẩy xuống
+  const loading =
+    trendingQ.isLoading || homeSectionsQ.isLoading || !minLoadingDone;
   const error =
     trendingQ.isError && !trendingQ.data
       ? trendingQ.error?.message || "Không thể tải dữ liệu"
@@ -270,12 +285,10 @@ export default function HomePage() {
         const meta = isTv ? tvMap.get(String(id)) : movieMap.get(String(id));
 
         const currentTime = isTv
-          ? item.progressSeconds ?? 0
+          ? (item.progressSeconds ?? 0)
           : (item.progressMinutes ?? 0) * 60;
 
-        const durationMinutes = isTv
-          ? item.episodeRuntime
-          : meta?.duration;
+        const durationMinutes = isTv ? item.episodeRuntime : meta?.duration;
         const duration = durationMinutes ? durationMinutes * 60 : null;
 
         const progress = duration
@@ -334,6 +347,112 @@ export default function HomePage() {
     () => [...trailerSourceTvShows, ...tvShows],
     [trailerSourceTvShows, tvShows],
   );
+
+  // ── Kho nội dung gộp (đã khử trùng lặp) để dựng các hàng phụ ────────────────
+  const pool = useMemo(() => {
+    const seen = new Set();
+    return [
+      ...movies,
+      ...tvShows,
+      ...trailerSourceMovies,
+      ...trailerSourceTvShows,
+    ].filter((i) => {
+      const k = mediaKey(i);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [movies, tvShows, trailerSourceMovies, trailerSourceTvShows]);
+
+  // Sắp chiếu: gần ngày khởi chiếu nhất đứng trước
+  const upcoming = useMemo(
+    () =>
+      pool
+        .filter((i) => i.isUpcoming)
+        .sort(
+          (a, b) =>
+            new Date(a.releaseDate || 0).getTime() -
+            new Date(b.releaseDate || 0).getTime(),
+        )
+        .slice(0, 12),
+    [pool],
+  );
+
+  // Premium độc quyền
+  const premiumPicks = useMemo(
+    () =>
+      byRating(pool.filter((i) => i.isPremium && !i.isUpcoming)).slice(0, 20),
+    [pool],
+  );
+
+  // Xem nhanh: phim ≤ 100 phút
+  const quickWatch = useMemo(
+    () =>
+      byRating(
+        pool.filter(
+          (i) =>
+            !i.isTvShow && i.duration > 0 && i.duration <= 100 && !i.isUpcoming,
+        ),
+      ).slice(0, 20),
+    [pool],
+  );
+
+  // Đang hot tuần này: theo lượt xem 30 ngày / điểm trending nếu BE có trả về
+  const hotThisWeek = useMemo(() => {
+    const score = (i) => i.views30d ?? i.trendingScore ?? 0;
+    return pool
+      .filter((i) => score(i) > 0 && !i.isUpcoming)
+      .sort((a, b) => score(b) - score(a))
+      .slice(0, 20);
+  }, [pool]);
+
+  // Thể loại yêu thích: thể loại xuất hiện nhiều nhất trong lịch sử xem
+  const favoriteGenre = useMemo(() => {
+    const nameOf = (g) => (typeof g === "string" ? g : g?.name || "");
+    const watchedKeys = new Set(continueWatchingList.map(mediaKey));
+    const freq = new Map();
+    pool
+      .filter((i) => watchedKeys.has(mediaKey(i)))
+      .forEach((i) =>
+        (i.genres || []).forEach((g) => {
+          const n = nameOf(g);
+          if (n) freq.set(n, (freq.get(n) || 0) + 1);
+        }),
+      );
+    const top = [...freq.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!top) return null;
+    const items = byRating(
+      pool.filter(
+        (i) =>
+          !watchedKeys.has(mediaKey(i)) &&
+          !i.isUpcoming &&
+          (i.genres || []).some((g) => nameOf(g) === top[0]),
+      ),
+    ).slice(0, 20);
+    return items.length >= 4 ? { name: top[0], items } : null;
+  }, [continueWatchingList, pool]);
+
+  // "Vì bạn đã xem X": lấy phim xem gần nhất, tìm nội dung cùng thể loại
+  const becauseYouWatched = useMemo(() => {
+    const last = continueWatchingList[0];
+    if (!last) return null;
+    const base = pool.find((i) => mediaKey(i) === mediaKey(last));
+    const genreKey = (g) =>
+      (typeof g === "string" ? g : g?.name || g?.id || "").toLowerCase();
+    const baseGenres = new Set(
+      (base?.genres || []).map(genreKey).filter(Boolean),
+    );
+    if (!baseGenres.size) return null;
+    const items = byRating(
+      pool.filter(
+        (i) =>
+          mediaKey(i) !== mediaKey(last) &&
+          !i.isUpcoming &&
+          (i.genres || []).some((g) => baseGenres.has(genreKey(g))),
+      ),
+    ).slice(0, 20);
+    return items.length >= 4 ? { title: last.title, items } : null;
+  }, [continueWatchingList, pool]);
 
   const uploadedTrailers = useMemo(() => {
     const all = [
@@ -395,11 +514,7 @@ export default function HomePage() {
 
   // Ảnh đại diện OpenGraph cho Vercel preview
   const ogImage = useMemo(() => {
-    return (
-      movies[0]?.backdropUrl ||
-      movies[0]?.posterUrl ||
-      SITE_DEFAULT_IMAGE
-    );
+    return movies[0]?.backdropUrl || movies[0]?.posterUrl || SITE_DEFAULT_IMAGE;
   }, [movies]);
 
   if (error) return <ErrorScreen message={error} onRetry={handleRetry} />;
@@ -478,6 +593,12 @@ export default function HomePage() {
                     />
                   </HomeReveal>
                 )}
+                {/* ── Trailer Mới Cập Nhật ──
+                {uploadedTrailers.length > 0 && (
+                  <HomeReveal variant="spotlight" divider>
+                    <TrailerShowcaseSection items={uploadedTrailers} />
+                  </HomeReveal>
+                )} */}
 
                 {/* ── Top 10 ── */}
                 <HomeReveal variant="feature" divider>
@@ -488,12 +609,8 @@ export default function HomePage() {
                   />
                 </HomeReveal>
 
-                {/* ── Trailer Mới Cập Nhật ── */}
-                {uploadedTrailers.length > 0 && (
-                  <HomeReveal variant="spotlight" divider>
-                    <TrailerShowcaseSection items={uploadedTrailers} />
-                  </HomeReveal>
-                )}
+                {/* ── Các khối do admin cấu hình (Quản lý trang chủ) ── */}
+                <HomeSections />
 
                 <CountryMovieRows />
 
@@ -541,6 +658,84 @@ export default function HomePage() {
                       accentColor="#34d399"
                       seeAllPath="/browse/tvshows?sort=firstAirDate"
                       badge={{ icon: CalendarDays, text: "Mới nhất" }}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Top 10 TV Series ── */}
+                {tvTopRated.length >= 3 && (
+                  <HomeReveal variant="feature" divider>
+                    <TopRankedRow
+                      title="Top 10 TV Series"
+                      badgeText="Series"
+                      items={tvTopRated}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Đang hot tuần này ── */}
+                {hotThisWeek.length >= 5 && (
+                  <HomeReveal variant="row" divider>
+                    <MovieRow
+                      title="Đang Hot Tuần Này"
+                      items={hotThisWeek}
+                      accentColor="#fb923c"
+                      badge={{ icon: Flame, text: "Hot" }}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Thể loại yêu thích ── */}
+                {favoriteGenre && (
+                  <HomeReveal variant="row" divider>
+                    <MovieRow
+                      title={`Vì Bạn Mê ${favoriteGenre.name}`}
+                      items={favoriteGenre.items}
+                      accentColor="#a78bfa"
+                      badge={{ icon: Heart, text: "Gu của bạn" }}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Vì bạn đã xem ── */}
+                {becauseYouWatched && (
+                  <HomeReveal variant="row" divider>
+                    <MovieRow
+                      title={`Vì bạn đã xem "${becauseYouWatched.title}"`}
+                      items={becauseYouWatched.items}
+                      accentColor="#fb7185"
+                      badge={{ icon: History, text: "Cùng thể loại" }}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Sắp chiếu ── */}
+                {upcoming.length > 0 && (
+                  <HomeReveal variant="spotlight" divider>
+                    <UpcomingSection items={upcoming} />
+                  </HomeReveal>
+                )}
+
+                {/* ── Premium độc quyền ── */}
+                {premiumPicks.length > 0 && (
+                  <HomeReveal variant="row" divider>
+                    <MovieRow
+                      title="Premium Độc Quyền"
+                      items={premiumPicks}
+                      accentColor="#f5c518"
+                      badge={{ icon: Crown, text: "Premium" }}
+                    />
+                  </HomeReveal>
+                )}
+
+                {/* ── Xem nhanh ── */}
+                {quickWatch.length > 0 && (
+                  <HomeReveal variant="row" divider>
+                    <MovieRow
+                      title="Xem Nhanh Dưới 100 Phút"
+                      items={quickWatch}
+                      accentColor="#2dd4bf"
+                      badge={{ icon: Timer, text: "Gọn gàng" }}
                     />
                   </HomeReveal>
                 )}

@@ -24,6 +24,8 @@ export const queryKeys = {
     latestMovies: ["home", "latest-movies"],
     latestTvShows: ["home", "latest-tvshows"],
     country: (code) => ["home", "country", code],
+    // Các khối trang chủ do admin cấu hình (GET /api/home-sections). Dưới gốc "home" nên tự làm mới khi admin sửa phim.
+    sections: ["home", "sections"],
   },
   reviews: { home: ["reviews", "home"] },
   // Trang Sắp chiếu & Tin tức: dữ liệu công khai
@@ -86,6 +88,13 @@ export const queryKeys = {
     subtitleContent: (mediaId, subtitleId) => ["admin", "subtitle-content", String(mediaId), String(subtitleId)],
     // Thông báo / bản tin do admin phát. Cùng nguồn dữ liệu với trang Tin tức công khai (`announcements.*`).
     announcements: { all: ["admin", "announcements"], list: ["admin", "announcements", "list"] },
+    // Quản lý trang chủ: list gồm cả khối đã tắt / hết hạn; search = ô tìm phim để thêm vào khối.
+    homeSections: {
+      all: ["admin", "homeSections"],
+      list: ["admin", "homeSections", "list"],
+      meta: ["admin", "homeSections", "meta"],
+      search: (kind, q) => ["admin", "homeSections", "search", kind, q],
+    },
     // Gói Premium (admin): TẤT CẢ gói kể cả đã tắt bán. Bộ lọc gói của trang Doanh thu dùng chung key này.
     plans: { all: ["admin", "plans"], list: ["admin", "plans", "list"] },
     revenue: {

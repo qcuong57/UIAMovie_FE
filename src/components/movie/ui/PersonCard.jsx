@@ -1,8 +1,8 @@
 // src/components/movie/ui/PersonCard.jsx
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { C, toSlug } from "./movieConstants";
+import { C } from "./movieConstants";
+import { usePersonNavigation } from "../../../hooks/usePersonNavigation";
 
 /**
  * PersonCard — thẻ diễn viên / đạo diễn dạng chữ nhật (tỉ lệ 2:3).
@@ -13,16 +13,13 @@ import { C, toSlug } from "./movieConstants";
  */
 const PersonCard = ({ person, isDirector = false }) => {
   const [err, setErr] = useState(false);
-  const navigate = useNavigate();
+  const goToPerson = usePersonNavigation();
 
   return (
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ type: "spring", stiffness: 340, damping: 26 }}
-      onClick={() =>
-        person.name &&
-        navigate(`/person/${toSlug(person.name)}`, { state: { actor: person } })
-      }
+      onClick={() => goToPerson(person)}
       style={{
         width: 140,
         flexShrink: 0,

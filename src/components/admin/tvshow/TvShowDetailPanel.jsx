@@ -1,5 +1,5 @@
 // src/components/admin/tvshow/TvShowDetailPanel.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -721,22 +721,50 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
   const syncEpisodes = useSyncTvShowEpisodes();
   const syncing = syncEpisodes.isPending;
   const [syncMsg, setSyncMsg] = useState(null);
+  const syncMsgTimer = useRef(null);
 
   useEffect(() => { setTab("info"); }, [showId]);
+
+  // Đổi show / đóng panel: bỏ thông báo cũ và huỷ timer ẩn thông báo
+  useEffect(() => {
+    setSyncMsg(null);
+    return () => clearTimeout(syncMsgTimer.current);
+  }, [showId]);
 
   // UploadZone upload bằng uploadUrl riêng → làm mới cache chi tiết sau khi xong
   const handleVideoUploaded = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.tvShows.detail(showId) });
 
+  // Map lỗi sync → thông báo dễ hiểu (BE trả 502 khi không kết nối được TMDB)
+  const getSyncErrorMessage = (error) => {
+    const status = error?.response?.status;
+    const serverMsg = error?.response?.data?.message;
+
+    if (status === 502) return serverMsg || "Không kết nối được TMDB (lỗi mạng). Vui lòng thử lại sau ít phút.";
+    if (serverMsg) return serverMsg;
+    if (error?.code === "ECONNABORTED") return "Đồng bộ quá lâu, mạng tới TMDB có thể đang chậm. Vui lòng thử lại sau.";
+    if (!error?.response) return "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+    if (status === 401 || status === 403) return "Bạn không có quyền đồng bộ TV show này.";
+    return "Đồng bộ thất bại, hãy thử lại";
+  };
+
+  const showSyncMsg = (msg, ms) => {
+    clearTimeout(syncMsgTimer.current);
+    setSyncMsg(msg);
+    syncMsgTimer.current = setTimeout(() => setSyncMsg(null), ms);
+  };
+
   const handleSyncEpisodes = async () => {
+    if (syncing) return;
+    clearTimeout(syncMsgTimer.current);
     setSyncMsg(null);
     try {
       const data = await syncEpisodes.mutateAsync(showId);
-      setSyncMsg({ type: "success", text: data?.message || "Đồng bộ tập mới thành công!" });
+      showSyncMsg({ type: "success", text: data?.message || "Đồng bộ tập mới thành công!" }, 5000);
     } catch (error) {
-      setSyncMsg({ type: "error", text: error?.response?.data?.message || "Đồng bộ thất bại, hãy thử lại" });
+      // Lỗi giữ lâu hơn (10s) để admin kịp đọc
+      showSyncMsg({ type: "error", text: getSyncErrorMessage(error) }, 10000);
     }
-    setTimeout(() => setSyncMsg(null), 5000);
   };
 
   return (
@@ -778,7 +806,33 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
           fontFamily: FONT,
         }}
       >
-        <div style={{ flexShrink: 0 }}>
+        <div style={{ flexShrink: 0, position: "relative", zIndex: 5 }}>
+          {/* --- THÔNG BÁO SYNC: nổi ngay dưới header, không đẩy layout --- */}
+          <AnimatePresence>
+            {syncMsg && !loading && show && (
+              <motion.div
+                key={syncMsg.text}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                role="status"
+                onClick={() => { clearTimeout(syncMsgTimer.current); setSyncMsg(null); }}
+                style={{
+                  position: "absolute", top: "100%", left: 16, right: 16, marginTop: 8,
+                  padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                  background: syncMsg.type === "success" ? "#F0FDF4" : "#FEF2F2",
+                  border: `1px solid ${syncMsg.type === "success" ? "#BBF7D0" : "#FECACA"}`,
+                  boxShadow: T.shadow,
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600, lineHeight: 1.4,
+                  color: syncMsg.type === "success" ? "#16A34A" : "#DC2626",
+                }}
+              >
+                {syncMsg.type === "success" ? "✓" : "❌"} {syncMsg.text}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {!loading && show && (
             <div style={{ position: "relative", overflow: "hidden", background: T.bg }}>
               {show.backdropUrl && (
@@ -838,20 +892,6 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                       </span>
                     )}
                   </div>
-                  
-                  {/* --- HIỂN THỊ THÔNG BÁO SYNC --- */}
-                  {syncMsg && (
-                    <div style={{ 
-                      marginTop: 8, padding: "5px 10px", borderRadius: 6,
-                      background: syncMsg.type === "success" ? "#F0FDF4" : "#FEF2F2",
-                      border: `1px solid ${syncMsg.type === "success" ? "#BBF7D0" : "#FECACA"}`,
-                      fontFamily: FONT, fontSize: 11.5, fontWeight: 600,
-                      color: syncMsg.type === "success" ? "#16A34A" : "#DC2626",
-                      display: "inline-block"
-                    }}>
-                      {syncMsg.type === "success" ? "✓" : "❌"} {syncMsg.text}
-                    </div>
-                  )}
                 </div>
 
                 <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
@@ -867,7 +907,8 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                       cursor: syncing ? "wait" : "pointer",
                       fontFamily: FONT, fontSize: 12, fontWeight: 600,
                       color: syncing ? T.textMuted : "#2563EB",
-                      display: "flex", alignItems: "center", gap: 5,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                      minWidth: 118, whiteSpace: "nowrap", flexShrink: 0, // cố định bề rộng: đổi nhãn không làm header nhảy
                     }}
                   >
                     <RefreshCw size={12} style={{ animation: syncing ? "spinCw 1s linear infinite" : "none" }} />

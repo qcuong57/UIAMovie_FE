@@ -75,6 +75,21 @@ export function useAdminPerson(id, { enabled = true } = {}) {
   });
 }
 
+/** Filmography (Movie + TV) của 1 person — PersonFilmography trong DetailPanel dùng.
+ *  Key nằm dưới keys.detail(id) nên xoá person (removeQueries detail) cũng dọn luôn phần này. */
+export function usePersonMovies(id, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: [...keys.detail(id), "movies"],
+    queryFn: async () => {
+      const res = await personService.getPersonMovies(id);
+      const list = res?.data ?? res;
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: !!id && enabled,
+    staleTime: STALE.admin,
+  });
+}
+
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 /** Vá một person trong mọi trang danh sách đang cache. */

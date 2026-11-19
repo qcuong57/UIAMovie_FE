@@ -5,7 +5,8 @@
 import React, { useState, useRef } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { motion, AnimatePresence, useInView } from "framer-motion";
-import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowUpRight, Globe2 } from "lucide-react";
+import SectionBadge from "./SectionBadge";
 import { useNavigate } from "react-router-dom";
 import { useCountryRow } from "../../hooks/useCountryRows";
 import MovieCard from "../movie/MovieCard";
@@ -120,30 +121,23 @@ const CountryBlock = ({ country, index, onFavToggle }) => {
           />
 
           <div>
-            {/* Flag + country label */}
+            {/* Flag + badge quốc gia (cùng kiểu badge với MovieRow) */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                marginBottom: 2,
+                marginBottom: 6,
               }}
             >
               <span style={{ fontSize: 16, lineHeight: 1 }}>
                 {country.flag}
               </span>
-              <span
-                style={{
-                  fontFamily: FONT_BODY,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: country.accent,
-                }}
-              >
-                {country.label}
-              </span>
+              <SectionBadge
+                icon={Globe2}
+                text={country.label}
+                color={country.accent}
+              />
             </div>
 
             {/* Big title */}

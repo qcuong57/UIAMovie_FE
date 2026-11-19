@@ -81,6 +81,21 @@ const personService = {
   },
 
   /**
+   * Filmography (Movie + TvShow) của 1 Person theo Id nội bộ
+   * GET /api/persons/{id}/movies
+   * Mỗi phần tử: { id, mediaType: "movie" | "tv", title, posterUrl, releaseDate, rating, character, roles[] }
+   */
+  getPersonMovies: async (id) => {
+    try {
+      const response = await axiosInstance.get(`/persons/${id}/movies`);
+      return response.data;
+    } catch (error) {
+      console.error('[personService] Error fetching person movies:', error);
+      throw error;
+    }
+  },
+
+  /**
    * [Admin] Tạo mới Person thủ công
    * POST /api/persons
    * @param {Object} dto - CreatePersonDTO (Name, TmdbPersonId?, ProfileUrl?, Biography?, Birthday?, PlaceOfBirth?)

@@ -329,7 +329,10 @@ export function useSyncTvShowEpisodes() {
     mutationKey: ["admin", "tvShows", "sync"],
     meta: { silent: true },
     mutationFn: async (showId) => {
-      const res = await axiosInstance.post(`/tvshows/${showId}/sync`);
+      // BE có thể retry TMDB tới ~60s → timeout FE phải dài hơn (mặc định của axios thường ngắn hơn)
+      const res = await axiosInstance.post(`/tvshows/${showId}/sync`, null, {
+        timeout: 90 * 1000,
+      });
       return res?.data?.data ?? res?.data;
     },
     onSuccess: (_d, showId) => {

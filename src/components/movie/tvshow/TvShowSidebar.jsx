@@ -3,10 +3,12 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { C, toSlug } from "../ui/movieConstants";
+import { C } from "../ui/movieConstants";
+import { usePersonNavigation } from "../../../hooks/usePersonNavigation";
 
 const TvShowSidebar = ({ tvShow, actors, related }) => {
   const navigate = useNavigate();
+  const goToPerson = usePersonNavigation();
   const showTitle = tvShow?.title ?? tvShow?.name ?? "";
 
   return (
@@ -53,12 +55,7 @@ const TvShowSidebar = ({ tvShow, actors, related }) => {
             {actors.slice(0, 6).map((p, i) => (
               <div
                 key={i}
-                onClick={() =>
-                  p.name &&
-                  navigate(`/person/${toSlug(p.name)}`, {
-                    state: { actor: p },
-                  })
-                }
+                onClick={() => goToPerson(p)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -258,4 +255,4 @@ const TvShowSidebar = ({ tvShow, actors, related }) => {
   );
 };
 
-export default TvShowSidebar;   
+export default TvShowSidebar;
