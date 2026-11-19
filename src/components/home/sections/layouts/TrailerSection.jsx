@@ -14,7 +14,7 @@ import { useIsMobile } from '../../../../hooks/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
-import TrailerPlayer, { hasTrailer, TRAILER_FILL } from '../shared/TrailerPlayer';
+import TrailerPlayer, { hasTrailer, TRAILER_FIT } from '../shared/TrailerPlayer';
 import Cover from '../shared/Cover';
 import { Rating, PremiumTag } from '../shared/Badges';
 import { accentOf, keyOf, imgOf, metaOf, clampLines } from '../shared/layoutUtils';
@@ -112,7 +112,7 @@ export function TrailerSection({ section }) {
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [playing, setPlaying] = useState(false);
+  const [playingFor, setPlayingFor] = useState(null); // key phim đã tới lượt phát trailer
   const [manualKey, setManualKey] = useState(null); // người xem tự bấm ▶ cho phim này
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(60); // 0–100
@@ -135,13 +135,17 @@ export function TrailerSection({ section }) {
   const next = () => setIndex((safeIndex + 1) % n);
   const prev = () => setIndex((safeIndex - 1 + n) % n);
 
+  // `playing` dẫn xuất từ itemKey: đổi phim là về false NGAY trong cùng lần render.
+  // (Trước đây dùng setPlaying(false) trong effect → render đầu của phim mới vẫn còn playing=true,
+  // iframe mount rồi bị huỷ ngay, rồi mount lại → YouTube kẹt, trailer thứ 2 trở đi về ảnh nền.)
+  const playing = canPlay && playingFor === itemKey;
+
   // Trailer tự phát sau 1.8s (bấm tay thì phát ngay), dừng khi khung rời màn hình / đổi phim
   useEffect(() => {
-    setPlaying(false);
     if (!canPlay) return undefined;
-    const t = setTimeout(() => setPlaying(true), manual ? 0 : START_DELAY);
-    return () => clearTimeout(t);
-  }, [safeIndex, canPlay, manual]);
+    const t = setTimeout(() => setPlayingFor(itemKey), manual ? 0 : START_DELAY);
+    return () => { clearTimeout(t); setPlayingFor(null); };
+  }, [itemKey, canPlay, manual]);
 
   // Giữ thẻ đang chọn ở giữa dải (chỉ cuộn trong dải, không kéo cả trang)
   useEffect(() => {
@@ -202,7 +206,7 @@ export function TrailerSection({ section }) {
                 </motion.div>
                 {playing && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} style={{ position: 'absolute', inset: 0 }}>
-                    <TrailerPlayer item={item} muted={muted} volume={volume} style={TRAILER_FILL} />
+                    <TrailerPlayer item={item} muted={muted} volume={volume} style={TRAILER_FIT} />
                   </motion.div>
                 )}
                 {item.isPremium && <PremiumTag style={{ top: 12, left: 12 }} />}
