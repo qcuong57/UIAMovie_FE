@@ -5,7 +5,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play } from 'lucide-react';
+import { Play, Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
@@ -139,12 +139,25 @@ export function SpotlightSection({ section }) {
               </motion.p>
             )}
             <motion.div variants={lineV} style={{ alignSelf: 'flex-start', marginTop: 2 }}>
-              <Link
-                to={contentPath(active)} className="hsl-link hsl-sp-cta"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: isMobile ? '9px 20px' : '11px 26px', borderRadius: 6, background: '#fff', color: C.bg, textDecoration: 'none', fontFamily: FONT_BODY, fontSize: isMobile ? 13.5 : 14.5, fontWeight: 800 }}
-              >
-                <Play size={16} fill={C.bg} strokeWidth={0} /> Xem ngay
-              </Link>
+              {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} style={{ display: 'inline-flex' }}>
+                <Link
+                  to={contentPath(active)} className="hsl-link"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+                    padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
+                    fontFamily: FONT_BODY, fontSize: isMobile ? 12.5 : 15, fontWeight: 700,
+                    background: active.isPremium ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : '#ffffff',
+                    color: active.isPremium ? '#1c1400' : '#000000',
+                    boxShadow: active.isPremium ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
+                  }}
+                >
+                  {active.isPremium
+                    ? <Crown size={15} fill="#1c1400" color="#1c1400" />
+                    : <Play size={16} fill="currentColor" strokeWidth={0} />}
+                  Xem ngay
+                </Link>
+              </motion.div>
             </motion.div>
           </motion.div>
         </AnimatePresence>

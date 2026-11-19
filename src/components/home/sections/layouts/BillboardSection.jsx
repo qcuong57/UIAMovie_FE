@@ -5,11 +5,12 @@
 //  • chữ ở dưới-trái, CTA trắng nổi bật; mô tả tự thu gọn khi trailer chạy
 //  • thanh phân đoạn (segmented progress) cho biết số phim + thời gian còn lại, bấm để chọn
 //  • thẻ "Tiếp theo" ở góc phải dưới thay cho dải thumbnail rối mắt (mobile: dải chip phía dưới)
+//  • trailer tự phát cả desktop lẫn mobile (muted, playsinline); tắt khi Reduce Motion / Data Saver
 //  • tạm dừng khi rê chuột / focus / khi banner ra khỏi màn hình; vuốt ngang trên mobile; phím ← →
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
-import { Play, Volume2, VolumeX, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Crown, Volume2, VolumeX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
@@ -22,6 +23,12 @@ import { accentOf, keyOf, imgOf, metaOf, clampLines } from '../shared/layoutUtil
 import { useTextMotion, HOME_EASE, CSS_EASE } from '../shared/motionPresets';
 
 const MAX_ITEMS = 5;
+
+// Mobile: khung 4:5 → iframe 16:9 phải rộng ~222% chiều ngang để phủ kín chiều cao (không viền đen)
+const TRAILER_FILL_MOBILE = { top: '50%', left: '50%', width: '222.5%', height: '100%', transform: 'translate(-50%,-50%)' };
+
+// Tiết kiệm dữ liệu: không tự phát trailer nếu người dùng bật Data Saver
+const dataSaver = () => typeof navigator !== 'undefined' && navigator.connection?.saveData === true;
 const AUTO_MS = 8000;
 const AUTO_MS_TRAILER = 20000;
 
@@ -94,11 +101,11 @@ function Chip({ item, active, accent, onSelect }) {
 }
 
 // ── Nút + thanh trượt âm lượng (không đổi src của trailer → không tải lại) ──
-function VolumeControl({ muted, volume, onToggle, onVolume }) {
+function VolumeControl({ muted, volume, onToggle, onVolume, isMobile }) {
   const shown = muted ? 0 : volume;
   return (
     <div
-      style={{ position: 'absolute', right: 28, top: 20, zIndex: 4, display: 'flex', alignItems: 'center', gap: 6, height: 38, borderRadius: 19, border: `1px solid ${C.borderBright}`, background: 'rgba(0,0,0,.55)' }}
+      style={{ position: 'absolute', right: isMobile ? 12 : 28, top: isMobile ? 12 : 20, zIndex: 4, display: 'flex', alignItems: 'center', gap: 6, height: 38, borderRadius: 19, border: `1px solid ${C.borderBright}`, background: 'rgba(0,0,0,.55)' }}
     >
       <button
         type="button" className="hsl-bb-mute" aria-label={muted ? 'Bật tiếng' : 'Tắt tiếng'} onClick={onToggle}
@@ -106,11 +113,13 @@ function VolumeControl({ muted, volume, onToggle, onVolume }) {
       >
         {shown === 0 ? <VolumeX size={17} /> : <Volume2 size={17} />}
       </button>
-      <input
-        type="range" min={0} max={100} step={1} value={shown} aria-label="Âm lượng"
-        onChange={(e) => onVolume(Number(e.target.value))}
-        style={{ width: 84, marginRight: 12, accentColor: '#fff', cursor: 'pointer' }}
-      />
+      {!isMobile && (
+        <input
+          type="range" min={0} max={100} step={1} value={shown} aria-label="Âm lượng"
+          onChange={(e) => onVolume(Number(e.target.value))}
+          style={{ width: 84, marginRight: 12, accentColor: '#fff', cursor: 'pointer' }}
+        />
+      )}
     </div>
   );
 }
@@ -142,7 +151,7 @@ export function BillboardSection({ section }) {
   const safeIndex = Math.min(index, Math.max(0, n - 1));
   const item = items[safeIndex];
   const nextItem = items[(safeIndex + 1) % Math.max(n, 1)];
-  const hasClip = !!item && !isMobile && !reduce && hasTrailer(item);
+  const hasClip = !!item && !reduce && !dataSaver() && hasTrailer(item);
   const canTrailer = hasClip && inView;
   const autoplay = n > 1 && !reduce;
   const duration = hasClip ? AUTO_MS_TRAILER : AUTO_MS;
@@ -243,7 +252,7 @@ export function BillboardSection({ section }) {
             </motion.div>
             {playing && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} style={{ position: 'absolute', inset: 0 }}>
-                <TrailerPlayer item={item} muted={muted} volume={volume} style={TRAILER_FILL} />
+                <TrailerPlayer item={item} muted={muted} volume={volume} style={isMobile ? TRAILER_FILL_MOBILE : TRAILER_FILL} />
               </motion.div>
             )}
             {item.isPremium && <PremiumTag style={{ top: 16, left: 16 }} />}
@@ -281,12 +290,25 @@ export function BillboardSection({ section }) {
               </motion.div>
             )}
             <motion.div variants={lineV} style={{ alignSelf: 'flex-start', marginTop: 2 }}>
-              <Link
-                to={contentPath(item)} className="hsl-link hsl-bb-cta"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 9, padding: isMobile ? '10px 22px' : '12px 30px', borderRadius: 6, background: '#fff', color: C.bg, textDecoration: 'none', fontFamily: FONT_BODY, fontSize: isMobile ? 14 : 15, fontWeight: 800 }}
-              >
-                <Play size={18} fill={C.bg} strokeWidth={0} /> Xem ngay
-              </Link>
+              {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} style={{ display: 'inline-flex' }}>
+                <Link
+                  to={contentPath(item)} className="hsl-link"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+                    padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
+                    fontFamily: FONT_BODY, fontSize: isMobile ? 12.5 : 15, fontWeight: 700,
+                    background: item.isPremium ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : '#ffffff',
+                    color: item.isPremium ? '#1c1400' : '#000000',
+                    boxShadow: item.isPremium ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
+                  }}
+                >
+                  {item.isPremium
+                    ? <Crown size={15} fill="#1c1400" color="#1c1400" />
+                    : <Play size={16} fill="currentColor" strokeWidth={0} />}
+                  Xem ngay
+                </Link>
+              </motion.div>
             </motion.div>
           </motion.div>
         </AnimatePresence>
@@ -311,7 +333,7 @@ export function BillboardSection({ section }) {
         {/* Âm thanh trailer */}
         {playing && (
           <VolumeControl
-            muted={muted} volume={volume}
+            isMobile={isMobile} muted={muted} volume={volume}
             onToggle={() => {
               if (muted && volume === 0) setVolume(60);
               setMuted((m) => !m);

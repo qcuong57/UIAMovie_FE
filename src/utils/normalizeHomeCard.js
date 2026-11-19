@@ -3,6 +3,29 @@
 // (id, title, posterUrl, backdropUrl, rating, year, genres, isTvShow, trailerVideoUrl...).
 // Nếu normalizeMedia.js của bạn có field khác tên, chỉ cần sửa ở đây.
 
+// Chấp nhận cả mã 11 ký tự lẫn link YouTube (watch?v=, youtu.be/, /embed/, /shorts/) → luôn trả về MÃ video,
+// vì TrailerPlayer ghép thẳng vào /embed/<mã>: truyền nguyên link thì iframe hỏng và trailer không phát.
+const YT_ID = /^[\w-]{11}$/;
+function toYoutubeKey(value) {
+  if (!value || typeof value !== 'string') return null;
+  const v = value.trim();
+  if (YT_ID.test(v)) return v;
+  const m = v.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Trailer có thể nằm ở trường riêng (trailerKey / trailerVideoUrl) hoặc trong mảng videos như DTO chi tiết phim
+// (videoType 'trailer' = link YouTube, 'trailer_upload' = file đã upload) → lấy cái nào có.
+function pickTrailer(card) {
+  const videos = Array.isArray(card.videos) ? card.videos : [];
+  const yt = videos.find((v) => v?.videoType === 'trailer')?.videoUrl;
+  const up = videos.find((v) => v?.videoType === 'trailer_upload')?.videoUrl;
+  return {
+    trailerKey: toYoutubeKey(card.trailerKey) ?? toYoutubeKey(yt),
+    trailerVideoUrl: card.trailerVideoUrl || up || null,
+  };
+}
+
 export function normalizeHomeCard(card) {
   if (!card) return null;
   const isTvShow = card.contentType === 'tvshow';
@@ -22,8 +45,7 @@ export function normalizeHomeCard(card) {
     isTvShow,
     isPremium: Boolean(card.isPremium),
     isUpcoming: Boolean(card.isUpcoming),
-    trailerKey: card.trailerKey ?? null,
-    trailerVideoUrl: card.trailerVideoUrl ?? null,
+    ...pickTrailer(card),
     duration: card.duration ?? null,
     numberOfSeasons: card.numberOfSeasons ?? null,
   };

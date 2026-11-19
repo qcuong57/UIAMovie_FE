@@ -70,11 +70,23 @@ export function HeroSection({ section }) {
                   {item.description}
                 </motion.p>
               )}
-              <motion.button variants={lineV}
+              {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
+              <motion.button
+                variants={lineV} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                 type="button" onClick={() => navigate(contentPath(item))}
-                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 6, border: 'none', cursor: 'pointer', background: accent, color: '#fff', fontFamily: FONT_BODY, fontSize: 13.5, fontWeight: 700 }}
+                style={{
+                  alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: 'none',
+                  padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
+                  fontFamily: FONT_BODY, fontSize: isMobile ? 12.5 : 15, fontWeight: 700,
+                  background: item.isPremium ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : '#ffffff',
+                  color: item.isPremium ? '#1c1400' : '#000000',
+                  boxShadow: item.isPremium ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
+                }}
               >
-                <Play size={15} fill="#fff" /> Xem ngay
+                {item.isPremium
+                  ? <Crown size={15} fill="#1c1400" color="#1c1400" />
+                  : <Play size={16} fill="currentColor" strokeWidth={0} />}
+                Xem ngay
               </motion.button>
             </motion.div>
           </motion.div>

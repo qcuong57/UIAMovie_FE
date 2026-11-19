@@ -28,19 +28,19 @@ const LAYOUT_INFO = {
   accordion: { name: 'Accordion',     desc: 'Dải panel, rê chuột thì mở rộng (tối đa 6 phim)' },
   list:      { name: 'Danh sách',     desc: 'Thumbnail + thông tin dạng hàng, nhiều cột' },
   billboard: { name: 'Billboard',     desc: 'Banner điện ảnh tự xoay, trailer tự phát, thẻ “Tiếp theo” (tối đa 5 phim)' },
-  trailer:   { name: 'Trailer',       desc: 'Hàng thẻ backdrop, rê chuột để xem trailer' },
-  split:     { name: 'Chia đôi',      desc: 'Khung lớn + danh sách bên phải (tối đa 6 phim)' },
+  trailer:   { name: 'Trailer',       desc: 'Phòng chiếu trailer: viền đen, khung video + bảng thông tin đầy đủ mô tả, dải thẻ đánh số để chọn phim (tối đa 12 phim)' },
+  split:     { name: 'Chia đôi',      desc: 'Hồ sơ quốc gia + ảnh lớn, nút ‹ › và dải poster để chọn phim, tự có chip lọc cờ khi nhiều nước (tối đa 10 phim)' },
 };
 // Số phim tối đa thực sự được hiển thị (khớp với FE). Layout không có trong bảng = không giới hạn cứng.
-const LAYOUT_LIMIT = { hero: 5, billboard: 5, spotlight: 8, mosaic: 5, accordion: 6, split: 6, ranked: 10 };
+const LAYOUT_LIMIT = { hero: 5, billboard: 5, trailer: 12, spotlight: 8, mosaic: 5, accordion: 6, split: 10, ranked: 10 };
 const LAYOUT_NOTE = {
   hero: 'Hero tự chuyển giữa các phim đầu tiên. Nên chọn phim có backdrop đẹp và mô tả.',
-  billboard: 'Billboard xoay vòng các phim đầu tiên với thanh tiến trình. Nên chọn phim có backdrop, mô tả và trailer — trailer chỉ tự phát trên máy tính.',
+  billboard: 'Billboard xoay vòng các phim đầu tiên với thanh tiến trình. Nên chọn phim có backdrop, mô tả và trailer — trailer tự phát (tắt tiếng) trên cả máy tính lẫn điện thoại.',
   spotlight: 'Tiêu điểm không tự chuyển, người xem chọn qua dock bên dưới. Nên chọn phim có đủ poster dọc, backdrop và mô tả — poster dọc hiện nổi bên phải sân khấu.',
   mosaic: 'Phim đầu tiên là ô lớn, các phim sau là ô nhỏ.',
   accordion: 'Trên điện thoại sẽ hiện dạng thẻ poster cuộn ngang.',
-  trailer: 'Phim có trailer sẽ tự phát khi rê chuột. Trên điện thoại hiển thị như banner thường.',
-  split: 'Phim đầu tiên được chọn sẵn.',
+  trailer: 'Khung video bên trái tự phát trailer (tắt tiếng) khi khối vào màn hình, thông tin phim nằm ở bảng bên phải (điện thoại: bên dưới video). Hết một lượt trailer thì tự chuyển phim kế; người xem bấm thẻ đánh số bên dưới để chọn. Nên chọn phim có backdrop, mô tả và trailer — phim không có trailer chỉ hiện ảnh tĩnh. Người dùng bật Giảm chuyển động hoặc Tiết kiệm dữ liệu sẽ không tự phát mà phải bấm nút ▶.',
+  split: 'Hướng theo quốc gia: đầu khối hiện cờ + tên nước (chọn quy tắc “Theo quốc gia” thì tiêu đề là “Phim <nước>”). Nếu bộ sưu tập có từ 2 nước trở lên, người xem có thêm chip cờ để lọc theo nước. Phim đầu tiên được chọn sẵn; người xem đổi phim bằng nút ‹ › (hoặc phím ← →) hoặc rê chuột / chạm vào dải poster, dải này tự cuộn khi có nhiều phim. Nên chọn phim có backdrop, poster dọc, mô tả và thông tin nước sản xuất.',
   ranked: 'Hiển thị đúng thứ tự bạn sắp.',
 };
 const AUTO_RULE_INFO = {
@@ -163,15 +163,31 @@ function LayoutThumb({ layout, active, w = 60 }) {
       <rect key="s3" x="25" y="31" width="4" height="1.6" rx="0.8" fill={f} />,
       <rect key="n" x="38" y="26" width="15" height="7" rx="1.5" fill={c} opacity="0.85" />,
     ],
-    trailer: [0, 1].map((i) => (
-      <g key={i}>
-        <rect x={4 + i * 30} y="10" width="26" height="18" rx="2" fill={f} />
-        <path d={`M${14 + i * 30} 15 l7 4 l-7 4 z`} fill={c} />
-      </g>
-    )),
+    // Khung video bên trái + bảng thông tin bên phải + dải thẻ đánh số bên dưới
+    trailer: [
+      <rect key="v" x="4" y="4" width="36" height="22" rx="2.5" fill={f} />,
+      <path key="p" d="M19 10.5 l8 4.5 l-8 4.5 z" fill={c} />,
+      <rect key="i" x="43" y="4" width="13" height="22" rx="2.5" fill={f} stroke={c} strokeWidth="0.6" />,
+      <rect key="i1" x="45" y="8" width="9" height="2.5" rx="1.2" fill={c} />,
+      <rect key="i2" x="45" y="13" width="7" height="1.8" rx="0.9" fill={c} opacity="0.6" />,
+      <rect key="i3" x="45" y="21" width="9" height="3" rx="1.5" fill={c} />,
+      ...[0, 1, 2, 3].map((i) => (
+        <g key={i}>
+          <rect x={4 + i * 13.5} y="29" width="12" height="5.5" rx="1.2" fill={i === 0 ? c : f} />
+          <rect x={4 + i * 13.5} y="36" width="8" height="1.6" rx="0.8" fill={f} />
+        </g>
+      )),
+    ],
+    // Nửa trái: cờ + tên nước + viên thuốc ‹ › · tiêu đề · nút · dải poster; nửa phải ảnh lớn
     split: [
-      <rect key="b" x="4" y="6" width="34" height="28" rx="3" fill={f} />,
-      ...[0, 1, 2].map((i) => <rect key={i} x="42" y={6 + i * 10} width="14" height="8" rx="2" fill={i === 0 ? c : f} />),
+      <rect key="b" x="4" y="6" width="52" height="28" rx="3" fill={f} />,
+      <rect key="i" x="26" y="6" width="30" height="28" rx="3" fill={c} opacity="0.35" />,
+      <rect key="fl" x="8" y="9" width="5" height="3.6" rx="0.8" fill={c} />,
+      <rect key="cn" x="15" y="9.6" width="9" height="2.4" rx="1.2" fill={c} opacity="0.7" />,
+      <rect key="pill" x="14" y="13.6" width="12" height="3.6" rx="1.8" fill="none" stroke={c} strokeWidth="0.5" opacity="0.8" />,
+      <rect key="t" x="8" y="19" width="16" height="3" rx="1.5" fill={c} />,
+      <rect key="bt" x="8" y="24" width="8" height="3" rx="1.5" fill="#fff" stroke={c} strokeWidth="0.5" />,
+      ...[0, 1, 2, 3].map((i) => <rect key={i} x={8 + i * 4.8} y="29" width="3.8" height="4" rx="0.7" fill={i === 0 ? c : f} />),
     ],
   };
   return (
@@ -516,7 +532,7 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
                 placeholder="VD: Phim mới nè" style={{ ...inputStyle, borderColor: titleError ? T.red : T.border }}
               />
             </Field>
-            <Field label="Phụ đề" hint="chữ mờ cạnh tên, chỉ hiện trên máy tính">
+            <Field label="Phụ đề" hint="chữ mờ cạnh tên (mobile sẽ xuống dòng dưới tên nếu hết chỗ)">
               <input value={form.subtitle} maxLength={250} onChange={(e) => set({ subtitle: e.target.value })} placeholder="VD: Phim này cực hay" style={inputStyle} />
             </Field>
           </FormSection>
