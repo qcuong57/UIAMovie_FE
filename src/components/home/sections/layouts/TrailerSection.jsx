@@ -14,7 +14,7 @@ import { useIsMobile } from '../../../../hooks/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
-import TrailerPlayer, { hasTrailer, TRAILER_FIT } from '../shared/TrailerPlayer';
+import TrailerPlayer, { hasTrailer, TRAILER_FILL, TRAILER_FIT } from '../shared/TrailerPlayer';
 import Cover from '../shared/Cover';
 import { Rating, PremiumTag } from '../shared/Badges';
 import { accentOf, keyOf, imgOf, metaOf, clampLines } from '../shared/layoutUtils';
@@ -206,7 +206,7 @@ export function TrailerSection({ section }) {
                 </motion.div>
                 {playing && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} style={{ position: 'absolute', inset: 0 }}>
-                    <TrailerPlayer item={item} muted={muted} volume={volume} style={TRAILER_FIT} />
+                    <TrailerPlayer item={item} muted={muted} volume={volume} style={isMobile ? TRAILER_FIT : TRAILER_FILL} clean={isMobile} />
                   </motion.div>
                 )}
                 {item.isPremium && <PremiumTag style={{ top: 12, left: 12 }} />}

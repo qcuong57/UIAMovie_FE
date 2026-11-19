@@ -11,7 +11,7 @@ const YT_ORIGIN = 'https://www.youtube-nocookie.com';
 // YouTube hiện lớp phủ (tiêu đề, nút ⏸ ⏮ ⏭, 'More videos', logo) vài giây đầu → chờ lớp phủ tự tắt rồi mới lộ iframe
 const REVEAL_DELAY = 3000;
 
-function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall }) {
+function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, clean }) {
   const frameRef = useRef(null);
   const audioRef = useRef({ muted, volume });
   audioRef.current = { muted, volume };
@@ -26,8 +26,9 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall }) {
   // src chỉ phụ thuộc vào trailerKey → không bao giờ đổi khi bấm âm lượng
   const src = useMemo(() => {
     const origin = typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
-    return `${YT_ORIGIN}/embed/${k}?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1${origin}`;
-  }, [k]);
+    const loop = clean ? '' : `&loop=1&playlist=${k}`; // clean (mobile): không dùng playlist → không hiện nút ⏮ ⏭
+    return `${YT_ORIGIN}/embed/${k}?autoplay=1&mute=1&controls=0${loop}&modestbranding=1&playsinline=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1${origin}`;
+  }, [k, clean]);
 
   const send = (func, args = []) => {
     frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), YT_ORIGIN);
@@ -58,8 +59,8 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall }) {
         if (state === 1) {
           started.current = true;
           // Lộ iframe sau REVEAL_DELAY (lớp phủ của YouTube đã tự ẩn); trong lúc chờ vẫn thấy ảnh nền
-          if (!revealTimer.current) revealTimer.current = setTimeout(() => setShown(true), REVEAL_DELAY);
-        } else if (state === 0) {
+          if (!revealTimer.current) revealTimer.current = setTimeout(() => setShown(true), clean ? REVEAL_DELAY : 0);
+        } else if (state === 0 && clean) {
           // Hết video: tự phát lại từ đầu (không dùng loop/playlist) và giấu màn hình 'More videos'
           clearTimeout(revealTimer.current); revealTimer.current = null;
           setShown(false); send('seekTo', [0, true]); send('playVideo');
@@ -120,13 +121,13 @@ function UploadedVideo({ item, muted, volume, style }) {
 }
 
 // Ưu tiên YouTube (iframe muted autoplay), sau đó video upload. Không có thì trả null.
-export default function TrailerPlayer({ item, muted = true, volume = 60, style }) {
+export default function TrailerPlayer({ item, muted = true, volume = 60, style, clean = false }) {
   const [retry, setRetry] = useState({ id: '', n: 0 });
   const tries = retry.id === item.trailerKey ? retry.n : 0;
   if (item.trailerKey) {
     return (
       <YouTubePlayer
-        key={`${item.trailerKey}-${tries}`} item={item} trailerKey={item.trailerKey} muted={muted} volume={volume} style={style}
+        key={`${item.trailerKey}-${tries}`} item={item} trailerKey={item.trailerKey} muted={muted} volume={volume} style={style} clean={clean}
         onStall={() => { if (tries < 2) setRetry({ id: item.trailerKey, n: tries + 1 }); }}
       />
     );
@@ -143,5 +144,4 @@ export const hasTrailer = (i) => Boolean(i.trailerKey || i.trailerVideoUrl);
 export const TRAILER_FILL = { top: '50%', left: '50%', width: '100%', height: '170%', transform: 'translate(-50%,-50%)' };
 
 // Khung đã đúng tỉ lệ 16:9 (kiểu TrailerSection / Billboard mới) → iframe phủ vừa khít, thấy trọn trailer, không cắt
-// scale nhẹ để cắt bớt thanh tiêu đề trên / logo YouTube dưới nằm sát mép khung
-export const TRAILER_FIT = { top: 0, left: 0, width: '100%', height: '100%', transform: 'scale(1.14)', transformOrigin: 'center center' };
+export const TRAILER_FIT = { top: 0, left: 0, width: '100%', height: '100%' };
