@@ -2,14 +2,17 @@
 // Panel slide-in dùng chung cho AdminMovies & AdminTvShows
 // 2 tab: 🎬 Phim | 📺 TV Show — mỗi tab có search theo tên + nhập ID riêng
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, Check, Star, Copy, Film, Tv, X, Hash,
   Users, Image, Layers, PlayCircle, ChevronDown, ChevronUp,
   Eye, AlertCircle, Clock
 } from 'lucide-react';
-import { useTmdbSearch, useTmdbPreview, useImportTmdb } from '../../hooks/useAdminTmdb';
+import { useTmdbPreview, useImportTmdb } from '../../hooks/useAdminTmdb';
+import { useTmdbDiscover, useTmdbExisting, tmdbKeys } from '../../hooks/useTmdbDiscover';
+import TmdbFilterBar, { EMPTY_FILTERS, hasActiveFilters, filtersKey } from './TmdbFilterBar';
 import { T, FONT_BODY as FONT } from '../../context/adminTokens';
 
 const COUNTRY_FLAG = { US:'🇺🇸', KR:'🇰🇷', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
@@ -25,6 +28,74 @@ const Spin = ({ color = T.accent, size = 20 }) => (
     }} />
   </>
 );
+
+// ── Đếm giây đã trôi qua khi đang import ─────────────────────────────────────
+function useElapsed(active) {
+  const [sec, setSec] = useState(0);
+  useEffect(() => {
+    if (!active) { setSec(0); return; }
+    const t0 = Date.now();
+    const id = setInterval(() => setSec(Math.floor((Date.now() - t0) / 1000)), 500);
+    return () => clearInterval(id);
+  }, [active]);
+  return sec;
+}
+
+const fmtSec = (n) => (n >= 60 ? `${Math.floor(n / 60)}p${String(n % 60).padStart(2, '0')}s` : `${n}s`);
+
+// ── Thanh tiến trình (không xác định) + đồng hồ — cho 1 lần import ───────────
+// BE chưa trả tiến độ theo bước nên chỉ hiện thời gian đã chạy + gợi ý, không giả số %.
+const ImportProgress = ({ seconds, isMovie }) => {
+  const slow = seconds >= (isMovie ? 25 : 60);
+  return (
+    <div style={{ marginTop: 8 }}>
+      <style>{`@keyframes _indet { 0% { left: -40%; } 100% { left: 100%; } }`}</style>
+      <div style={{ position: 'relative', height: 4, borderRadius: 4, background: `${T.accent}22`, overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, width: '40%', borderRadius: 4,
+          background: T.accent, animation: '_indet 1.1s ease-in-out infinite',
+        }}/>
+      </div>
+      <div style={{
+        marginTop: 5, display: 'flex', alignItems: 'center', gap: 5,
+        fontFamily: FONT, fontSize: 10.5, color: slow ? '#D97706' : T.textMuted,
+      }}>
+        <Clock size={10}/>
+        <span>
+          Đang import… {fmtSec(seconds)}
+          {slow
+            ? ' — lâu hơn bình thường, vẫn đang chạy, vui lòng không đóng panel'
+            : !isMovie ? ' (show nhiều season sẽ lâu hơn)' : ''}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ── Tiến trình import hàng loạt: thanh % thật + thời gian còn lại ước tính ────
+const BulkProgress = ({ bulk }) => {
+  const elapsed = useElapsed(bulk.running);
+  const pct = bulk.total ? Math.round((bulk.done / bulk.total) * 100) : 0;
+  const eta = bulk.running && bulk.done > 0
+    ? Math.max(0, Math.round((elapsed / bulk.done) * (bulk.total - bulk.done)))
+    : null;
+  return (
+    <div style={{ flexBasis: '100%' }}>
+      <div style={{ height: 6, borderRadius: 6, background: `${T.accent}22`, overflow: 'hidden' }}>
+        <div style={{
+          width: `${pct}%`, height: '100%', background: bulk.failed > 0 ? '#D97706' : T.accent,
+          transition: 'width 0.3s ease',
+        }}/>
+      </div>
+      <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontFamily: FONT, fontSize: 10.5, color: T.textMuted }}>
+        <span>{bulk.done}/{bulk.total} ({pct}%){bulk.failed > 0 ? ` · ${bulk.failed} lỗi` : ''}</span>
+        <span>
+          {fmtSec(elapsed)}{eta != null ? ` · còn ~${fmtSec(eta)}` : ''}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 // ── Import Result Badge ───────────────────────────────────────────────────────
 // Hiển thị chi tiết sau khi import thành công: cast, ảnh, seasons, episodes
@@ -241,9 +312,10 @@ const PreviewPanel = ({ tmdbId, isMovie, onClose }) => {
 };
 
 // ── Result Card ───────────────────────────────────────────────────────────────
-const TmdbCard = ({ item, isMovie, onImport, importing, imported, importResult, importMsg }) => {
+const TmdbCard = ({ item, isMovie, onImport, importing, imported, importResult, importMsg, selected, onToggle }) => {
   const [copied, setCopied]         = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const elapsed = useElapsed(importing);
 
   const accent      = T.accent;
   const accentLight = T.accentLight;
@@ -288,7 +360,22 @@ const TmdbCard = ({ item, isMovie, onImport, importing, imported, importResult, 
           onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
         >
           {/* Poster */}
-          <div style={{ width: 54, flexShrink: 0, background: T.bg }}>
+          <div style={{ width: 54, flexShrink: 0, background: T.bg, position: 'relative' }}>
+            {onToggle && !imported && (
+              <label
+                onClick={e => e.stopPropagation()}
+                style={{
+                  position: 'absolute', top: 4, left: 4, zIndex: 1, display: 'flex', cursor: 'pointer',
+                  padding: 3, borderRadius: 5, background: 'rgba(255,255,255,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }}
+              >
+                <input
+                  type="checkbox" checked={!!selected} onChange={() => onToggle(item.id)} disabled={importing}
+                  aria-label={`Chọn ${title}`}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: T.accent, cursor: 'pointer' }}
+                />
+              </label>
+            )}
             {item.posterUrl
               ? <img src={item.posterUrl} alt="" style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
               : <div style={{ width: '100%', aspectRatio: '2/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
@@ -381,15 +468,7 @@ const TmdbCard = ({ item, isMovie, onImport, importing, imported, importResult, 
             </div>
 
             {/* TV show import note — cảnh báo có thể mất lâu */}
-            {!isMovie && importing && (
-              <div style={{
-                marginTop: 6, display: 'flex', alignItems: 'center', gap: 5,
-                fontFamily: FONT, fontSize: 10.5, color: '#D97706',
-              }}>
-                <Clock size={10}/>
-                Show nhiều season có thể mất 10–30 giây để fetch episodes từ TMDB
-              </div>
-            )}
+            {importing && <ImportProgress seconds={elapsed} isMovie={isMovie} />}
           </div>
         </div>
 
@@ -422,7 +501,12 @@ const TabContent = ({ isMovie, onImported }) => {
   const [subTab,          setSubTab]          = useState('search');
   const [query,           setQuery]           = useState('');
   const [debouncedQuery,  setDebouncedQuery]  = useState('');
-  const [tmdbPage,        setTmdbPage]        = useState(1);
+  const [filters,         setFilters]         = useState(EMPTY_FILTERS);
+  const [debouncedFilters, setDebouncedFilters] = useState(EMPTY_FILTERS);
+  // Con trỏ phân trang: mỗi phần tử là trang TMDB bắt đầu quét; trang sau = nextPage mà server trả về
+  const [pageStack,       setPageStack]       = useState([1]);
+  const [selected,        setSelected]        = useState({}); // { [tmdbId]: true } — chọn để import hàng loạt
+  const [bulk,            setBulk]            = useState(null); // { running, done, failed, total }
   const [importing,       setImporting]       = useState({});
   const [imported,        setImported]        = useState({});
   const [importResult,    setImportResult]    = useState({}); // { [tmdbId]: resultData }
@@ -431,9 +515,11 @@ const TabContent = ({ isMovie, onImported }) => {
   const [manualImporting, setManualImporting] = useState(false);
   const [manualMsg,       setManualMsg]       = useState(null);
   const [manualResult,    setManualResult]    = useState(null);
+  const manualElapsed = useElapsed(manualImporting);
 
   const kind = isMovie ? 'movie' : 'tv';
   const importTmdb = useImportTmdb(kind);
+  const queryClient = useQueryClient();
 
   const accent      = T.accent;
   const accentLight = T.accentLight;
@@ -444,32 +530,72 @@ const TabContent = ({ isMovie, onImported }) => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
     return () => clearTimeout(t);
   }, [query]);
-  const searchQ    = useTmdbSearch(kind, debouncedQuery, tmdbPage);
-  const results    = debouncedQuery ? (searchQ.data?.results ?? []) : [];
-  const totalPages = debouncedQuery ? (searchQ.data?.totalPages ?? 0) : 0;
-  const totalRes   = debouncedQuery ? (searchQ.data?.totalResults ?? 0) : 0;
-  const searching  = !!query.trim() && (searchQ.isFetching || query.trim() !== debouncedQuery);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFilters(filters), 350);
+    return () => clearTimeout(t);
+  }, [filters]);
 
+  const filterActive = hasActiveFilters(debouncedFilters);
+  const active       = !!debouncedQuery || filterActive;
+  const hasInput     = !!query.trim() || hasActiveFilters(filters);
+  const startPage    = pageStack[pageStack.length - 1];
+  const discoverQ    = useTmdbDiscover(kind, debouncedQuery, debouncedFilters, startPage, active);
+  const results      = active ? (discoverQ.data?.results ?? []) : [];
+  const nextPage     = active ? (discoverQ.data?.nextPage ?? null) : null;
+  const isFiltered   = !!discoverQ.data?.isFiltered;
+  const totalRes     = discoverQ.data?.totalResults ?? 0;
+  const notes        = active ? (discoverQ.data?.notes ?? []) : [];
+  const pendingInput = query.trim() !== debouncedQuery || filtersKey(filters) !== filtersKey(debouncedFilters);
+  const searching    = hasInput && (discoverQ.isFetching || pendingInput);
+
+  // Phim/show đã có trong DB (server) hoặc vừa import trong phiên này
+  const existingQ   = useTmdbExisting(kind, results.map(r => r.id));
+  const existingSet = useMemo(() => new Set(existingQ.data ?? []), [existingQ.data]);
+  const isDone      = (id) => !!imported[id] || existingSet.has(id);
+
+  const resetPaging = () => { setPageStack([1]); setSelected({}); };
   const handleQueryChange = (q) => {
     setQuery(q);
-    setTmdbPage(1);
+    resetPaging();
+  };
+  const handleFiltersChange = (f) => {
+    setFilters(f);
+    resetPaging();
   };
 
-  const doImport = async (tmdbId) => {
+  const doImport = async (tmdbId, { silent = false } = {}) => {
+    let ok = false;
     setImporting(p => ({ ...p, [tmdbId]: true }));
     setImportMsg(p => ({ ...p, [tmdbId]: null }));
     setImportResult(p => ({ ...p, [tmdbId]: null }));
     try {
-      const result  = await importTmdb.mutateAsync(tmdbId);
+      // Import hàng loạt: lỗi mạng / 5xx tự thử lại 1 lần (nếu lần 1 đã ghi một phần → lần 2 trả 409 → coi như xong)
+      let result;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          result = await importTmdb.mutateAsync(tmdbId);
+          break;
+        } catch (err) {
+          const st = err?.response?.status;
+          if (silent && attempt < 1 && (!st || st >= 500)) continue;
+          throw err;
+        }
+      }
       setImported(p => ({ ...p, [tmdbId]: true }));
       setImportResult(p => ({ ...p, [tmdbId]: result }));
       setImportMsg(p => ({ ...p, [tmdbId]: { type: 'success', text: '✓ Import thành công' } }));
       console.log(`[AdminTmdbSearch] Import result for ${tmdbId}:`, result);
-      onImported?.();
+      ok = true;
+      // Hàng loạt: chỉ làm mới 1 lần ở cuối (tránh refetch "đã có" sau từng phim)
+      if (!silent) {
+        queryClient.invalidateQueries({ queryKey: tmdbKeys.existingAll() });
+        onImported?.();
+      }
     } catch (e) {
       const status  = e?.response?.status;
       const message = e?.response?.data?.message ?? e?.message;
       if (status === 409) {
+        ok = true; // đã có trong DB — coi như xong
         setImported(p => ({ ...p, [tmdbId]: true }));
         setImportMsg(p => ({ ...p, [tmdbId]: { type: 'warn', text: isMovie ? 'Phim đã được import rồi' : 'TV show đã được import rồi' } }));
       } else {
@@ -478,6 +604,7 @@ const TabContent = ({ isMovie, onImported }) => {
     } finally {
       setImporting(p => ({ ...p, [tmdbId]: false }));
     }
+    return ok;
   };
 
   const doManualImport = async () => {
@@ -492,6 +619,8 @@ const TabContent = ({ isMovie, onImported }) => {
       setManualMsg({ type: 'success', text: '✓ Import thành công' });
       setManualId('');
       console.log(`[AdminTmdbSearch] Manual import result for ${tmdbId}:`, result);
+      // Làm mới trạng thái "Đã có" ở tab tìm theo tên (trước đây import theo ID không invalidate)
+      queryClient.invalidateQueries({ queryKey: tmdbKeys.existingAll() });
       onImported?.();
     } catch (e) {
       const status  = e?.response?.status;
@@ -502,6 +631,51 @@ const TabContent = ({ isMovie, onImported }) => {
         setManualMsg({ type: 'error', text: message ?? 'Import thất bại' });
       }
     } finally { setManualImporting(false); }
+  };
+
+  // ── Chọn nhiều + import hàng loạt ──────────────────────────────────────────
+  const selectedIds   = Object.keys(selected).filter(k => selected[k]).map(Number);
+  const selectableIds = results.filter(r => !isDone(r.id)).map(r => r.id);
+  const toggleSelect  = (id) => setSelected(p => ({ ...p, [id]: !p[id] }));
+  const selectAllOnPage = () => setSelected(Object.fromEntries(selectableIds.map(id => [id, true])));
+  const clearSelection  = () => setSelected({});
+
+  const runBulkImport = async () => {
+    if (bulk?.running || selectedIds.length === 0) return;
+    const noun = isMovie ? 'phim' : 'TV show';
+    const confirmed = window.confirm(
+      `Import ${selectedIds.length} ${noun} từ TMDB?\n\nMỗi ${noun} import xong sẽ gửi 1 thông báo “mới ra mắt” tới người dùng.`
+    );
+    if (!confirmed) return;
+
+    const queue = selectedIds.filter(id => !isDone(id)); // bỏ phim đã có → khỏi tốn 1 request 409
+    const total = queue.length;
+    if (total === 0) return;
+    // Song song để rút ngắn tổng thời gian. TV show nặng hơn (nhiều season/episode) nên ít luồng hơn.
+    const concurrency = Math.min(total, isMovie ? 3 : 2);
+    const stats = { done: 0, failed: 0 };
+    setBulk({ running: true, done: 0, failed: 0, total });
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const id = queue.shift();
+        const success = await doImport(id, { silent: true });
+        if (!success) stats.failed += 1;
+        stats.done += 1;
+        setBulk({ running: true, done: stats.done, failed: stats.failed, total });
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, worker));
+
+    setBulk({ running: false, done: stats.done, failed: stats.failed, total });
+    setSelected({});
+    queryClient.invalidateQueries({ queryKey: tmdbKeys.existingAll() });
+    onImported?.();
+  };
+
+  const ghostBtn = {
+    padding: '5px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.surfaceAlt ?? T.bg,
+    fontFamily: FONT, fontSize: 11, color: T.textSub, cursor: 'pointer',
   };
 
   return (
@@ -545,17 +719,70 @@ const TabContent = ({ isMovie, onImported }) => {
               )}
             </div>
 
+            <TmdbFilterBar kind={kind} filters={filters} onChange={handleFiltersChange} hasQuery={!!query.trim()} />
+
             {searching && (
               <div style={{ padding: '32px 0', textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                 <Spin color={accent}/>
               </div>
             )}
 
+            {!searching && discoverQ.isError && (
+              <div style={{
+                padding: 12, borderRadius: 8, background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)',
+                fontFamily: FONT, fontSize: 12, color: T.red ?? '#DC2626', marginBottom: 10,
+              }}>
+                ❌ {discoverQ.error?.response?.data?.message ?? 'Không tải được danh sách từ TMDB'}
+              </div>
+            )}
+
             {!searching && results.length > 0 && (
               <>
-                <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginBottom: 10 }}>
-                  {totalRes.toLocaleString()} kết quả — trang {tmdbPage}/{totalPages}
+                <p style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted, marginBottom: 8 }}>
+                  {isFiltered
+                    ? `${results.length} ${isMovie ? 'phim' : 'show'} phù hợp ở trang này`
+                    : `${totalRes.toLocaleString()} kết quả`} — trang {pageStack.length}
                 </p>
+                {notes.map((n, i) => (
+                  <p key={i} style={{ fontFamily: FONT, fontSize: 10.5, color: '#D97706', margin: '0 0 6px', lineHeight: 1.5 }}>
+                    ⚠️ {n}
+                  </p>
+                ))}
+
+                {/* Thanh chọn nhiều / import hàng loạt */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  padding: '8px 10px', margin: '4px 0 10px', borderRadius: 8,
+                  background: T.surface, border: `1px solid ${T.border}`,
+                }}>
+                  <button type="button" onClick={selectAllOnPage} disabled={bulk?.running || selectableIds.length === 0} style={ghostBtn}>
+                    Chọn tất cả ({selectableIds.length})
+                  </button>
+                  {selectedIds.length > 0 && (
+                    <button type="button" onClick={clearSelection} disabled={bulk?.running} style={ghostBtn}>Bỏ chọn</button>
+                  )}
+                  <button
+                    type="button" onClick={runBulkImport} disabled={bulk?.running || selectedIds.length === 0}
+                    style={{
+                      marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 12px', borderRadius: 6, border: `1px solid ${accent}`, background: accent,
+                      fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: '#fff',
+                      cursor: bulk?.running ? 'wait' : selectedIds.length === 0 ? 'default' : 'pointer',
+                      opacity: selectedIds.length === 0 && !bulk?.running ? 0.5 : 1,
+                    }}
+                  >
+                    {bulk?.running
+                      ? <><Spin color="#fff" size={13}/> Đang import {bulk.done}/{bulk.total}…</>
+                      : <><Download size={11}/> Import {selectedIds.length > 0 ? selectedIds.length : ''} đã chọn</>}
+                  </button>
+                  {bulk?.running && <BulkProgress bulk={bulk} />}
+                  {bulk && !bulk.running && (
+                    <span style={{ flexBasis: '100%', fontFamily: FONT, fontSize: 11, color: bulk.failed > 0 ? '#D97706' : accentText }}>
+                      Xong: {bulk.done - bulk.failed}/{bulk.total} thành công{bulk.failed > 0 ? `, ${bulk.failed} lỗi (xem thẻ bên dưới)` : ''}
+                    </span>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {results.map(item => (
                     <TmdbCard
@@ -564,43 +791,61 @@ const TabContent = ({ isMovie, onImported }) => {
                       isMovie={isMovie}
                       onImport={doImport}
                       importing={importing[item.id]    ?? false}
-                      imported={imported[item.id]      ?? false}
+                      imported={isDone(item.id)}
                       importResult={importResult[item.id] ?? null}
                       importMsg={importMsg[item.id]    ?? null}
+                      selected={!!selected[item.id]}
+                      onToggle={bulk?.running ? undefined : toggleSelect}
                     />
                   ))}
                 </div>
-                {totalPages > 1 && (
+
+                {(pageStack.length > 1 || nextPage) && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, gap: 8 }}>
-                    <button disabled={tmdbPage <= 1} onClick={() => setTmdbPage(p => p - 1)}
-                      style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: tmdbPage <= 1 ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5, color: T.textSub, opacity: tmdbPage <= 1 ? 0.4 : 1 }}>
+                    <button
+                      disabled={pageStack.length <= 1 || bulk?.running}
+                      onClick={() => { setPageStack(s => s.slice(0, -1)); setSelected({}); }}
+                      style={{
+                        padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface,
+                        cursor: pageStack.length <= 1 ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5,
+                        color: T.textSub, opacity: pageStack.length <= 1 ? 0.5 : 1,
+                      }}
+                    >
                       ← Trước
                     </button>
-                    <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, display: 'flex', alignItems: 'center' }}>{tmdbPage} / {totalPages}</span>
-                    <button disabled={tmdbPage >= totalPages} onClick={() => setTmdbPage(p => p + 1)}
-                      style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface, cursor: tmdbPage >= totalPages ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5, color: T.textSub, opacity: tmdbPage >= totalPages ? 0.4 : 1 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, display: 'flex', alignItems: 'center' }}>
+                      Trang {pageStack.length}
+                    </span>
+                    <button
+                      disabled={!nextPage || bulk?.running}
+                      onClick={() => { setPageStack(s => [...s, nextPage]); setSelected({}); }}
+                      style={{
+                        padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surface,
+                        cursor: !nextPage ? 'default' : 'pointer', fontFamily: FONT, fontSize: 12.5,
+                        color: T.textSub, opacity: !nextPage ? 0.5 : 1,
+                      }}
+                    >
                       Sau →
                     </button>
                   </div>
                 )}
               </>
             )}
-
-            {!searching && !query && (
+            {!searching && !hasInput && (
               <div style={{ padding: '48px 0', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: 14, background: accentLight, border: `1px solid ${accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   {isMovie ? <Film size={22} color={accent} strokeWidth={1.5}/> : <Tv size={22} color={accent} strokeWidth={1.5}/>}
                 </div>
                 <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>
-                  {isMovie ? 'Nhập tên phim để tìm kiếm' : 'Nhập tên TV show để tìm kiếm'}
+                  {isMovie ? 'Nhập tên phim hoặc chọn bộ lọc để duyệt TMDB' : 'Nhập tên TV show hoặc chọn bộ lọc để duyệt TMDB'}
                 </p>
               </div>
             )}
 
-            {!searching && query && results.length === 0 && (
+            {!searching && hasInput && !discoverQ.isError && results.length === 0 && (
               <div style={{ padding: '48px 0', textAlign: 'center' }}>
                 <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textMuted, marginBottom: 4 }}>Không tìm thấy kết quả</p>
-                <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>Thử từ khóa khác hoặc tên tiếng Anh</p>
+                <p style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>Thử từ khóa khác, tên tiếng Anh hoặc nới lỏng bộ lọc</p>
               </div>
             )}
           </>
@@ -670,6 +915,8 @@ const TabContent = ({ isMovie, onImported }) => {
                 : <><Download size={15}/> Import {isMovie ? 'phim' : 'TV show'} này</>
               }
             </button>
+
+            {manualImporting && <ImportProgress seconds={manualElapsed} isMovie={isMovie} />}
 
             {/* Result — hiển thị chi tiết sau khi import */}
             {manualMsg && (

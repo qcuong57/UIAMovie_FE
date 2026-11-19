@@ -3,6 +3,29 @@
 
 import axiosInstance from '../config/axios';
 
+
+// ── Gộp 2 trang kết quả (đã phát hành + sắp chiếu) ──────────────────────────────
+// BE: IsUpcoming = null chỉ trả nội dung ĐÃ phát hành; muốn thấy phim/show sắp chiếu phải gọi
+// thêm với isUpcoming = true. Hàm này gộp (loại trùng theo id), giữ nguyên hình dạng response
+// ({ items, totalCount... } hoặc mảng). Hình dạng lạ → trả nguyên bản đã phát hành, không làm hỏng.
+const mergeReleasedAndUpcoming = (released, upcoming) => {
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter((x) => (x?.id == null ? true : !seen.has(x.id) && seen.add(x.id)));
+  };
+
+  if (Array.isArray(released) && Array.isArray(upcoming)) return dedupe([...released, ...upcoming]);
+
+  const key = ['items', 'movies', 'tvShows', 'results', 'data'].find((k) => Array.isArray(released?.[k]));
+  if (!key || !Array.isArray(upcoming?.[key])) return released;
+
+  const merged = { ...released, [key]: dedupe([...released[key], ...upcoming[key]]) };
+  for (const k of ['totalCount', 'total', 'totalItems']) {
+    if (typeof released[k] === 'number' && typeof upcoming[k] === 'number') merged[k] = released[k] + upcoming[k];
+  }
+  return merged;
+};
+
 const tvShowService = {
   // ═══════════════════════════════════════════════════════════════════
   // PUBLIC — Danh sách & tìm kiếm
@@ -70,6 +93,21 @@ const tvShowService = {
       console.error('[tvShowService] Response data:', error?.response?.data);
       throw error;
     }
+  },
+
+  /**
+   * [Admin] Giống getTvShows nhưng lấy CẢ show đã lên sóng lẫn show sắp lên sóng (2 request song song, gộp lại).
+   * Dùng cho trang quản trị: getTvShows mặc định ẩn show có FirstAirDate > hôm nay.
+   * Nếu request "sắp lên sóng" lỗi thì vẫn trả danh sách đã lên sóng.
+   * @param {Object} filter - cùng tham số với getTvShows (không truyền isUpcoming)
+   * @param {Object} [config] - { signal }
+   */
+  getTvShowsIncludingUpcoming: async (filter = {}, config = {}) => {
+    const [released, upcoming] = await Promise.all([
+      tvShowService.getTvShows({ ...filter, isUpcoming: undefined }, config),
+      tvShowService.getTvShows({ ...filter, isUpcoming: true }, config).catch(() => null),
+    ]);
+    return upcoming ? mergeReleasedAndUpcoming(released, upcoming) : released;
   },
 
   /**

@@ -15,6 +15,8 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style }) {
   audioRef.current = { muted, volume };
   // Chỉ hiện iframe khi trailer thực sự đang chạy → không lộ nút play / vòng quay tải của YouTube
   const [shown, setShown] = useState(false);
+  const timers = useRef([]);
+  const gotMsg = useRef(false); // player đã phản hồi ít nhất 1 lần (bắt tay thành công)
 
   // src chỉ phụ thuộc vào trailerKey → không bao giờ đổi khi bấm âm lượng
   const src = useMemo(() => {
@@ -41,7 +43,8 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style }) {
       if (e.origin !== YT_ORIGIN || e.source !== frameRef.current?.contentWindow) return;
       let data = e.data;
       if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return; } }
-      if (data?.event === 'onReady') applyAudio();
+      gotMsg.current = true;
+      if (data?.event === 'onReady') { applyAudio(); send('playVideo'); }
 
       // Trạng thái player: 1 đang phát, 3 đệm, 0 hết (loop sẽ phát lại ngay); còn lại (-1, 2, 5) là chưa phát/tạm dừng
       const state = data?.event === 'onStateChange' ? data.info : data?.info?.playerState;
@@ -51,12 +54,26 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style }) {
     return () => window.removeEventListener('message', onMessage);
   }, [k]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Iframe tải xong → đăng ký nhận sự kiện của player, rồi áp âm thanh (kèm vài lần thử lại phòng player chưa kịp sẵn sàng)
+  // Iframe tải xong → đăng ký nhận sự kiện của player. Lặp lại tới khi player phản hồi, vì nếu 'listening'
+  // tới trước khi player sẵn sàng (hay gặp ở iframe thứ 2 trở đi) thì sẽ không nhận được onStateChange
+  // → iframe giữ opacity 0 dù trailer vẫn đang phát (có tiếng nhưng không có hình).
   const onLoad = () => {
-    frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), YT_ORIGIN);
+    gotMsg.current = false;
+    const listen = () =>
+      frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), YT_ORIGIN);
+    listen();
     applyAudio();
-    [400, 1200].forEach((ms) => setTimeout(applyAudio, ms));
+    let tries = 0;
+    const id = setInterval(() => {
+      if (gotMsg.current || ++tries > 12) { clearInterval(id); return; }
+      listen(); applyAudio(); send('playVideo');
+    }, 350);
+    timers.current.push(id);
+    // Phòng hờ: 4s vẫn không có tín hiệu nào thì cứ hiện iframe (autoplay muted hầu như luôn chạy)
+    timers.current.push(setTimeout(() => { if (!gotMsg.current) setShown(true); }, 4000));
   };
+
+  useEffect(() => () => timers.current.forEach((t) => { clearInterval(t); clearTimeout(t); }), []);
 
   return (
     <iframe

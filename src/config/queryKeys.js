@@ -102,6 +102,8 @@ export const queryKeys = {
       summary: ["admin", "revenue", "summary"],
       chart: (params) => ["admin", "revenue", "chart", params],
       orders: (filter) => ["admin", "revenue", "orders", filter],
+      // Gói cho bộ lọc trang Doanh thu (đã qua select → {value,label}); tách riêng để không lẫn dữ liệu với `admin.plans`.
+      planOptions: ["admin", "revenue", "plan-options"],
     },
     // Quảng cáo: filter là MỘT object (page, pageSize, search, isActive) → key ổn định.
     // detail(id) nằm dưới `all` → invalidate ["admin","ads"] làm mới cả danh sách lẫn panel chi tiết.

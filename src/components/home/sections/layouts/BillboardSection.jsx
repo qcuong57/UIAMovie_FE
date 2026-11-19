@@ -24,8 +24,8 @@ import { useTextMotion, HOME_EASE, CSS_EASE } from '../shared/motionPresets';
 
 const MAX_ITEMS = 5;
 
-// Mobile: khung 4:5 → iframe 16:9 phải rộng ~222% chiều ngang để phủ kín chiều cao (không viền đen)
-const TRAILER_FILL_MOBILE = { top: '50%', left: '50%', width: '222.5%', height: '100%', transform: 'translate(-50%,-50%)' };
+// Mobile: khung 16:9 trùng tỉ lệ trailer → iframe phủ đúng khung, thấy trọn trailer
+const TRAILER_FILL_MOBILE = { top: 0, left: 0, width: '100%', height: '100%' };
 
 // Tiết kiệm dữ liệu: không tự phát trailer nếu người dùng bật Data Saver
 const dataSaver = () => typeof navigator !== 'undefined' && navigator.connection?.saveData === true;
@@ -140,7 +140,7 @@ export function BillboardSection({ section }) {
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [playing, setPlaying] = useState(false);
+  const [playingFor, setPlayingFor] = useState(null); // index phim đã tới lượt phát trailer
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(60); // 0–100
   const stageRef = useRef(null);
@@ -153,6 +153,9 @@ export function BillboardSection({ section }) {
   const nextItem = items[(safeIndex + 1) % Math.max(n, 1)];
   const hasClip = !!item && !reduce && !dataSaver() && hasTrailer(item);
   const canTrailer = hasClip && inView;
+  // Dẫn xuất từ index: chuyển phim là `playing` tự về false ngay trong cùng lần render
+  // (trước đây còn true 1 nhịp → iframe mới mount rồi bị huỷ ngay)
+  const playing = canTrailer && playingFor === safeIndex;
   const autoplay = n > 1 && !reduce;
   const duration = hasClip ? AUTO_MS_TRAILER : AUTO_MS;
   const running = inView && !paused;
@@ -163,9 +166,8 @@ export function BillboardSection({ section }) {
 
   // Trailer tự phát sau 1.8s, dừng khi banner rời màn hình
   useEffect(() => {
-    setPlaying(false);
     if (!canTrailer) return undefined;
-    const t = setTimeout(() => setPlaying(true), 1800);
+    const t = setTimeout(() => setPlayingFor(safeIndex), 1800);
     return () => clearTimeout(t);
   }, [safeIndex, canTrailer]);
 
@@ -214,6 +216,58 @@ export function BillboardSection({ section }) {
     ? (tl > 40 ? 22 : tl > 24 ? 25 : 28)
     : (tl > 40 ? 'clamp(24px, 2.8vw, 38px)' : tl > 24 ? 'clamp(28px, 3.4vw, 46px)' : 'clamp(32px, 4vw, 56px)');
 
+  // Lớp chữ: desktop nằm đè lên banner; mobile nằm DƯỚI khung 16:9 để không che trailer
+  const textLayer = (
+  <AnimatePresence mode="wait" initial={false}>
+    <motion.div
+      key={keyOf(item)} variants={textLayerV} initial="enter" animate="center" exit="exit"
+      style={{
+        ...(isMobile
+          ? { padding: '14px 2px 0' }
+          : { position: 'absolute', left: padX, bottom: 76, right: '44%', maxWidth: 620, zIndex: 2 }),
+        display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 14,
+      }}
+    >
+      <motion.h3 variants={lineV} style={{ margin: 0, fontFamily: FONT_DISPLAY, fontSize: titleSize, fontWeight: 800, color: '#fff', lineHeight: 1.12, letterSpacing: '-0.03em', overflowWrap: 'anywhere', padding: '0.1em 0 0.12em', margin: 0, overflow: 'visible', clipPath: 'none', textShadow: '0 2px 18px rgba(0,0,0,.45)' }}>
+        {item.title}
+      </motion.h3>
+      <motion.p variants={lineV} style={{ margin: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontFamily: FONT_BODY, fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,.88)' }}>
+        <Rating value={item.rating} size={14} /> {metaOf(item, 3)}
+      </motion.p>
+      {item.description && (
+        <motion.div variants={lineV}>
+          <div style={{ display: 'grid', gridTemplateRows: playing && !isMobile ? '0fr' : '1fr', opacity: playing && !isMobile ? 0 : 1, transition: reduce ? 'none' : `grid-template-rows .6s ${CSS_EASE}, opacity .5s ease` }}>
+            <div style={{ minHeight: 0, overflow: 'hidden' }}>
+              <p style={{ margin: 0, maxWidth: '52ch', fontFamily: FONT_BODY, fontSize: isMobile ? 13 : 15, lineHeight: 1.6, color: 'rgba(255,255,255,.8)', ...clampLines(isMobile ? 2 : 3) }}>{item.description}</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+      <motion.div variants={lineV} style={{ alignSelf: 'flex-start', marginTop: 2 }}>
+        {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
+        <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} style={{ display: 'inline-flex' }}>
+          <Link
+            to={contentPath(item)} className="hsl-link"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+              padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
+              fontFamily: FONT_BODY, fontSize: isMobile ? 12.5 : 15, fontWeight: 700,
+              background: item.isPremium ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : '#ffffff',
+              color: item.isPremium ? '#1c1400' : '#000000',
+              boxShadow: item.isPremium ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
+            }}
+          >
+            {item.isPremium
+              ? <Crown size={15} fill="#1c1400" color="#1c1400" />
+              : <Play size={16} fill="currentColor" strokeWidth={0} />}
+            Xem ngay
+          </Link>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+  );
+
   return (
     <section
       role="region" aria-roledescription="carousel" aria-label={section.title}
@@ -231,7 +285,7 @@ export function BillboardSection({ section }) {
         onPointerDown={onPointerDown} onPointerUp={onPointerUp} onClickCapture={onClickCapture}
         style={{
           position: 'relative', overflow: 'hidden', borderRadius: isMobile ? 8 : 10, background: C.surfaceMid,
-          ...(isMobile ? { aspectRatio: '4 / 5' } : { height: 'clamp(400px, 42vw, 600px)' }),
+          ...(isMobile ? { aspectRatio: '16 / 9' } : { height: 'clamp(400px, 42vw, 600px)' }),
           touchAction: isMobile ? 'pan-y' : undefined,
         }}
       >
@@ -261,64 +315,18 @@ export function BillboardSection({ section }) {
 
         {/* Scrim 2 lớp: trái cho chữ, đáy hòa vào nền trang */}
         <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: isMobile
-          ? 'linear-gradient(0deg, rgba(0,0,0,.94) 0%, rgba(0,0,0,.6) 42%, rgba(0,0,0,.05) 75%)'
+          ? 'linear-gradient(0deg, rgba(0,0,0,.6) 0%, rgba(0,0,0,0) 38%)'
           : `linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.5) 34%, rgba(0,0,0,0) 68%), linear-gradient(0deg, ${C.bg} 0%, rgba(0,0,0,.55) 16%, rgba(0,0,0,0) 42%)` }}
         />
 
-        {/* Lớp chữ: thoát nhanh, vào lần lượt */}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={keyOf(item)} variants={textLayerV} initial="enter" animate="center" exit="exit"
-            style={{
-              position: 'absolute', left: padX, bottom: isMobile ? 56 : 76, right: isMobile ? 18 : '44%', maxWidth: 620,
-              display: 'flex', flexDirection: 'column', gap: isMobile ? 10 : 14, zIndex: 2,
-            }}
-          >
-            <motion.h3 variants={lineV} style={{ margin: 0, fontFamily: FONT_DISPLAY, fontSize: titleSize, fontWeight: 800, color: '#fff', lineHeight: 1.12, letterSpacing: '-0.03em', overflowWrap: 'anywhere', padding: '0.1em 0 0.12em', margin: 0, overflow: 'visible', clipPath: 'none', textShadow: '0 2px 18px rgba(0,0,0,.45)' }}>
-              {item.title}
-            </motion.h3>
-            <motion.p variants={lineV} style={{ margin: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontFamily: FONT_BODY, fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,.88)' }}>
-              <Rating value={item.rating} size={14} /> {metaOf(item, 3)}
-            </motion.p>
-            {item.description && (
-              <motion.div variants={lineV}>
-                <div style={{ display: 'grid', gridTemplateRows: playing ? '0fr' : '1fr', opacity: playing ? 0 : 1, transition: reduce ? 'none' : `grid-template-rows .6s ${CSS_EASE}, opacity .5s ease` }}>
-                  <div style={{ minHeight: 0, overflow: 'hidden' }}>
-                    <p style={{ margin: 0, maxWidth: '52ch', fontFamily: FONT_BODY, fontSize: isMobile ? 13 : 15, lineHeight: 1.6, color: 'rgba(255,255,255,.8)', ...clampLines(isMobile ? 2 : 3) }}>{item.description}</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-            <motion.div variants={lineV} style={{ alignSelf: 'flex-start', marginTop: 2 }}>
-              {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
-              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} style={{ display: 'inline-flex' }}>
-                <Link
-                  to={contentPath(item)} className="hsl-link"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
-                    padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
-                    fontFamily: FONT_BODY, fontSize: isMobile ? 12.5 : 15, fontWeight: 700,
-                    background: item.isPremium ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : '#ffffff',
-                    color: item.isPremium ? '#1c1400' : '#000000',
-                    boxShadow: item.isPremium ? '0 4px 16px rgba(251,191,36,0.35)' : 'none',
-                  }}
-                >
-                  {item.isPremium
-                    ? <Crown size={15} fill="#1c1400" color="#1c1400" />
-                    : <Play size={16} fill="currentColor" strokeWidth={0} />}
-                  Xem ngay
-                </Link>
-              </motion.div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
+        {!isMobile && textLayer}
 
         {/* Thanh phân đoạn */}
         {n > 1 && (
           <Segments
             items={items} index={safeIndex} autoplay={autoplay} running={running} duration={duration} accent={accent}
             onSelect={go} onEnd={next}
-            style={{ position: 'absolute', left: padX, bottom: isMobile ? 14 : 22, zIndex: 3 }}
+            style={{ position: 'absolute', left: isMobile ? 12 : padX, bottom: isMobile ? 0 : 22, zIndex: 3 }}
           />
         )}
 
@@ -362,9 +370,12 @@ export function BillboardSection({ section }) {
         )}
       </div>
 
+      {/* Mobile: thông tin phim nằm dưới khung trailer */}
+      {isMobile && textLayer}
+
       {/* Mobile: dải chip chọn phim */}
       {isMobile && n > 1 && (
-        <div ref={stripRef} className="hsl-bb-strip" role="group" aria-label="Chọn phim" style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 }}>
+        <div ref={stripRef} className="hsl-bb-strip" role="group" aria-label="Chọn phim" style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 14, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 }}>
           {items.map((it, i) => <Chip key={keyOf(it)} item={it} active={i === safeIndex} accent={accent} onSelect={() => go(i)} />)}
         </div>
       )}

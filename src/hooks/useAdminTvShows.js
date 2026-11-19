@@ -32,12 +32,17 @@ const errMsg = (e, fallback) =>
   e?.response?.data?.message ?? e?.message ?? fallback;
 
 const normalizeList = (res) => {
-  const data = res?.data ?? res;
+  let data = res?.data ?? res;
+  if (data && !Array.isArray(data) && !data.items && data.data) data = data.data; // envelope { success, data: { items } }
   const raw = Array.isArray(data) ? data : (data?.items ?? []);
+  const now = Date.now();
   return {
     items: raw.map((s) => ({
       ...s,
       year: s.firstAirDate ? new Date(s.firstAirDate).getFullYear() : null,
+      // Ưu tiên cờ từ BE; fallback tự tính để badge luôn đúng
+      isUpcoming:
+        s.isUpcoming ?? (s.firstAirDate ? new Date(s.firstAirDate).getTime() > now : false),
     })),
     total: data?.totalCount ?? data?.total ?? raw.length,
   };
@@ -92,13 +97,22 @@ export const adminTvShowsOptions = ({
 } = {}) =>
   queryOptions({
     queryKey: keys.list({ page, pageSize, search, sortBy, sortDir }),
-    // `signal` truyền làm tham số thứ 2: nếu tvShowService.getTvShows chuyển tiếp cho axios thì request cũ bị huỷ.
+    // Admin phải thấy CẢ show sắp lên sóng (giống getMoviesIncludingUpcoming bên Movie):
+    // BE mặc định ẩn show có FirstAirDate > hôm nay, nên gửi includeUpcoming=true.
+    // Gọi axios trực tiếp để chắc chắn tham số này được gửi đi và request cũ bị huỷ qua `signal`.
     queryFn: async ({ signal }) =>
       normalizeList(
-        await tvShowService.getTvShows(
-          { page, pageSize, search, sortBy, sortDesc: sortDir === "desc" },
-          { signal },
-        ),
+        await axiosInstance.get("/tvshows", {
+          params: {
+            page,
+            pageSize,
+            search: search || undefined,
+            sortBy,
+            sortDesc: sortDir === "desc",
+            includeUpcoming: true,
+          },
+          signal,
+        }),
       ),
     staleTime: STALE.admin,
     placeholderData: keepPreviousData,

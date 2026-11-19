@@ -3,6 +3,29 @@
 
 import axiosInstance from "../config/axios";
 
+
+// ── Gộp 2 trang kết quả (đã phát hành + sắp chiếu) ──────────────────────────────
+// BE: IsUpcoming = null chỉ trả nội dung ĐÃ phát hành; muốn thấy phim/show sắp chiếu phải gọi
+// thêm với isUpcoming = true. Hàm này gộp (loại trùng theo id), giữ nguyên hình dạng response
+// ({ items, totalCount... } hoặc mảng). Hình dạng lạ → trả nguyên bản đã phát hành, không làm hỏng.
+const mergeReleasedAndUpcoming = (released, upcoming) => {
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter((x) => (x?.id == null ? true : !seen.has(x.id) && seen.add(x.id)));
+  };
+
+  if (Array.isArray(released) && Array.isArray(upcoming)) return dedupe([...released, ...upcoming]);
+
+  const key = ['items', 'movies', 'tvShows', 'results', 'data'].find((k) => Array.isArray(released?.[k]));
+  if (!key || !Array.isArray(upcoming?.[key])) return released;
+
+  const merged = { ...released, [key]: dedupe([...released[key], ...upcoming[key]]) };
+  for (const k of ['totalCount', 'total', 'totalItems']) {
+    if (typeof released[k] === 'number' && typeof upcoming[k] === 'number') merged[k] = released[k] + upcoming[k];
+  }
+  return merged;
+};
+
 const movieService = {
   /**
    * Lấy danh sách phim — khớp hoàn toàn với FilterMoviesDTO trên backend.
@@ -61,6 +84,20 @@ const movieService = {
       console.error("[movieService] Request URL:", error?.config?.url);
       throw error;
     }
+  },
+
+  /**
+   * [Admin] Giống getMovies nhưng lấy CẢ phim đã phát hành lẫn phim sắp chiếu (2 request song song, gộp lại).
+   * Dùng cho trang quản trị: getMovies mặc định ẩn phim có ReleaseDate > hôm nay.
+   * Nếu request "sắp chiếu" lỗi thì vẫn trả danh sách đã phát hành.
+   * @param {Object} filter - cùng tham số với getMovies (không truyền isUpcoming)
+   */
+  getMoviesIncludingUpcoming: async (filter = {}) => {
+    const [released, upcoming] = await Promise.all([
+      movieService.getMovies({ ...filter, isUpcoming: undefined }),
+      movieService.getMovies({ ...filter, isUpcoming: true }).catch(() => null),
+    ]);
+    return upcoming ? mergeReleasedAndUpcoming(released, upcoming) : released;
   },
 
   /**

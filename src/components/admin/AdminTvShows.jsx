@@ -43,6 +43,21 @@ const PremiumBadge = () => (
   </span>
 );
 
+// ── Badge "Sắp chiếu" (show có FirstAirDate > hôm nay) ───────────────────────
+const UpcomingBadge = () => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    padding: '2px 7px', borderRadius: 5,
+    background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.35)',
+    fontSize: 10, fontWeight: 700, color: '#3B82F6',
+    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+  }}>
+    SẮP CHIẾU
+  </span>
+);
+
+const fmtAirDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : null);
+
 // ── Premium toggle button ─────────────────────────────────────────────────────
 function PremiumToggle({ isPremium, loading, onClick }) {
   return (
@@ -309,6 +324,7 @@ export default function AdminTvShows() {
                           <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
                             {s.title}
                           </p>
+                          {s.isUpcoming && <UpcomingBadge />}
                           {s.isPremium && <PremiumBadge />}
                         </div>
                         <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, marginTop: 2 }}>
@@ -330,7 +346,11 @@ export default function AdminTvShows() {
                   </td>
 
                   {/* Year */}
-                  <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{s.year ?? '—'}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{s.year ?? '—'}
+                    {s.isUpcoming && fmtAirDate(s.firstAirDate) && (
+                      <div style={{ fontSize: 10.5, color: '#3B82F6', marginTop: 2 }}>{fmtAirDate(s.firstAirDate)}</div>
+                    )}
+                  </td>
 
                   {/* Country */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 12.5 }}>

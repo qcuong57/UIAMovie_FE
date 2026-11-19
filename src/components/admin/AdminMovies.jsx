@@ -44,6 +44,21 @@ const PremiumBadge = () => (
   </span>
 );
 
+// ── Badge "Sắp chiếu" (phim có ReleaseDate > hôm nay) ────────────────────────
+const UpcomingBadge = () => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    padding: '2px 7px', borderRadius: 5,
+    background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.35)',
+    fontSize: 10, fontWeight: 700, color: '#3B82F6',
+    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+  }}>
+    SẮP CHIẾU
+  </span>
+);
+
+const fmtReleaseDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : null);
+
 // ── Table header ──────────────────────────────────────────────────────────────
 const Th = ({ children, sortKey, sortBy, sortDir, onSort, width }) => {
   const active = sortBy === sortKey;
@@ -296,6 +311,7 @@ export default function AdminMovies() {
                           <p style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
                             {m.title}
                           </p>
+                          {m.isUpcoming && <UpcomingBadge />}
                           {m.isPremium && <PremiumBadge />}
                         </div>
                         {m.tmdbId && <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, marginTop: 2 }}>TMDB #{m.tmdbId}</p>}
@@ -314,7 +330,11 @@ export default function AdminMovies() {
                   </td>
 
                   {/* Year */}
-                  <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{m.year ?? '—'}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{m.year ?? '—'}
+                    {m.isUpcoming && fmtReleaseDate(m.releaseDate) && (
+                      <div style={{ fontSize: 10.5, color: '#3B82F6', marginTop: 2 }}>{fmtReleaseDate(m.releaseDate)}</div>
+                    )}
+                  </td>
 
                   {/* Country */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 12.5 }}>

@@ -22,6 +22,12 @@ const reportError = (scope, error, meta) => {
 
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
+    // DEV: bắt query thiếu queryKey (thường do gọi key không tồn tại trong queryKeys.js) để biết hook nào gây lỗi.
+    onSuccess: (_data, query) => {
+      if (import.meta.env.DEV && !Array.isArray(query.queryKey)) {
+        console.warn("[queryKey thiếu/không hợp lệ] Kiểm tra hook dùng key này:", query.queryHash, query.options);
+      }
+    },
     onError: (error, query) => reportError(`query ${JSON.stringify(query.queryKey)}`, error, query.meta),
   }),
   mutationCache: new MutationCache({
@@ -57,14 +63,17 @@ export const persister = createSyncStoragePersister({
 });
 
 // Hằng số cấp module để tham chiếu ổn định
+const RECOMMENDATIONS_ROOT = queryKeys.recommendations.all[0];
+
 export const persistOptions = {
   persister,
   maxAge: DAY,
   buster: "v1", // đổi chuỗi này khi cấu trúc dữ liệu thay đổi để bỏ cache cũ
   dehydrateOptions: {
     // Chỉ lưu gợi ý AI đã thành công; không lưu danh sách phim, favorites...
+    // `?.` để query thiếu queryKey không làm sập cả bước persist.
     shouldDehydrateQuery: (q) =>
-      q.state.status === "success" && q.queryKey[0] === queryKeys.recommendations.all[0],
+      q.state.status === "success" && q.queryKey?.[0] === RECOMMENDATIONS_ROOT,
   },
 };
 

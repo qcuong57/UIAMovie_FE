@@ -58,18 +58,28 @@ export function useRefreshMovies() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Module-level → tham chiếu ổn định, React Query chỉ chạy lại select khi data đổi
-const selectMovieRows = (raw) =>
-  raw.map((m) => ({
+const selectMovieRows = (raw) => {
+  const now = Date.now();
+  return raw.map((m) => ({
     ...m,
     year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : m.year,
+    // Ưu tiên cờ từ BE; fallback tự tính từ releaseDate để badge luôn đúng
+    isUpcoming: m.isUpcoming ?? (m.releaseDate ? new Date(m.releaseDate).getTime() > now : false),
   }));
+};
 
-/** Toàn bộ phim cho bảng admin (lọc / sắp xếp / phân trang phía client). */
+/**
+ * Toàn bộ phim cho bảng admin (lọc / sắp xếp / phân trang phía client).
+ * Lấy cả phim đã phát hành lẫn phim sắp chiếu: BE mặc định (IsUpcoming = null) ẩn phim có ReleaseDate > hôm nay.
+ */
 export const useAdminMovies = () =>
   useQuery({
     queryKey: queryKeys.admin.movies.list(),
     queryFn: async () =>
-      unwrapList(await movieService.getMovies({ page: 1, pageSize: 500 }), ["movies"]),
+      unwrapList(
+        await movieService.getMoviesIncludingUpcoming({ page: 1, pageSize: 500 }),
+        ["movies"],
+      ),
     select: selectMovieRows,
     staleTime: STALE.admin,
     refetchOnWindowFocus: true, // nhiều admin cùng thao tác → quay lại tab thì thấy thay đổi của nhau
