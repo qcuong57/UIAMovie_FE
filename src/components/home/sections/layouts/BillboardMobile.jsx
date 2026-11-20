@@ -112,6 +112,8 @@ export function BillboardMobile({ section }) {
   const [paused, setPaused] = useState(false);
   const [playingFor, setPlayingFor] = useState(null); // key phim đã tới lượt phát trailer
   const [manualKey, setManualKey] = useState(null); // người xem tự bấm ▶ cho phim này
+  const [playerOn, setPlayerOn] = useState(false); // mobile: player được dựng một lần rồi giữ nguyên
+  const lastTrailer = useRef(null);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(60); // 0–100
   const stageRef = useRef(null);
@@ -123,6 +125,7 @@ export function BillboardMobile({ section }) {
   const item = items[safeIndex];
   const itemKey = item ? String(keyOf(item)) : '';
   const trailerOk = !!item && hasTrailer(item);
+  if (trailerOk) lastTrailer.current = item;
   const manual = manualKey === itemKey;
   const autoOk = trailerOk && !reduce && !dataSaver();
   const canPlay = (autoOk || (trailerOk && manual)) && inView;
@@ -139,7 +142,7 @@ export function BillboardMobile({ section }) {
   // Trailer tự phát sau 1.8s (bấm tay thì phát ngay); đổi phim / ra khỏi màn hình thì tắt
   useEffect(() => {
     if (!canPlay) return undefined;
-    const t = setTimeout(() => setPlayingFor(itemKey), manual ? 0 : START_DELAY);
+    const t = setTimeout(() => { setPlayerOn(true); setPlayingFor(itemKey); }, manual ? 0 : START_DELAY);
     return () => { clearTimeout(t); setPlayingFor(null); };
   }, [itemKey, canPlay, manual]);
 
@@ -220,14 +223,16 @@ export function BillboardMobile({ section }) {
                 >
                   <Cover item={item} src={imgOf(item)} />
                 </motion.div>
-                {playing && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} style={{ position: 'absolute', inset: 0 }}>
-                    <TrailerPlayer item={item} muted={muted} volume={volume} style={TRAILER_FIT} clean />
-                  </motion.div>
-                )}
                 {item.isPremium && <PremiumTag style={{ top: 12, left: 12 }} />}
               </motion.div>
             </AnimatePresence>
+
+            {/* Mobile: MỘT iframe duy nhất giữ qua các phim (iOS Safari chỉ cho autoplay ở lần đầu → đổi video bằng loadVideoById) */}
+            {playerOn && (trailerOk || lastTrailer.current) && (
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                <TrailerPlayer item={trailerOk ? item : lastTrailer.current} active={playing && trailerOk} persist clean muted={muted} volume={volume} style={TRAILER_FIT} />
+              </div>
+            )}
 
             <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(0deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,0) 30%)' }} />
 
