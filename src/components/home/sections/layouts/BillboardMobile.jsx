@@ -29,6 +29,9 @@ const START_DELAY = 1800; // chờ ảnh hiện xong rồi mới phát trailer
 // Tiết kiệm dữ liệu: không tự phát trailer nếu người dùng bật Data Saver
 const dataSaver = () => typeof navigator !== 'undefined' && navigator.connection?.saveData === true;
 
+// Iframe lớn hơn khung ~1% mỗi cạnh (khung overflow:hidden sẽ cắt phần thừa) → không còn vệt hở lộ ảnh nền do làm tròn pixel
+const FIT_BLEED = { ...TRAILER_FIT, top: '-1%', left: '-1%', width: '102%', height: '102%' };
+
 const pad2 = (v) => String(v).padStart(2, '0');
 
 const BB_CSS = `
@@ -230,7 +233,7 @@ export function BillboardMobile({ section }) {
             {/* Mobile: MỘT iframe duy nhất giữ qua các phim (iOS Safari chỉ cho autoplay ở lần đầu → đổi video bằng loadVideoById) */}
             {playerOn && (trailerOk || lastTrailer.current) && (
               <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                <TrailerPlayer item={trailerOk ? item : lastTrailer.current} active={playing && trailerOk} persist clean muted={muted} volume={volume} style={TRAILER_FIT} />
+                <TrailerPlayer item={trailerOk ? item : lastTrailer.current} active={playing && trailerOk} persist clean muted={muted} volume={volume} style={FIT_BLEED} />
               </div>
             )}
 
