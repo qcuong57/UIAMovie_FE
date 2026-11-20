@@ -10,11 +10,11 @@ import {
   FONT_BODY,
   GOOGLE_FONTS,
 } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { sortComingSoonMovies } from "../../utils/releaseDateUtils";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
-import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
 import { queryKeys, STALE } from "../../config/queryKeys";
 import { ignoreMissingEndpoint } from "../../utils/queryHelpers";
 import { normalizeMovie, normalizeTvShow } from "../../utils/normalizeMedia";

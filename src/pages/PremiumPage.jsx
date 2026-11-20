@@ -43,7 +43,7 @@ import { useNavigate } from "react-router-dom";
 import paymentService from "../services/paymentService";
 import authService from "../services/authService";
 import { useToast } from "../components/common/Toast";
-import { useIsLoggedIn } from "../hooks/useStoredUser";
+import { useIsLoggedIn } from "../hooks/user/useStoredUser";
 import { PENDING_PLAN_KEY } from "../utils/authRedirect";
 
 // ─── Constants ────────────────────────────────────────────────────────────────

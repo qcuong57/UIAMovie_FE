@@ -6,7 +6,7 @@ import VideoPlayer from "../player/VideoPlayer";
 import playbackService from "../../../services/playbackService";
 import movieService from "../../../services/movieService";
 import movieSubtitleService from "../../../services/movieSubtitleService";
-import useResumeOffer, { toResumeSeconds, toStartAt, resumeLog, MIN_RESUME_SEC } from "../../../hooks/useResumeOffer";
+import useResumeOffer, { toResumeSeconds, toStartAt, resumeLog, MIN_RESUME_SEC } from "../../../hooks/player/useResumeOffer";
 import { flushMovieProgress } from "../../../services/watchProgressFlush";
 import { C } from "../ui/movieConstants";
 

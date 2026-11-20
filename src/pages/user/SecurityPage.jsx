@@ -1,13 +1,13 @@
 // src/pages/SecurityPage.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, ShieldCheck, ShieldOff, Check, AlertTriangle, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../../services/authService';
 import axiosInstance from '../../config/axios';
 import { getStoredUser, setStoredUser } from '../../config/sessionStore';
-import { useStoredUser } from '../../hooks/useStoredUser';
+import { useStoredUser } from '../../hooks/user/useStoredUser';
 import { C as HT, FONT_TITLE, FONT_BODY, GOOGLE_FONTS } from '../../context/homeTokens';
 import { useToast } from '../../components/common/Toast';
 

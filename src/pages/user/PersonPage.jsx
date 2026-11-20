@@ -1,6 +1,6 @@
 // src/pages/PersonPage.jsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Film, Calendar, ExternalLink, Camera,

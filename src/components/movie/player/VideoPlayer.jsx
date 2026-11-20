@@ -6,22 +6,22 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import "./player.css";
 
-import { useIsMobile } from "../../../hooks/useIsMobile";
-import { useIsTouch } from "../../../hooks/useIsTouch";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
+import { useIsTouch } from "../../../hooks/common/useIsTouch";
 import { shouldUseMse } from "../../../utils/hls";
-import { useAdManager } from "../../../hooks/useAdManager";
-import usePlayback from "../../../hooks/usePlayback";
-import useSubtitles from "../../../hooks/useSubtitles";
+import { useAdManager } from "../../../hooks/player/useAdManager";
+import usePlayback from "../../../hooks/player/usePlayback";
+import useSubtitles from "../../../hooks/player/useSubtitles";
 import AdOverlay from "../shared/AdOverlay";
 import PlaybackGate from "../shared/PlaybackGate";
 
-import useVideoPlayerCore from "../../../hooks/useVideoPlayerCore";
-import useFullscreen from "../../../hooks/useFullscreen";
-import useControlsVisibility from "../../../hooks/useControlsVisibility";
-import usePlayerShortcuts from "../../../hooks/usePlayerShortcuts";
-import useWatchProgress from "../../../hooks/useWatchProgress";
-import useSkipMarkers from "../../../hooks/useSkipMarkers";
-import usePlaybackHeartbeat from "../../../hooks/usePlaybackHeartbeat";
+import useVideoPlayerCore from "../../../hooks/player/useVideoPlayerCore";
+import useFullscreen from "../../../hooks/player/useFullscreen";
+import useControlsVisibility from "../../../hooks/player/useControlsVisibility";
+import usePlayerShortcuts from "../../../hooks/player/usePlayerShortcuts";
+import useWatchProgress from "../../../hooks/player/useWatchProgress";
+import useSkipMarkers from "../../../hooks/player/useSkipMarkers";
+import usePlaybackHeartbeat from "../../../hooks/player/usePlaybackHeartbeat";
 
 import PlayerControls from "./controls/PlayerControls";
 import CenterPlayIcon from "./controls/CenterPlayIcon";

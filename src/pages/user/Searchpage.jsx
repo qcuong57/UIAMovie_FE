@@ -22,8 +22,8 @@ import MovieCard from "../../components/movie/MovieCard";
 import { SkeletonCard, NoResults, GRID_STYLE } from "../../components/search/SearchUI";
 
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
-import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
+import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
 import { queryKeys, STALE } from "../../config/queryKeys";
 import { normalizeMovie, normalizeTvShow, mediaKey } from "../../utils/normalizeMedia";
 import { parsePaged } from "../../utils/queryHelpers";

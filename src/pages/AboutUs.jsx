@@ -18,7 +18,7 @@ import {
 } from "framer-motion";
 
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../context/homeTokens";
-import { useIsMobile } from "../hooks/useIsMobile";
+import { useIsMobile } from "../hooks/common/useIsMobile";
 import LoadingScreen from "../components/ui/LoadingScreen";
 import Technology from "../components/ui/TechnologyMarquee";
 import SeoMeta from "../components/common/SeoMeta";

@@ -7,7 +7,7 @@ import NextEpisodeCountdown from "./NextEpisodeCountdown";
 import playbackService from "../../../services/playbackService";
 import tvShowService from "../../../services/tvShowService";
 import episodeSubtitleService from "../../../services/episodeSubtitleService";
-import useResumeOffer, { toResumeSeconds, toStartAt, resumeLog } from "../../../hooks/useResumeOffer";
+import useResumeOffer, { toResumeSeconds, toStartAt, resumeLog } from "../../../hooks/player/useResumeOffer";
 import { flushEpisodeProgress } from "../../../services/watchProgressFlush";
 import { C } from "../ui/movieConstants";
 

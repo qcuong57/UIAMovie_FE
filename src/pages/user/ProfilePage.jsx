@@ -1,6 +1,6 @@
 // src/pages/ProfilePage.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -25,7 +25,7 @@ import axiosInstance from "../../config/axios";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { validateUsername } from "../../utils/validators";
 import { getStoredUser, setStoredUser } from "../../config/sessionStore";
-import { useStoredUser } from "../../hooks/useStoredUser";
+import { useStoredUser } from "../../hooks/user/useStoredUser";
 import paymentService from "../../services/paymentService";
 import authService from "../../services/authService";
 

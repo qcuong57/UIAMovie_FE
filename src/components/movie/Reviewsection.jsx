@@ -8,7 +8,7 @@ import {
   Trash2,
   LogIn,
 } from "lucide-react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import reviewService from "../../services/reviewService";
 import { useToast } from "../../components/common/Toast";
 import { C, FONT_TITLE } from "../../context/homeTokens";

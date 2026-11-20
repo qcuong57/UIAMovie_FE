@@ -1,7 +1,7 @@
 // src/components/movie/PersonScrollRow.jsx
 // Component scroll ngang cho diễn viên / đạo diễn — dùng chung ở mọi trang
 import React, { useRef, useState, useEffect } from 'react';
-import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';

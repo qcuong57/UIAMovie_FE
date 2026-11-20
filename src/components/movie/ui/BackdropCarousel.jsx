@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useIsMobile } from "../../../hooks/useIsMobile";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 import { C } from "./movieConstants";
 import SectionTitle from "./SectionTitle";
 

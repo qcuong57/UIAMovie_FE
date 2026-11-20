@@ -9,7 +9,7 @@
 import React from "react";
 import PaginationBase from "./pagination/PaginationBase";
 import { FONT_BODY } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 const ACCENT = "#e5181e";
 

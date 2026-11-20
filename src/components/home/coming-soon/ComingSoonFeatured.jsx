@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Info, Play, Volume2, VolumeX, X, Calendar } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../../context/homeTokens";
-import { useIsMobile } from "../../../hooks/useIsMobile";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 import { getReleaseLabel, getDaysUntilRelease } from "../../../utils/releaseDateUtils";
 import { isYoutubeUrl, getYoutubeEmbedUrl } from "../../../utils/videoUtils";
 import ComingSoonCountdown from "./ComingSoonCountdown";

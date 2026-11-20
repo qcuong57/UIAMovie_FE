@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import {
   Star,
 } from "lucide-react";
-import { useIsMobile } from "../../../hooks/useIsMobile";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 import { C, FONT_TITLE } from "../../../context/homeTokens";
 import { ratingWord } from "./reviewUtils";
 

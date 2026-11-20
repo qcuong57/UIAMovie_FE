@@ -3,10 +3,10 @@
 // Route: /movie/:id/info → /movie/:id (player)
 
 import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useMovie } from "../../hooks/useMediaDetail";
+import { useMovie } from "../../hooks/media/useMediaDetail";
 import { normalizeMovieInfo } from "../../utils/normalizeDetail";
 import DetailPageError from "../../components/common/DetailPageError";
 import SeoMeta from "../../components/common/SeoMeta";
@@ -31,7 +31,7 @@ import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { useFavoriteToggle } from "../../hooks/useFavorites";
+import { useFavoriteToggle } from "../../hooks/user/useFavorites";
 import { userHasPremium } from "../../utils/premium";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 

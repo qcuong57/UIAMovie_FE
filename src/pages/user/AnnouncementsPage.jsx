@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BODY, GOOGLE_FONTS } from "../../context/homeTokens";
 import notificationService from "../../services/notificationService";
-import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
 import { queryKeys, STALE } from "../../config/queryKeys";
 import PageError from "../../components/common/PageError";
 import Footer from "../../components/layout/Footer";

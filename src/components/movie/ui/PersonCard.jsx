@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { C } from "./movieConstants";
-import { usePersonNavigation } from "../../../hooks/usePersonNavigation";
+import { usePersonNavigation } from "../../../hooks/media/usePersonNavigation";
 
 /**
  * PersonCard — thẻ diễn viên / đạo diễn dạng chữ nhật (tỉ lệ 2:3).

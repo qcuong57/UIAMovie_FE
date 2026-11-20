@@ -1,13 +1,13 @@
 // src/pages/user/TvShowDetailPage.jsx
 import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { List } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
-import { useTvShow } from "../../hooks/useMediaDetail";
+import { useTvShow } from "../../hooks/media/useMediaDetail";
 import { normalizeTvShowWatch } from "../../utils/normalizeDetail";
 import { normalizeTvShow } from "../../utils/normalizeMedia";
 import { unwrapList } from "../../utils/queryHelpers";

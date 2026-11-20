@@ -3,11 +3,11 @@
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
 import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import tvShowService from "../../services/tvShowService";
-import { useTvShow } from "../../hooks/useMediaDetail";
+import { useTvShow } from "../../hooks/media/useMediaDetail";
 import { normalizeTvShowInfo } from "../../utils/normalizeDetail";
 import DetailPageError from "../../components/common/DetailPageError";
 import SeoMeta from "../../components/common/SeoMeta";
@@ -24,7 +24,7 @@ import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { useFavoriteToggle } from "../../hooks/useFavorites";
+import { useFavoriteToggle } from "../../hooks/user/useFavorites";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 
 const EMPTY = [];

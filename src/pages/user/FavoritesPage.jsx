@@ -19,12 +19,12 @@ import {
   useFavorites,
   useRemoveFavorite,
   favKey,
-} from "../../hooks/useFavorites";
+} from "../../hooks/user/useFavorites";
 import MovieCard from "../../components/movie/MovieCard";
 import BackButton from "../../components/common/BackButton";
 import SeoMeta from "../../components/common/SeoMeta";
 import Pagination from "../../components/common/Pagination";
-import { usePagination } from "../../hooks/usePagination";
+import { usePagination } from "../../hooks/common/usePagination";
 import {
   C,
   FONT_DISPLAY,
@@ -32,10 +32,10 @@ import {
   FONT_BEBAS,
   GOOGLE_FONTS,
 } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import PageError from "../../components/common/PageError";
-import { useMinimumLoading } from "../../hooks/useMinimumLoading";
+import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
 
 // 6 cột giống BrowsePage
 const grid6 = (isMobile) => ({

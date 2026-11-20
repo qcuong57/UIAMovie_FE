@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { C } from "../ui/movieConstants";
-import { usePersonNavigation } from "../../../hooks/usePersonNavigation";
+import { usePersonNavigation } from "../../../hooks/media/usePersonNavigation";
 
 const TvShowSidebar = ({ tvShow, actors, related }) => {
   const navigate = useNavigate();

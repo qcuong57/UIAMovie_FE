@@ -8,12 +8,12 @@
 //   MovieTabsPanel    – tabs: Diễn viên | Đánh giá | Thêm thông tin
 
 import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { getStoredUser, subscribeStoredUser } from "../../config/sessionStore";
 import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
-import { useMovie } from "../../hooks/useMediaDetail";
-import { useTrendingMovies } from "../../hooks/useHomeQueries";
+import { useMovie } from "../../hooks/media/useMediaDetail";
+import { useTrendingMovies } from "../../hooks/home/useHomeQueries";
 import { normalizeMovieWatch } from "../../utils/normalizeDetail";
 import DetailPageError from "../../components/common/DetailPageError";
 import BackButton from "../../components/common/BackButton";

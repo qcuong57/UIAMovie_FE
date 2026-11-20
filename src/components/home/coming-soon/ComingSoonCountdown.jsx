@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { C, FONT_BODY } from "../../../context/homeTokens";
-import { useIsMobile } from "../../../hooks/useIsMobile";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 import { getCountdownParts } from "../../../utils/releaseDateUtils";
 
 const Unit = ({ value, label, isMobile }) => (
