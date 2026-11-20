@@ -16,13 +16,15 @@ export default function usePlayerShortcuts({ enabled, handlers }) {
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e) => {
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // không cướp Ctrl+C/F/K...
+      const t = e.target;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable) return;
       const h = ref.current;
       switch (e.code) {
         case "Space":
         case "KeyK":
           e.preventDefault();
-          h.onTogglePlay?.();
+          if (!e.repeat) h.onTogglePlay?.();
           break;
         case "ArrowLeft":
           e.preventDefault();

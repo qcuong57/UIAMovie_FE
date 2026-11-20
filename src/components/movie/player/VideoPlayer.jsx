@@ -21,6 +21,7 @@ import useControlsVisibility from "../../../hooks/player/useControlsVisibility";
 import usePlayerShortcuts from "../../../hooks/player/usePlayerShortcuts";
 import useWatchProgress from "../../../hooks/player/useWatchProgress";
 import useSkipMarkers from "../../../hooks/player/useSkipMarkers";
+import useDevToolsGuard from "../../../hooks/player/useDevToolsGuard";
 import usePlaybackHeartbeat from "../../../hooks/player/usePlaybackHeartbeat";
 
 import PlayerControls from "./controls/PlayerControls";
@@ -186,6 +187,12 @@ export default function VideoPlayer({
   });
 
   const skip = useSkipMarkers({ videoRef, hasVideo, markers: skipMarkers });
+
+  // Rào cản nhẹ chống DevTools (chỉ production). Phải gọi TRƯỚC early-return `if (!videoUrl)`.
+  const devtoolsOpen = useDevToolsGuard({
+    enabled: hasVideo && process.env.NODE_ENV === "production", // Vite: import.meta.env.PROD
+    onDetect: () => videoRef.current?.pause(),
+  });
 
   usePlayerShortcuts({
     enabled: hasVideo && !promptOpen, // popup đang mở → khoá phím Space/mũi tên
@@ -379,6 +386,25 @@ export default function VideoPlayer({
           />
         )}
       </AnimatePresence>
+
+      {devtoolsOpen && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 100,
+            background: "#000",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            padding: 24,
+          }}
+        >
+          Vui lòng đóng công cụ dành cho nhà phát triển để tiếp tục xem.
+        </div>
+      )}
 
       <ResumePrompt
         open={promptOpen}

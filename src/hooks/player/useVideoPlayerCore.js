@@ -87,10 +87,8 @@ export default function useVideoPlayerCore({
     if (!v || !refreshRef.current || isAdPlayingRef.current) return false;
     if (recoveringRef.current) return true;
     if (recoveryCountRef.current >= MAX_SOURCE_RECOVERY) {
-      console.log("[recover] HET LUOT -> hien loi");
       return false;
     }
-    console.log("[recover]", recoveryCountRef.current, v.currentTime);
     recoveryCountRef.current += 1;
     recoveringRef.current = true;
     resumeOverrideRef.current = v.currentTime || 0;
@@ -237,6 +235,8 @@ export default function useVideoPlayerCore({
       applyResume();
     };
     const onError = () => {
+      // Lỗi của file quảng cáo do useAdManager tự bỏ qua → không hiện overlay lỗi của phim
+      if (adNow()) return;
       const err = v.error;
       // Chrome/Firefox không phát m3u8 native: lỗi này chỉ là khoảnh khắc useAdManager đặt
       // src=m3u8 sau ad, hls.js sẽ gắn lại ngay → không hiện overlay lỗi.

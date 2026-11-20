@@ -85,6 +85,8 @@ export default function useHlsSource({
       fragLoadingMaxRetry: 4,
     });
     hlsRef.current = hls;
+    wasAdRef.current = false; // hls mới → trạng thái "đã tháo vì ad" của hls cũ không còn đúng
+    setAutoHeight(null);
 
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (!data.fatal) return;
@@ -184,11 +186,12 @@ export default function useHlsSource({
     nativeRef.current = null;
     if (useMse || !url || !(isHls ?? isHlsUrl(url))) return;
     let cancelled = false;
+    const ac = new AbortController();
     setLevels([]);
     setLevelState(-1);
     setAutoHeight(null);
 
-    fetch(url)
+    fetch(url, { signal: ac.signal })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((txt) => {
         if (cancelled) return;
@@ -217,6 +220,7 @@ export default function useHlsSource({
 
     return () => {
       cancelled = true;
+      ac.abort();
       nativeRef.current = null;
     };
   }, [url, isHls, useMse, nonce]);
