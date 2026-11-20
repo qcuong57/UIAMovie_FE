@@ -18,8 +18,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService";
 import { getApiErrorMessage } from "../utils/apiError";
 import { validateUsername } from "../utils/validators";
-import { useIsMobile } from "../hooks/useIsMobile";
-import { useStoredUser } from "../hooks/useStoredUser";
+import { useIsMobile } from "../hooks/common/useIsMobile";
+import { useStoredUser } from "../hooks/user/useStoredUser";
 import { postLoginPath, safeReturnPath } from "../utils/authRedirect";
 
 const C = {
