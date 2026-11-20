@@ -28,7 +28,7 @@ import {
   useUploadEpisodeSubtitle,
   useTranslateEpisodeSubtitle,
   useAiGenerateEpisodeSubtitle,
-} from "../../../hooks/useAdminEpisodeSubtitles";
+} from "../../../hooks/admin/useAdminEpisodeSubtitles";
 import episodeSubtitleService from "../../../services/episodeSubtitleService";
 import SubtitleContentEditor, {
   SubtitleEditorModal,

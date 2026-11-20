@@ -10,8 +10,8 @@ import {
 import {
   useAdminHomeSections, useHomeSectionMeta, useContentSearch, useSaveHomeSection,
   useDeleteHomeSection, useSetHomeSectionActive, useReorderHomeSections,
-} from '../../hooks/useAdminHomeSections';
-import { useGenres } from '../../hooks/useHomeQueries';
+} from '../../hooks/admin/useAdminHomeSections';
+import { useGenres } from '../../hooks/home/useHomeQueries';
 import { useToast } from './common/Toast';
 import ConfirmDeleteModal, { InfoBox, WarnBox, IrreversibleNote } from './common/ConfirmDeleteModal';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';

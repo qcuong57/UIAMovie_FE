@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, Trash2, X } from 'lucide-react';
-import { useDeleteAnnouncement } from '../../../hooks/useAdminAnnouncements';
+import { useDeleteAnnouncement } from '../../../hooks/admin/useAdminAnnouncements';
 import { useToast } from '../common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../../context/adminTokens';
 

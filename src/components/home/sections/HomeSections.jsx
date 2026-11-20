@@ -13,7 +13,7 @@
 //   3. Thêm key vào HomeSectionConstants.Layouts (BE) và LAYOUT_INFO + LayoutThumb trong AdminHomeSections.jsx
 import React from 'react';
 import HomeReveal from '../../../motion-configs/HomeReveal';
-import { useHomeSections } from '../../../hooks/useHomeSections';
+import { useHomeSections } from '../../../hooks/home/useHomeSections';
 import { CarouselSection } from './layouts/CarouselSection';
 import { GridSection } from './layouts/GridSection';
 import { HeroSection } from './layouts/HeroSection';

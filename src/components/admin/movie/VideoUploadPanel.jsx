@@ -6,7 +6,7 @@ import {
   useAdminMovie,
   useDeleteMovieVideo,
   useUploadMovieVideo,
-} from "../../../hooks/useAdminMovies";
+} from "../../../hooks/admin/useAdminMovies";
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {

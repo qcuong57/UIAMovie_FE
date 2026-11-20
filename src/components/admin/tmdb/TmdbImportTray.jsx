@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { Download, X, RotateCcw, Check, AlertCircle } from 'lucide-react';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
-import { useImportJobList } from '../../../hooks/useTmdbImports';
+import { useImportJobList } from '../../../hooks/admin/useTmdbImports';
 import {
   initTmdbImports, enqueueImports, dismissImport, isActive,
 } from '../../../../stores/tmdbImportStore';

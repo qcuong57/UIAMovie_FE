@@ -1,7 +1,7 @@
 // src/components/admin/tvshow/TvShowEditModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Check, Crown, X } from 'lucide-react';
-import { useAdminTvShow, useUpdateTvShow } from '../../../hooks/useAdminTvShows';
+import { useAdminTvShow, useUpdateTvShow } from '../../../hooks/admin/useAdminTvShows';
 import { motion, AnimatePresence } from 'framer-motion';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';

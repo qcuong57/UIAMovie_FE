@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
-import { useIsMobile } from '../../../../hooks/useIsMobile';
+import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';

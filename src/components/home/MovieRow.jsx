@@ -1,7 +1,7 @@
 // src/components/home/MovieRow.jsx
 // ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
 import React, { useRef, useState, useEffect } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MovieCard from "../movie/MovieCard";

@@ -24,8 +24,8 @@ import {
   useUnbanUser,
   useGrantPremium,
   useRevokePremium,
-} from "../../hooks/useAdminUsers";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+} from "../../hooks/admin/useAdminUsers";
+import { useDebouncedValue } from "../../hooks/common/useDebouncedValue";
 import authService from "../../services/authService";
 import UserDetailPanel from "./user/UserDetailPanel";
 import UserEditModal from "./user/UserEditModal";

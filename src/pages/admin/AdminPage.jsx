@@ -1,7 +1,7 @@
 // src/pages/admin/AdminPage.jsx
 import React, { useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useStoredUser } from "../../hooks/useStoredUser";
+import { useStoredUser } from "../../hooks/user/useStoredUser";
 
 import AdminLayout from "../../components/admin/AdminLayout";
 import AdminDashboard from "../../components/admin/AdminDashboard";

@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Trash2, X, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDeleteMovie } from "../../../hooks/useAdminMovies";
+import { useDeleteMovie } from "../../../hooks/admin/useAdminMovies";
 import {
   T,
   FONT_BODY as FONT,

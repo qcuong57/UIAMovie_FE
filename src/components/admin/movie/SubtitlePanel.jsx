@@ -26,7 +26,7 @@ import {
   useMovieSubtitles,
   useDeleteSubtitle,
   useSetDefaultSubtitle,
-} from "../../../hooks/useAdminSubtitles";
+} from "../../../hooks/admin/useAdminSubtitles";
 import SubtitleContentEditor, {
   SubtitleEditorModal,
 } from "../shared/SubtitleContentEditor";

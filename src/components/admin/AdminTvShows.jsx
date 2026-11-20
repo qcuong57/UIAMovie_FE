@@ -14,9 +14,9 @@ import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 import AdminPagination from '../common/AdminPagination';
 import {
   useAdminTvShows, useSetTvShowPremium, usePremiumPendingIds, useRefreshTvShows,
-} from '../../hooks/useAdminTvShows';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { usePageParam, usePagination } from '../../hooks/usePagination';
+} from '../../hooks/admin/useAdminTvShows';
+import { useDebouncedValue } from '../../hooks/common/useDebouncedValue';
+import { usePageParam, usePagination } from '../../hooks/common/usePagination';
 
 const PAGE_SIZE = 15;
 const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };

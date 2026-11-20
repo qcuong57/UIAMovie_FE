@@ -1,12 +1,12 @@
 // src/components/movie/MovieCard.jsx
 import React, { useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Plus, ThumbsUp, ChevronDown, Heart, Star, Loader, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PremiumGateModal from './ui/PremiumGateModal';
-import { useFavoriteToggle } from '../../hooks/useFavorites';
+import { useFavoriteToggle } from '../../hooks/user/useFavorites';
 import { userHasPremium } from '../../utils/premium';
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from '../../config/sessionStore';
 

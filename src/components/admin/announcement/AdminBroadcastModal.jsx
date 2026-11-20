@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   Edit3,
 } from "lucide-react";
-import { useBroadcastAnnouncement, useUpdateAnnouncement } from "../../../hooks/useAdminAnnouncements";
+import { useBroadcastAnnouncement, useUpdateAnnouncement } from "../../../hooks/admin/useAdminAnnouncements";
 import { useToast } from "../common/Toast";
 import { T, FONT_BODY as FONT, FONT_TITLE } from "../../../context/adminTokens";
 

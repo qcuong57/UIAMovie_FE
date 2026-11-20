@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Film, Tv, Star } from "lucide-react";
-import { usePersonMovies } from "../../../hooks/useAdminPersons";
+import { usePersonMovies } from "../../../hooks/admin/useAdminPersons";
 import {
   T,
   FONT_BODY as FONT,

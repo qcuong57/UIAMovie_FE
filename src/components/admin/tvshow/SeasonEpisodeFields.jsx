@@ -16,7 +16,7 @@ import { PosterField } from '../shared/GenreAndImageFields';
 import tvShowService from '../../../services/tvShowService';
 import {
   useTvShowSeason, useAddEpisode, useDeleteEpisode, useUpdateSeason, useUpdateEpisode,
-} from '../../../hooks/useAdminTvShows';
+} from '../../../hooks/admin/useAdminTvShows';
 
 let seasonUidSeq = 0;
 const nextSeasonUid = () => `season_${Date.now()}_${seasonUidSeq++}`;

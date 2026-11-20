@@ -15,7 +15,7 @@ import {
   Lock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import { createPortal } from "react-dom";

@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Search, X } from "lucide-react";
-import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
+import { useBodyScrollLock } from "../../hooks/common/useBodyScrollLock";
 
 const FULL = { inset: 0 };
 

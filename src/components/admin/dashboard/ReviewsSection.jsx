@@ -2,7 +2,7 @@
 import React from "react";
 import { Film, MessageSquare, ThumbsUp, Tv } from "lucide-react";
 import { ACCENT, ACCENT2, ACCENT4 } from "../../../context/adminTokens";
-import { useDashboardReviews } from "../../../hooks/useAdminDashboard";
+import { useDashboardReviews } from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
 import { KpiGrid } from "./StatCard";
 import {

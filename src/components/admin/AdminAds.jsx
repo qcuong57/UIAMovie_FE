@@ -29,7 +29,7 @@ import {
   useRefreshAds,
   useSetScheduleSettings,
   isRandomSchedule,
-} from "../../hooks/useAdminAds";
+} from "../../hooks/admin/useAdminAds";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { useToast } from "./common/Toast";
 import {

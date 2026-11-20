@@ -13,7 +13,7 @@ import Navbar from "../components/layout/Navbar";
 import ErrorBoundary from "../components/common/ErrorBoundary";
 import SeoMeta from "../components/common/SeoMeta";
 import { useToast } from "../components/common/Toast";
-import { useIsLoggedIn, useStoredUser } from "../hooks/useStoredUser";
+import { useIsLoggedIn, useStoredUser } from "../hooks/user/useStoredUser";
 import { postLoginPath } from "../utils/authRedirect";
 import LoadingScreen from "../components/ui/LoadingScreen";
 

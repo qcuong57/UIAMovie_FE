@@ -6,7 +6,7 @@ import * as signalR from "@microsoft/signalr";
 import { useNavigate } from "react-router-dom";
 import authService from "../../services/authService";
 import { getFreshAccessToken } from "../../config/axios";
-import { useIsLoggedIn } from "../../hooks/useStoredUser";
+import { useIsLoggedIn } from "../../hooks/user/useStoredUser";
 import notificationService from "../../services/notificationService";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import { fmtDateTime } from "../../helper/format";

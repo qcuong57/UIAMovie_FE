@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useHomeReviews } from "../../hooks/useHomeQueries";
+import { useHomeReviews } from "../../hooks/home/useHomeQueries";
 import {
   C,
   FONT_DISPLAY,

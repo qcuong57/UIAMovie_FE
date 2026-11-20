@@ -1,7 +1,7 @@
 // src/components/home/GenreSection.jsx
 // ─── Genre cards: refined, elegant — không in hoa, tinh tế hơn ───────────────
 import React, { useRef, useState, useEffect, useMemo } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";

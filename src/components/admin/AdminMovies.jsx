@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 import {
   useAdminMovies, useSetMoviePremium, usePendingPremiumIds, useRefreshMovies,
-} from '../../hooks/useAdminMovies';
+} from '../../hooks/admin/useAdminMovies';
 import { Input } from '../ui';
-import { usePagination } from '../../hooks/usePagination';
+import { usePagination } from '../../hooks/common/usePagination';
 import AdminPagination from '../common/AdminPagination';
 import MovieDetailPanel  from './movie/MovieDetailPanel';
 import MovieEditModal    from './movie/MovieEditModal';

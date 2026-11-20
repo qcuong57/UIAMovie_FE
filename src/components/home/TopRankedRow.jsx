@@ -2,7 +2,7 @@
 // ─── Top 10 Thịnh Hành — Đồng bộ trực tiếp MovieCard với toàn bộ website ───
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BEBAS } from "../../context/homeTokens";

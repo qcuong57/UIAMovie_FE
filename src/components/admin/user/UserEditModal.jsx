@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, User, Link } from "lucide-react";
-import { useUpdateUser } from "../../../hooks/useAdminUsers";
+import { useUpdateUser } from "../../../hooks/admin/useAdminUsers";
 import { useToast } from "../common/Toast";
 import { validateUsername } from "../../../utils/validators";
 

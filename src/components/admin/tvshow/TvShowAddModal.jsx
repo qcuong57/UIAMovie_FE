@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Check, Crown, X, ImagePlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import tvShowService from '../../../services/tvShowService';
-import { useCreateTvShow } from '../../../hooks/useAdminTvShows';
+import { useCreateTvShow } from '../../../hooks/admin/useAdminTvShows';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDto } from './PersonPickerField';
 import { GenrePickerField, PosterField, BackdropGalleryField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields';

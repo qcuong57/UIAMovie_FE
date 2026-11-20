@@ -6,7 +6,7 @@ import genreService from "../../services/genreService";
 import movieService from "../../services/movieService";
 import tvShowService from "../../services/tvShowService";
 import { C, FONT_BODY } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import BottomSheet from "./BottomSheet";
 
 const ACCENT = C.accent;

@@ -7,7 +7,7 @@ import {
   useDashboardReviews,
   useDashboardUsers,
   useViewOverview,
-} from "../../../hooks/useAdminDashboard";
+} from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
 import { Card } from "./Card";
 import { StatCard } from "./StatCard";

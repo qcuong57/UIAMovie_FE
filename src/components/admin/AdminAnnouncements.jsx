@@ -12,7 +12,7 @@ import {
   Megaphone,
   ExternalLink,
 } from 'lucide-react';
-import { useAdminAnnouncements } from '../../hooks/useAdminAnnouncements';
+import { useAdminAnnouncements } from '../../hooks/admin/useAdminAnnouncements';
 import { useToast } from './common/Toast';
 import AnnouncementModal from './announcement/AnnouncementModal';
 import AnnouncementDeleteModal from './announcement/AnnouncementDeleteModal';

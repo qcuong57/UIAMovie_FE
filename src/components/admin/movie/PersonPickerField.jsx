@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Plus, User, GripVertical } from "lucide-react";
-import { usePersonSearch } from "../../../hooks/useAdminMovies";
+import { usePersonSearch } from "../../../hooks/admin/useAdminMovies";
 import { T, FONT_BODY as FONT } from "../../../context/adminTokens";
 
 let uidSeq = 0;

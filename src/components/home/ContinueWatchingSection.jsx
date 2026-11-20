@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 
 // ── Helpers ────────────────────────────────────────────────────────

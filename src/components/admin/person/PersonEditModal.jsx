@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, ImageOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUpdatePerson } from '../../../hooks/useAdminPersons';
+import { useUpdatePerson } from '../../../hooks/admin/useAdminPersons';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 

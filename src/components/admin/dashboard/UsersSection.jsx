@@ -2,7 +2,7 @@
 import React from "react";
 import { Activity, Crown, UserPlus, Users } from "lucide-react";
 import { ACCENT, ACCENT2, ACCENT5 } from "../../../context/adminTokens";
-import { useDashboardUsers } from "../../../hooks/useAdminDashboard";
+import { useDashboardUsers } from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
 import { KpiGrid } from "./StatCard";
 import { UserGrowthCard, UserListCard } from "./UserChartCards";

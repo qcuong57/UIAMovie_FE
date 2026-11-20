@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import { Play, Crown, Volume2, VolumeX, ChevronLeft, ChevronRight, Film } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
-import { useIsMobile } from '../../../../hooks/useIsMobile';
+import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';

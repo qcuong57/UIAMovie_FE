@@ -25,7 +25,7 @@ import {
   useDeleteTvShowVideo,
   useUploadEpisodeVideo,
   useDeleteEpisodeVideo,
-} from "../../../hooks/useAdminTvShows";
+} from "../../../hooks/admin/useAdminTvShows";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../../config/queryKeys";
 import { UploadZone } from "../movie/VideoUploadPanel";

@@ -24,7 +24,7 @@ import {
   backdropStateToDto,
 } from "../shared/GenreAndImageFields";
 import { useToast } from "../common/Toast";
-import { useCreateMovie } from "../../../hooks/useAdminMovies";
+import { useCreateMovie } from "../../../hooks/admin/useAdminMovies";
 
 const gold = "#D97706";
 const goldLight = "#FEF3C7";

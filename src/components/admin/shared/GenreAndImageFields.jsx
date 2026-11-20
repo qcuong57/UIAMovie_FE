@@ -5,7 +5,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, ImageOff, Youtube, FileVideo, Trash2 } from 'lucide-react';
 import movieService from '../../../services/movieService';
-import { useGenreOptions, useUploadAdminImage } from '../../../hooks/useAdminUploads';
+import { useGenreOptions, useUploadAdminImage } from '../../../hooks/admin/useAdminUploads';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
 
 // ── Chọn thể loại ────────────────────────────────────────────────────────────

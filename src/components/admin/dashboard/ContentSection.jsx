@@ -2,7 +2,7 @@
 import React from "react";
 import { AlertTriangle, Crown, Film, Tv } from "lucide-react";
 import { ACCENT, ACCENT4 } from "../../../context/adminTokens";
-import { useDashboardContent } from "../../../hooks/useAdminDashboard";
+import { useDashboardContent } from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
 import { Card } from "./Card";
 import { HBarChart } from "./ChartComponents";

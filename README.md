@@ -333,40 +333,42 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 
 ### Query layer (`src/config`, `src/hooks`, `src/utils`)
 
+Hooks are grouped by domain: `hooks/admin/`, `hooks/home/`, `hooks/media/`, `hooks/user/`, `hooks/player/`, `hooks/common/`. The "File" column below shows the full path. Import with the full path (`hooks/home/useHomeQueries`); there are no barrel `index.js` files.
+
 | File | Responsibility |
 |---|---|
 | `config/queryClient.js` | The single `QueryClient`: defaults (`staleTime` 1 min, `gcTime` 10 min, no retry on 4xx, one retry on network/5xx, mutations never retry), global error hook (`QueryCache` / `MutationCache` `onError`, a place to plug Sentry), and the **session ↔ cache sync** |
 | `config/queryKeys.js` | The only place query keys are defined (`queryKeys.*`), the `STALE` presets and `PUBLIC_QUERY_ROOTS` |
-| `hooks/useHomeQueries.js` | Home data hooks: trending, top / latest TV, latest movies, genres, watch history (+ optimistic delete) |
-| `hooks/useHomeSections.js` | Public home collections: one query for `GET /home-sections` under `queryKeys.home.sections` (`STALE.medium`). The key sits under the `home` root, which is in `PUBLIC_QUERY_ROOTS` **and** `CATALOG_ROOTS`: it is not reset on account change and reloads when an admin edits a movie. Items go through `normalizeHomeSection`; `HomeSections` renders nothing while loading or on error |
-| `hooks/useCountryRows.js` | One query per country row, enabled only when the row is near the viewport |
-| `hooks/useFavorites.js` | Favorites: read (`useIsFavorite`, `useFavorites`) and write (`useFavoriteToggle`, `useFavoriteActions`, optimistic) |
+| `hooks/home/useHomeQueries.js` | Home data hooks: trending, top / latest TV, latest movies, genres, watch history (+ optimistic delete) |
+| `hooks/home/useHomeSections.js` | Public home collections: one query for `GET /home-sections` under `queryKeys.home.sections` (`STALE.medium`). The key sits under the `home` root, which is in `PUBLIC_QUERY_ROOTS` **and** `CATALOG_ROOTS`: it is not reset on account change and reloads when an admin edits a movie. Items go through `normalizeHomeSection`; `HomeSections` renders nothing while loading or on error |
+| `hooks/home/useCountryRows.js` | One query per country row, enabled only when the row is near the viewport |
+| `hooks/user/useFavorites.js` | Favorites: read (`useIsFavorite`, `useFavorites`) and write (`useFavoriteToggle`, `useFavoriteActions`, optimistic) |
 | `utils/normalizeMedia.js` | The only `normalizeMovie` / `normalizeTvShow` (components must not define their own) |
 | `utils/normalizeHomeCard.js` | `HomeContentCardDTO` → site card shape (`normalizeHomeCard`), `normalizeHomeSection` (items normalised, `config` always an object) and `contentPath`. Keeps `trailerKey` / `trailerVideoUrl` |
 | `utils/queryHelpers.js` | `unwrapList` (unwraps every response shape the backend uses) and `ignoreMissingEndpoint` |
-| `hooks/useMediaDetail.js` | `useMovie` / `useTvShow`: the Info page and the Watch page of the same title share one cache entry (`queryKeys.movies.detail` / `tvShows.detail`) |
-| `hooks/useMinimumLoading.js` | Keeps the entry `LoadingScreen` visible for a minimum time so it never flashes |
+| `hooks/media/useMediaDetail.js` | `useMovie` / `useTvShow`: the Info page and the Watch page of the same title share one cache entry (`queryKeys.movies.detail` / `tvShows.detail`) |
+| `hooks/common/useMinimumLoading.js` | Keeps the entry `LoadingScreen` visible for a minimum time so it never flashes |
 | `utils/normalizeDetail.js` | DTO → view-model for Movie / TV Info and Watch pages (one place instead of one block per page) |
-| `hooks/useAdminMovies.js` | Admin → Phim: `useAdminMovies` (bảng), `useAdminMovie` (chi tiết, dùng chung DetailPanel / EditModal / VideoUploadPanel), `useAdminGenres`, `usePersonSearch`, và các mutation `useSetMoviePremium` (optimistic), `useUpdateMovie`, `useCreateMovie`, `useDeleteMovie`, `useUploadMovieVideo`, `useDeleteMovieVideo`. Mọi thay đổi gọi `invalidateCatalog` để cache người dùng (`CATALOG_ROOTS`) tải lại |
-| `hooks/useAdminUsers.js` | Admin → Người dùng, **phân trang server**: `useAdminUsers(filter)` (`filter` = page + search + role + subscriptionType nằm trong key, `keepPreviousData`, prefetch trang kế, `AbortSignal`), `useAdminUser` (chi tiết) và các mutation `useUpdateUser`, `useDeleteUser`, `useChangeUserRole`, `useBanUser`, `useUnbanUser`, `useGrantPremium`, `useRevokePremium` (ghi thẳng vào mọi trang đang cache) |
-| `hooks/useAdminTvShows.js` | Admin → TV Show: `useAdminTvShows(filter)` (phân trang server, `keepPreviousData`, prefetch trang kế), `useAdminTvShow` (chi tiết), `useTvShowSeason(showId, seasonNumber, { enabled })` (một cache cho accordion và modal sửa season) và các mutation `useAddEpisode`, `useUpdateEpisode`, `useDeleteEpisode`, `useUpdateSeason`, `useUploadEpisodeVideo`, `useDeleteEpisodeVideo`, `useDeleteTvShowVideo`, `useSyncTvShowEpisodes`, `useDeleteTvShow`. Mutation vá thẳng vào cache season rồi invalidate catalogue người dùng (`CATALOG_ROOTS`) |
-| `hooks/useAdminPersons.js` | Admin → Diễn viên & Đạo diễn, **phân trang server**: `useAdminPersons(filter)` (`filter` = page + pageSize + search nằm trong key, `keepPreviousData`, prefetch trang kế), `useAdminPerson` (chi tiết, DetailPanel dùng), và các mutation `useCreatePerson`, `useUpdatePerson` (vá chi tiết + mọi trang danh sách), `useDeletePerson`. Sửa / xoá làm mới ô gợi ý (`admin.persons.search`) và nhóm catalogue người dùng |
-| `hooks/useAdminPlans.js` | Admin → Gói Premium: `useAdminPlans` (mọi gói, kể cả gói đã tắt bán; cùng cache với bộ lọc gói của trang Doanh thu) và các mutation `useCreatePlan`, `useUpdatePlan`, `useSetPlanActive`, `useGrantSubscription`, `useRevokeSubscription`. Sửa gói làm mới `premium.plans` (trang `/premium`); cấp / thu hồi Premium làm mới người dùng admin và KPI doanh thu |
-| `hooks/useAdminReviews.js` | Admin → Đánh giá: `useReviewCatalog(kind)`, `useShowEpisodes` (queryFn xuất riêng là `fetchShowEpisodes` để Dashboard dùng chung cache), `useAdminReviews({ kind, targetId, episodeId })`, `useReviewReplies(reviewId, page)` (phân trang theo reply gốc, giữ trang cũ khi chuyển trang) và `useDeleteReview`, `useDeleteReviews` (xoá hàng loạt, một review lỗi không chặn các review khác), `useDeleteReply` (giảm `replyCount` ngay, lấy lại reply, làm mới điểm phía người dùng) |
-| `hooks/useAdminDashboard.js` | Admin → Dashboard: mỗi nguồn dữ liệu một query riêng (`admin.dashboard.*`, `STALE.admin`) và bốn hook theo section — `useDashboardContent`, `useDashboardUsers`, `useDashboardReviews` (trả thống kê đã tính + `isPending` / `isError` / `refetch`), `useViewOverview` / `useViewTop` / `useViewGenres` (`keepPreviousData`, đổi bộ lọc không nháy skeleton) — cùng `useDashboardRefresh()` → `{ refresh, isRefreshing, updatedAt }` (invalidate `admin.dashboard.all`). Query phim / show / user / review dùng chung giữa các tab nên chỉ gọi API một lần; nhãn tập của review dùng key `admin.reviews.episodes(showId)`, chung cache với trang Đánh giá |
+| `hooks/admin/useAdminMovies.js` | Admin → Phim: `useAdminMovies` (bảng), `useAdminMovie` (chi tiết, dùng chung DetailPanel / EditModal / VideoUploadPanel), `useAdminGenres`, `usePersonSearch`, và các mutation `useSetMoviePremium` (optimistic), `useUpdateMovie`, `useCreateMovie`, `useDeleteMovie`, `useUploadMovieVideo`, `useDeleteMovieVideo`. Mọi thay đổi gọi `invalidateCatalog` để cache người dùng (`CATALOG_ROOTS`) tải lại |
+| `hooks/admin/useAdminUsers.js` | Admin → Người dùng, **phân trang server**: `useAdminUsers(filter)` (`filter` = page + search + role + subscriptionType nằm trong key, `keepPreviousData`, prefetch trang kế, `AbortSignal`), `useAdminUser` (chi tiết) và các mutation `useUpdateUser`, `useDeleteUser`, `useChangeUserRole`, `useBanUser`, `useUnbanUser`, `useGrantPremium`, `useRevokePremium` (ghi thẳng vào mọi trang đang cache) |
+| `hooks/admin/useAdminTvShows.js` | Admin → TV Show: `useAdminTvShows(filter)` (phân trang server, `keepPreviousData`, prefetch trang kế), `useAdminTvShow` (chi tiết), `useTvShowSeason(showId, seasonNumber, { enabled })` (một cache cho accordion và modal sửa season) và các mutation `useAddEpisode`, `useUpdateEpisode`, `useDeleteEpisode`, `useUpdateSeason`, `useUploadEpisodeVideo`, `useDeleteEpisodeVideo`, `useDeleteTvShowVideo`, `useSyncTvShowEpisodes`, `useDeleteTvShow`. Mutation vá thẳng vào cache season rồi invalidate catalogue người dùng (`CATALOG_ROOTS`) |
+| `hooks/admin/useAdminPersons.js` | Admin → Diễn viên & Đạo diễn, **phân trang server**: `useAdminPersons(filter)` (`filter` = page + pageSize + search nằm trong key, `keepPreviousData`, prefetch trang kế), `useAdminPerson` (chi tiết, DetailPanel dùng), và các mutation `useCreatePerson`, `useUpdatePerson` (vá chi tiết + mọi trang danh sách), `useDeletePerson`. Sửa / xoá làm mới ô gợi ý (`admin.persons.search`) và nhóm catalogue người dùng |
+| `hooks/admin/useAdminPlans.js` | Admin → Gói Premium: `useAdminPlans` (mọi gói, kể cả gói đã tắt bán; cùng cache với bộ lọc gói của trang Doanh thu) và các mutation `useCreatePlan`, `useUpdatePlan`, `useSetPlanActive`, `useGrantSubscription`, `useRevokeSubscription`. Sửa gói làm mới `premium.plans` (trang `/premium`); cấp / thu hồi Premium làm mới người dùng admin và KPI doanh thu |
+| `hooks/admin/useAdminReviews.js` | Admin → Đánh giá: `useReviewCatalog(kind)`, `useShowEpisodes` (queryFn xuất riêng là `fetchShowEpisodes` để Dashboard dùng chung cache), `useAdminReviews({ kind, targetId, episodeId })`, `useReviewReplies(reviewId, page)` (phân trang theo reply gốc, giữ trang cũ khi chuyển trang) và `useDeleteReview`, `useDeleteReviews` (xoá hàng loạt, một review lỗi không chặn các review khác), `useDeleteReply` (giảm `replyCount` ngay, lấy lại reply, làm mới điểm phía người dùng) |
+| `hooks/admin/useAdminDashboard.js` | Admin → Dashboard: mỗi nguồn dữ liệu một query riêng (`admin.dashboard.*`, `STALE.admin`) và bốn hook theo section — `useDashboardContent`, `useDashboardUsers`, `useDashboardReviews` (trả thống kê đã tính + `isPending` / `isError` / `refetch`), `useViewOverview` / `useViewTop` / `useViewGenres` (`keepPreviousData`, đổi bộ lọc không nháy skeleton) — cùng `useDashboardRefresh()` → `{ refresh, isRefreshing, updatedAt }` (invalidate `admin.dashboard.all`). Query phim / show / user / review dùng chung giữa các tab nên chỉ gọi API một lần; nhãn tập của review dùng key `admin.reviews.episodes(showId)`, chung cache với trang Đánh giá |
 | `helper/dashboardStats.js` | Các phép tính của Dashboard ở dạng hàm thuần (không React, không API, dễ test): `buildContentStats`, `buildUserStats`, `buildReviewStats`, `summarizeViews`, `buildEpisodeLabelMap`, `pctChange`, `nf`. Hook bọc chúng bằng `useMemo` |
-| `hooks/useAdminAnnouncements.js` | Admin → Thông báo & Lịch bảo trì: `useAdminAnnouncements` (một danh sách, lọc / sắp xếp / phân trang ở client) và `useBroadcastAnnouncement`, `useUpdateAnnouncement`, `useDeleteAnnouncement`. Sửa / xoá vá cache ngay; cả ba làm mới trang Tin tức công khai (`queryKeys.announcements.all`) |
-| `hooks/useAdminTmdb.js` | Admin → Import TMDB, **read-only preview**: `useTmdbPreview(kind, tmdbId)` (`admin.tmdb.preview`, `STALE.static`, reopening the same title is instant). Importing is **not** a mutation any more: it lives in `tmdbImportStore` |
-| `hooks/useTmdbDiscover.js` | TMDB browsing: `useTmdbDiscover(kind, query, filters, page, enabled)` (search + filters in one query, key `admin.tmdb.discover` with genre ids sorted so `[1,2]` and `[2,1]` share a cache entry), `useTmdbGenres(kind)` and `useTmdbExisting(kind, ids)` (which TMDB ids are already in the DB, key `admin.tmdb.exists`) |
-| `hooks/useTmdbImports.js` | React bindings for `tmdbImportStore`: `useImportJobs()` (jobs by key), `useImportJobList()` (array, for the tray), `useOnImportsSettled(fn)` (debounced callback after a group of imports ends, used as `onImported` by the parent page) and `batchStats(jobs)` (`{ total, finished, failed, percent }` for the bulk bar) |
+| `hooks/admin/useAdminAnnouncements.js` | Admin → Thông báo & Lịch bảo trì: `useAdminAnnouncements` (một danh sách, lọc / sắp xếp / phân trang ở client) và `useBroadcastAnnouncement`, `useUpdateAnnouncement`, `useDeleteAnnouncement`. Sửa / xoá vá cache ngay; cả ba làm mới trang Tin tức công khai (`queryKeys.announcements.all`) |
+| `hooks/admin/useAdminTmdb.js` | Admin → Import TMDB, **read-only preview**: `useTmdbPreview(kind, tmdbId)` (`admin.tmdb.preview`, `STALE.static`, reopening the same title is instant). Importing is **not** a mutation any more: it lives in `tmdbImportStore` |
+| `hooks/admin/useTmdbDiscover.js` | TMDB browsing: `useTmdbDiscover(kind, query, filters, page, enabled)` (search + filters in one query, key `admin.tmdb.discover` with genre ids sorted so `[1,2]` and `[2,1]` share a cache entry), `useTmdbGenres(kind)` and `useTmdbExisting(kind, ids)` (which TMDB ids are already in the DB, key `admin.tmdb.exists`) |
+| `hooks/admin/useTmdbImports.js` | React bindings for `tmdbImportStore`: `useImportJobs()` (jobs by key), `useImportJobList()` (array, for the tray), `useOnImportsSettled(fn)` (debounced callback after a group of imports ends, used as `onImported` by the parent page) and `batchStats(jobs)` (`{ total, finished, failed, percent }` for the bulk bar) |
 | `stores/tmdbImportStore.js` | The background import queue, outside React (see [TMDB import](#tmdb-import-background-queue)) |
-| `hooks/useAdminRevenue.js` | Admin → Doanh thu: `useRevenueSummary`, `useRevenueChart` (biểu đồ + doanh thu theo gói chung một kỳ → một query), `useAdminRevenueOrders(filter)` và `useRevenuePlanOptions`. Polling bằng `refetchInterval` do trang truyền vào (20 giây khi còn đơn pending, 60 giây khi không), tự dừng khi tab ẩn, `refetchOnWindowFocus` thay cho handler `visibilitychange`; refetch nền lỗi thì giữ số cũ. Xuất Excel vẫn gọi `paymentService.adminExportRevenue` trực tiếp (tải file, không cache) |
-| `hooks/useAdminGenres.js` | Admin → Thể loại: `useAdminGenres()` (một query `genres.admin`, chuẩn hoá về mảng) và `useGenreMutations()` → `{ save, remove }` (`save` tạo hoặc sửa theo id). Mọi thay đổi làm mới `genres.all` (ô chọn thể loại, trang chủ) và, khi xoá, cả nhóm `CATALOG_ROOTS` cùng bảng phim admin |
-| `hooks/useAdminAds.js` | Admin → Quảng cáo: `useAdminAds({ page, pageSize, search, isActive })` (phân trang server, `keepPreviousData`), `useAdDetail(id, initial)` (panel chi tiết, dùng dòng của bảng làm dữ liệu ban đầu), `useAdScheduleSettings()` (cấu hình lịch phát, key riêng `admin.adScheduleSettings`), `useSetScheduleSettings()`, `useRefreshAds()` và `useAdMutations()` → `{ toggleActive, deleteAd, toggleSlot, deleteSlot }`. Mỗi mutation làm mới cả nhóm `admin.ads.all` nên bảng, panel chi tiết và số slot luôn khớp nhau. Xuất thêm `isRandomSchedule(settings)` |
-| `hooks/useAdminHomeSections.js` | Admin → Bộ sưu tập: `useAdminHomeSections` (mọi khối, kể cả tắt / hết hạn), `useHomeSectionMeta` (layout, auto rule, giới hạn; `STALE.static`), `useContentSearch(kind, term)` (bật từ 2 ký tự, cache theo từ khoá) và các mutation `useSaveHomeSection` (tạo / sửa theo `id`), `useDeleteHomeSection`, `useSetHomeSectionActive` (optimistic, lỗi thì hoàn lại), `useReorderHomeSections` (optimistic, lỗi thì hoàn lại). Mọi thay đổi làm mới `admin.homeSections.all` **và** `home.sections` (trang chủ công khai) |
-| `hooks/useAdminEpisodeSubtitles.js` | Subtitle của tập: `useEpisodeSubtitles(episodeId)` (một query, tự bật `refetchInterval` khi còn subtitle `processing`, giữ danh sách cũ nếu refetch lỗi) và mutation `useUploadEpisodeSubtitle`, `useTranslateEpisodeSubtitle`, `useAiGenerateEpisodeSubtitle`, xoá, đặt mặc định (optimistic, lỗi thì lấy lại từ server) |
-| `hooks/useDebouncedValue.js` | Debounce giá trị ô tìm kiếm; giá trị đã debounce mới đi vào query key |
-| `hooks/useAdminSubtitles.js` | Subtitle của phim; một query tự refetch 3s khi còn subtitle đang xử lý |
+| `hooks/admin/useAdminRevenue.js` | Admin → Doanh thu: `useRevenueSummary`, `useRevenueChart` (biểu đồ + doanh thu theo gói chung một kỳ → một query), `useAdminRevenueOrders(filter)` và `useRevenuePlanOptions`. Polling bằng `refetchInterval` do trang truyền vào (20 giây khi còn đơn pending, 60 giây khi không), tự dừng khi tab ẩn, `refetchOnWindowFocus` thay cho handler `visibilitychange`; refetch nền lỗi thì giữ số cũ. Xuất Excel vẫn gọi `paymentService.adminExportRevenue` trực tiếp (tải file, không cache) |
+| `hooks/admin/useAdminGenres.js` | Admin → Thể loại: `useAdminGenres()` (một query `genres.admin`, chuẩn hoá về mảng) và `useGenreMutations()` → `{ save, remove }` (`save` tạo hoặc sửa theo id). Mọi thay đổi làm mới `genres.all` (ô chọn thể loại, trang chủ) và, khi xoá, cả nhóm `CATALOG_ROOTS` cùng bảng phim admin |
+| `hooks/admin/useAdminAds.js` | Admin → Quảng cáo: `useAdminAds({ page, pageSize, search, isActive })` (phân trang server, `keepPreviousData`), `useAdDetail(id, initial)` (panel chi tiết, dùng dòng của bảng làm dữ liệu ban đầu), `useAdScheduleSettings()` (cấu hình lịch phát, key riêng `admin.adScheduleSettings`), `useSetScheduleSettings()`, `useRefreshAds()` và `useAdMutations()` → `{ toggleActive, deleteAd, toggleSlot, deleteSlot }`. Mỗi mutation làm mới cả nhóm `admin.ads.all` nên bảng, panel chi tiết và số slot luôn khớp nhau. Xuất thêm `isRandomSchedule(settings)` |
+| `hooks/admin/useAdminHomeSections.js` | Admin → Bộ sưu tập: `useAdminHomeSections` (mọi khối, kể cả tắt / hết hạn), `useHomeSectionMeta` (layout, auto rule, giới hạn; `STALE.static`), `useContentSearch(kind, term)` (bật từ 2 ký tự, cache theo từ khoá) và các mutation `useSaveHomeSection` (tạo / sửa theo `id`), `useDeleteHomeSection`, `useSetHomeSectionActive` (optimistic, lỗi thì hoàn lại), `useReorderHomeSections` (optimistic, lỗi thì hoàn lại). Mọi thay đổi làm mới `admin.homeSections.all` **và** `home.sections` (trang chủ công khai) |
+| `hooks/admin/useAdminEpisodeSubtitles.js` | Subtitle của tập: `useEpisodeSubtitles(episodeId)` (một query, tự bật `refetchInterval` khi còn subtitle `processing`, giữ danh sách cũ nếu refetch lỗi) và mutation `useUploadEpisodeSubtitle`, `useTranslateEpisodeSubtitle`, `useAiGenerateEpisodeSubtitle`, xoá, đặt mặc định (optimistic, lỗi thì lấy lại từ server) |
+| `hooks/common/useDebouncedValue.js` | Debounce giá trị ô tìm kiếm; giá trị đã debounce mới đi vào query key |
+| `hooks/admin/useAdminSubtitles.js` | Subtitle của phim; một query tự refetch 3s khi còn subtitle đang xử lý |
 | Persisted cache | AI recommendations are persisted through `PersistQueryClientProvider` (`localStorage` key `uiamovie-query-cache`, 24 h, `buster: "v1"`); nothing else is persisted. The old hand-written `recommendationCache` was removed |
 
 ### Cache policy (`STALE`)
@@ -435,7 +437,7 @@ queued ──► running ──► done      (result: castCount, imageCount, tra
 **Add a new field to the import result**: return it in `result` from the job endpoint, then add one line to `summarizeResult` in `TmdbImportUi.jsx`. The badges, the toast text (`describeResult`) and the "missing data" warning follow from it.
 
 ### Conventions
-- A new endpoint = a new hook in `src/hooks` + a key in `queryKeys.js`. Components never call a service inside `useEffect` and never `useState` the result.
+- A new endpoint = a new hook in `src/hooks/<domain>/` (`admin`, `home`, `media`, `user`, `player`, `common`) + a key in `queryKeys.js`. Components never call a service inside `useEffect` and never `useState` the result.
 - Put normalisation in `select` (module-level function, so the reference is stable) or in the `queryFn`; never repeat it in a component.
 - `queryFn` must **throw** on failure. Do not `.catch(() => [])`: that caches an empty list as if it were valid for the whole `staleTime`. Use `ignoreMissingEndpoint` only for optional sources, and it swallows 404 / 501 only.
 - Anything below the fold or not needed for first paint takes an `enabled` flag (`useInView` or "after the Hero").
@@ -547,26 +549,28 @@ src/
 │   ├── homeTokens.js   # Global design tokens (colors, fonts, genre maps)
 │   └── adminTokens.js  # Admin design tokens (AdminPagination, AdminRevenue, AdminPlans, AdminHomeSections)
 │
-├── hooks/
-│   ├── useIsMobile.js  # Responsive breakpoint hook
-│   ├── useAdManager.js # Pre/mid/post-roll playback on the single <video>
-│   ├── useStoredUser.js# Subscribes to sessionStore
-│   ├── useHomeQueries.js # Home queries + watch-history mutation (TanStack Query)
-│   ├── useHomeSections.js # Public admin-curated collections
-│   ├── useCountryRows.js # Per-country rows, loaded when near the viewport
-│   ├── useFavorites.js # Favorites: read + optimistic toggle
-│   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
-│   ├── useAdminMovies.js / useAdminUsers.js / useAdminTvShows.js # Admin tables + mutations
-│   ├── useAdminPersons.js / useAdminRevenue.js # Admin persons + revenue dashboard
-│   ├── useAdminPlans.js / useAdminReviews.js # Admin plans, reviews
-│   ├── useAdminTmdb.js / useTmdbDiscover.js / useTmdbImports.js # TMDB preview, search + filters, import-queue bindings
-│   ├── useAdminAnnouncements.js # Admin announcements (broadcast / edit / delete)
-│   ├── useAdminGenres.js / useAdminAds.js # Admin genres, ads (list, detail, schedule settings, mutations)
-│   ├── useAdminHomeSections.js # Admin collections (list, meta, content search, save / delete / toggle / reorder)
-│   ├── useAdminDashboard.js # Admin dashboard queries + refresh
-│   ├── useAdminSubtitles.js / useAdminEpisodeSubtitles.js # Movie / episode subtitles
-│   ├── useMinimumLoading.js # Minimum LoadingScreen time
-│   └── usePagination.js# Client & server-side pagination hook
+├── hooks/              # grouped by domain; no barrel index.js, import the full path
+│   ├── admin/          # Admin data hooks (queries + mutations)
+│   │   ├── useAdminMovies.js / useAdminUsers.js / useAdminTvShows.js # Admin tables + mutations
+│   │   ├── useAdminPersons.js / useAdminRevenue.js # Admin persons + revenue dashboard
+│   │   ├── useAdminPlans.js / useAdminReviews.js # Admin plans, reviews
+│   │   ├── useAdminTmdb.js / useTmdbDiscover.js / useTmdbImports.js # TMDB preview, search + filters, import-queue bindings
+│   │   ├── useAdminAnnouncements.js # Admin announcements (broadcast / edit / delete)
+│   │   ├── useAdminGenres.js / useAdminAds.js # Admin genres, ads (list, detail, schedule settings, mutations)
+│   │   ├── useAdminHomeSections.js # Admin collections (list, meta, content search, save / delete / toggle / reorder)
+│   │   ├── useAdminDashboard.js # Admin dashboard queries + refresh
+│   │   ├── useAdminSubtitles.js / useAdminEpisodeSubtitles.js # Movie / episode subtitles
+│   │   └── useAdminUploads.js
+│   ├── home/           # useHomeQueries (home queries + watch-history mutation), useHomeSections (public collections),
+│   │                   # useCountryRows (per-country rows, loaded when near the viewport)
+│   ├── media/          # useMediaDetail (movie / TV detail, shared Info + Watch cache), usePersonNavigation
+│   ├── user/           # useStoredUser (subscribes to sessionStore), useFavorites (read + optimistic toggle),
+│   │                   # useAuthGuard, useNotifications
+│   ├── player/         # useAdManager (pre/mid/post-roll on the single <video>), useVideoPlayerCore, usePlayback,
+│   │                   # usePlaybackHeartbeat, useWatchProgress, useResumeOffer, useSkipMarkers, useHlsSource,
+│   │                   # useSubtitles, useSubtitleContent, usePlayerShortcuts, useControlsVisibility, useFullscreen
+│   └── common/         # useIsMobile, useIsTouch, useMinimumLoading, usePagination, useDebouncedValue,
+│                       # useBodyScrollLock, useClickOutside
 │
 ├── motion-configs/
 │   ├── transitions.js  # Framer Motion timing presets

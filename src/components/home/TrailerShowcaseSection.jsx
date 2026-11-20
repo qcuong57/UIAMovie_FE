@@ -2,7 +2,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX, Clapperboard } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 // ── Layout tuning ───────────────────────────────────────────────────────────
 const CARD_W_DESKTOP = 560;

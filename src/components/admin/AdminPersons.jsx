@@ -7,9 +7,9 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, User, Plus, RefreshCw } from "lucide-react";
-import { usePagination } from "../../hooks/usePagination";
+import { usePagination } from "../../hooks/common/usePagination";
 import AdminPagination from "../common/AdminPagination";
-import { useAdminPersons } from "../../hooks/useAdminPersons";
+import { useAdminPersons } from "../../hooks/admin/useAdminPersons";
 import PersonAddModal from "./person/PersonAddModal";
 import PersonEditModal from "./person/PersonEditModal";
 import PersonDeleteModal from "./person/PersonDeleteModal";

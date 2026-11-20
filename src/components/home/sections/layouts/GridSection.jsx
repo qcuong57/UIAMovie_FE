@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import MovieCard from '../../../movie/MovieCard';
-import { useIsMobile } from '../../../../hooks/useIsMobile';
+import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import SectionHeading from '../shared/SectionHeading';
 import PagerButtons from '../shared/PagerButtons';
 import { HOME_EASE } from '../shared/motionPresets';

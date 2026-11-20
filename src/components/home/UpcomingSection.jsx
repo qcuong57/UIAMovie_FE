@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, CalendarClock, Crown } from "lucide-react";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { contentPath } from "../../utils/normalizeHomeCard";
 import SectionBadge from "./SectionBadge";
 

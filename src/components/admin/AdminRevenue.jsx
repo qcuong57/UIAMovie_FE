@@ -33,7 +33,7 @@ import {
   useRevenueChart,
   useAdminRevenueOrders,
   useRevenuePlanOptions,
-} from "../../hooks/useAdminRevenue";
+} from "../../hooks/admin/useAdminRevenue";
 import { queryKeys } from "../../config/queryKeys";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { useToast } from "./common/Toast";

@@ -3,7 +3,7 @@
 
 import React, { useEffect } from 'react';
 import { Eye, X } from 'lucide-react';
-import { useTmdbPreview } from '../../../hooks/useAdminTmdb';
+import { useTmdbPreview } from '../../../hooks/admin/useAdminTmdb';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
 import { Spin, Notice, TONE } from './TmdbImportUi';
 

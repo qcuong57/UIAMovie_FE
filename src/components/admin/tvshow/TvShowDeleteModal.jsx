@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDeleteTvShow } from '../../../hooks/useAdminTvShows';
+import { useDeleteTvShow } from '../../../hooks/admin/useAdminTvShows';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../../context/adminTokens';
 import { useToast } from '../common/Toast';
 

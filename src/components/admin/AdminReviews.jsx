@@ -5,8 +5,8 @@ import { Trash2, AlertTriangle, Star, Search, Film, Tv, Eye, EyeOff, BarChart2, 
 import {
   useReviewCatalog, useShowEpisodes, useAdminReviews, useReviewReplies,
   useDeleteReview, useDeleteReviews, useDeleteReply, REPLY_PAGE_SIZE,
-} from '../../hooks/useAdminReviews';
-import { usePagination } from '../../hooks/usePagination';
+} from '../../hooks/admin/useAdminReviews';
+import { usePagination } from '../../hooks/common/usePagination';
 import AdminPagination from '../../components/common/AdminPagination';
 import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';

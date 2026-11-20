@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   useAdminPlans, useCreatePlan, useUpdatePlan, useSetPlanActive,
   useGrantSubscription, useRevokeSubscription,
-} from '../../hooks/useAdminPlans';
+} from '../../hooks/admin/useAdminPlans';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { useToast } from './common/Toast';
 import {

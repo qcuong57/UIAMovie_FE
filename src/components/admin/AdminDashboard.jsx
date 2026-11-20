@@ -4,7 +4,7 @@ import { Eye, Film, LayoutDashboard, MessageSquare, RefreshCw, Users } from "luc
 import {
   T, ACCENT, FONT_BODY as FONT, FONT_TITLE, DASHBOARD_GLOBAL_CSS,
 } from "../../context/adminTokens";
-import { useDashboardRefresh } from "../../hooks/useAdminDashboard";
+import { useDashboardRefresh } from "../../hooks/admin/useAdminDashboard";
 import { DASHBOARD_LAYOUT_CSS, GhostBtn } from "../../components/admin/dashboard/DashboardPrimitives";
 import { OverviewSection } from "../../components/admin/dashboard/OverviewSection";
 import { ContentSection } from "../../components/admin/dashboard/ContentSection";

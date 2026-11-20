@@ -19,10 +19,10 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 import recommendationService from "../../services/recommendationService";
-import { useFavoriteActions } from "../../hooks/useFavorites";
+import { useFavoriteActions } from "../../hooks/user/useFavorites";
 import PremiumGateModal from "../movie/ui/PremiumGateModal";
 import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
 

@@ -24,7 +24,7 @@ import {
   useViewGenres,
   useViewOverview,
   useViewTop,
-} from "../../../hooks/useAdminDashboard";
+} from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
 import { AXIS_TICK, ChartTooltip, HBarChart } from "./ChartComponents";
 import { Segmented } from "./DashboardPrimitives";

@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Ban,
 } from "lucide-react";
-import { useAdminUser } from "../../../hooks/useAdminUsers";
+import { useAdminUser } from "../../../hooks/admin/useAdminUsers";
 
 const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const T = {

@@ -3,8 +3,8 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useIsMobile } from "../../hooks/useIsMobile";
-import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
+import { useBodyScrollLock } from "../../hooks/common/useBodyScrollLock";
 
 const SPRING = { type: "spring", damping: 30, stiffness: 320 };
 

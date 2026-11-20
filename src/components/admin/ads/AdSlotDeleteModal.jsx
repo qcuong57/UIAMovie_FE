@@ -2,7 +2,7 @@
 // Xác nhận xóa 1 Global Slot.
 import React from "react";
 import { AlertTriangle } from "lucide-react";
-import { useAdMutations } from "../../../hooks/useAdminAds";
+import { useAdMutations } from "../../../hooks/admin/useAdminAds";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { useToast } from "../common/Toast";
 import ConfirmDeleteModal, {

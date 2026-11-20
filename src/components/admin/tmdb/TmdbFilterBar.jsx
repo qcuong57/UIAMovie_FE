@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
-import { useTmdbGenres } from '../../../hooks/useTmdbDiscover';
+import { useTmdbGenres } from '../../../hooks/admin/useTmdbDiscover';
 
 export const EMPTY_FILTERS = {
   genres: [],      // id thể loại TMDB (số)

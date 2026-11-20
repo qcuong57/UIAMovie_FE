@@ -17,7 +17,7 @@ import {
 import {
   useAdminMovie,
   useDeleteMovieVideo,
-} from "../../../hooks/useAdminMovies";
+} from "../../../hooks/admin/useAdminMovies";
 import { UploadZone } from "./VideoUploadPanel";
 import SubtitlePanel from "./SubtitlePanel";
 

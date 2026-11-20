@@ -8,8 +8,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, Film, Tv, X, Hash, Clock } from 'lucide-react';
-import { useTmdbDiscover, useTmdbExisting } from '../../hooks/useTmdbDiscover';
-import { useImportJobs, useOnImportsSettled, batchStats } from '../../hooks/useTmdbImports';
+import { useTmdbDiscover, useTmdbExisting } from '../../hooks/admin/useTmdbDiscover';
+import { useImportJobs, useOnImportsSettled, batchStats } from '../../hooks/admin/useTmdbImports';
 import { enqueueImports, jobKey, isActive, isSuccess } from '../../../stores/tmdbImportStore';
 import TmdbFilterBar, { EMPTY_FILTERS, hasActiveFilters, filtersKey } from './tmdb/TmdbFilterBar';
 import TmdbResultCard from './tmdb/TmdbResultCard';

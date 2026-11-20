@@ -7,7 +7,7 @@ import { CastPickerField, DirectorPickerField, castStateToDto, directorStateToDt
 import { GenrePickerField, BackdropGalleryField, PosterField, TrailerField, backdropStateToDto } from '../shared/GenreAndImageFields'; // ✅ file dùng chung với TvShow, preview poster/backdrop đã phóng to
 import movieService from '../../../services/movieService';
 import { useToast } from '../common/Toast';
-import { useAdminGenres, useAdminMovie, useUpdateMovie } from '../../../hooks/useAdminMovies';
+import { useAdminGenres, useAdminMovie, useUpdateMovie } from '../../../hooks/admin/useAdminMovies';
 
 let editUidSeq = 0;
 const nextEditUid = () => `ec_${Date.now()}_${editUidSeq++}`;

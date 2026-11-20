@@ -26,7 +26,7 @@ import { C, FONT_DISPLAY, FONT_BODY } from "../../context/homeTokens";
 // ── Dùng chung timing/easing từ motion-configs, không hardcode nữa ─────────
 import { MOTION } from "../../motion-configs/motionConfig";
 import { TRANSITION_SHIMMER } from "../../motion-configs/transitions";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 const UIA = "UIA";
 const MOVIE = "MOVIE";

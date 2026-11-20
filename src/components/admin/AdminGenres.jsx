@@ -9,7 +9,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Trash2, Pencil, AlertCircle, Check, X, Search } from "lucide-react";
-import { useAdminGenres, useGenreMutations } from "../../hooks/useAdminGenres";
+import { useAdminGenres, useGenreMutations } from "../../hooks/admin/useAdminGenres";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { useToast } from "./common/Toast";
 import {

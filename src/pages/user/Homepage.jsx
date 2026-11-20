@@ -24,7 +24,7 @@ import {
   useGenres,
   useWatchHistory,
   useRemoveWatchHistory,
-} from "../../hooks/useHomeQueries";
+} from "../../hooks/home/useHomeQueries";
 import AiChatWidget from "../../components/ai/AiChatWidget";
 import ContinueWatchingSection from "../../components/home/ContinueWatchingSection";
 import SeoMeta from "../../components/common/SeoMeta";
@@ -43,7 +43,7 @@ import {
   FONT_DISPLAY,
   GOOGLE_FONTS,
 } from "../../context/homeTokens";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { mediaKey } from "../../utils/normalizeMedia";
 import GenreSection from "../../components/home/GenreSection";
 import TopRankedRow from "../../components/home/TopRankedRow";
@@ -55,7 +55,7 @@ import RecommendSection from "../../components/home/RecommendSection";
 import HomeReveal, { HOME_EASE } from "../../motion-configs/HomeReveal";
 import HomeSections from "../../components/home/sections/HomeSections";
 import { LoadingScreen } from "../../components/ui";
-import { useHomeSections } from "../../hooks/useHomeSections";
+import { useHomeSections } from "../../hooks/home/useHomeSections";
 
 const EMPTY = [];
 

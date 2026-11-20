@@ -6,7 +6,7 @@ import { useReducedMotion } from 'framer-motion';
 import { Play } from 'lucide-react';
 import MovieCard from '../../../movie/MovieCard';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
-import { useIsMobile } from '../../../../hooks/useIsMobile';
+import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { contentPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';

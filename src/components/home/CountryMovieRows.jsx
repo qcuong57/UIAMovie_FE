@@ -3,12 +3,12 @@
 // ─── Hỗ trợ cả Movie lẫn TV Show ─────────────────────────────────────────────
 
 import React, { useState, useRef } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowUpRight, Globe2 } from "lucide-react";
 import SectionBadge from "./SectionBadge";
 import { useNavigate } from "react-router-dom";
-import { useCountryRow } from "../../hooks/useCountryRows";
+import { useCountryRow } from "../../hooks/home/useCountryRows";
 import MovieCard from "../movie/MovieCard";
 import { FONT_BODY, FONT_DISPLAY } from "../../context/homeTokens";
 

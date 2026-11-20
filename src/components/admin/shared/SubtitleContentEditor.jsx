@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import {
   useSubtitleContent,
   useSaveSubtitleContent,
-} from "../../../hooks/useSubtitleContent";
+} from "../../../hooks/player/useSubtitleContent";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil,
