@@ -196,16 +196,14 @@ export function BillboardMobile({ section }) {
 
       {/* Phòng chiếu */}
       <div
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
-        style={{ position: 'relative', overflow: 'hidden', isolation: 'isolate', borderRadius: isMobile ? 12 : 18, background: '#000', padding: isMobile ? 12 : 28 }}
+                style={{ position: 'relative', overflow: 'hidden', isolation: 'isolate', borderRadius: isMobile ? 12 : 18, background: '#000', padding: isMobile ? 12 : 28 }}
       >
         <div className="hsl-bb-grid">
           {/* Khung video 16:9 */}
           <div
             ref={stageRef}
             onPointerDown={onPointerDown} onPointerUp={onPointerUp} onClickCapture={onClickCapture}
-            style={{ position: 'relative', overflow: 'hidden', aspectRatio: '16 / 9', alignSelf: 'start', borderRadius: isMobile ? 8 : 12, background: '#000', touchAction: isMobile ? 'pan-y' : undefined }}
+            style={{ position: 'relative', overflow: 'hidden', aspectRatio: '16 / 9', alignSelf: 'start', borderRadius: isMobile ? 8 : 12, background: '#000', transform: 'translateZ(0)', WebkitMaskImage: '-webkit-radial-gradient(white, black)', touchAction: isMobile ? 'pan-y' : undefined }}
           >
             {/* Phim mới mờ dần lên TRÊN phim cũ → không có khoảng đen giữa hai phim */}
             <AnimatePresence initial={false}>
@@ -216,9 +214,9 @@ export function BillboardMobile({ section }) {
                 style={{ position: 'absolute', inset: 0 }}
               >
                 <motion.div
-                  initial={reduce ? false : { scale: 1.05 }} animate={{ scale: 1 }}
+                  initial={false}
                   transition={{ duration: 1.8, ease: HOME_EASE }}
-                  style={{ position: 'absolute', inset: 0, willChange: reduce ? undefined : 'transform' }}
+                  style={{ position: 'absolute', inset: 0, }}
                 >
                   <Cover item={item} src={imgOf(item)} />
                 </motion.div>
@@ -237,7 +235,7 @@ export function BillboardMobile({ section }) {
             {showPlayBtn && (
               <button
                 type="button" className="hsl-bb-bigplay" aria-label={`Phát trailer ${item.title}`} onClick={() => setManualKey(itemKey)}
-                style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 3, width: 68, height: 68, borderRadius: '50%', border: '1px solid rgba(255,255,255,.4)', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 3, width: 68, height: 68, borderRadius: '50%', border: '1px solid rgba(255,255,255,.4)', background: 'rgba(255,255,255,.18)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
               >
                 <Play size={28} fill="#fff" strokeWidth={0} style={{ marginLeft: 3 }} />
               </button>

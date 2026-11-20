@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const YT_ORIGIN = 'https://www.youtube-nocookie.com';
 // YouTube hiện lớp phủ (tiêu đề, nút ⏸ ⏮ ⏭, 'More videos', logo) vài giây đầu → chờ lớp phủ tự tắt rồi mới lộ iframe
-const REVEAL_DELAY = 3000;
+const REVEAL_DELAY = 0;
 
 function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, clean }) {
   const frameRef = useRef(null);
@@ -17,11 +17,14 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, cle
   audioRef.current = { muted, volume };
   // Chỉ hiện iframe khi trailer thực sự đang chạy → không lộ nút play / vòng quay tải của YouTube
   const [shown, setShown] = useState(false);
+  // iOS Safari/Low Power Mode chặn autoplay: không tự phát được thì cho người xem chạm thẳng vào iframe (nút ▶ của YouTube)
+  const [tap, setTap] = useState(false);
   const timers = useRef([]);
   const gotMsg = useRef(false); // player đã phản hồi ít nhất 1 lần (bắt tay thành công)
   const started = useRef(false); // đã từng phát thật (state 1) → từ đây KHÔNG ẩn iframe nữa
   const lastResume = useRef(0);
   const revealTimer = useRef(null);
+  const shownRef = useRef(false); // iframe đã lộ ra chưa (mobile: giữ im lặng cho tới lúc đó)
 
   // src chỉ phụ thuộc vào trailerKey → không bao giờ đổi khi bấm âm lượng
   const src = useMemo(() => {
@@ -35,13 +38,14 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, cle
   };
 
   const applyAudio = () => {
-    const { muted: m, volume: v } = audioRef.current;
+    const { muted, volume: v } = audioRef.current;
+    const m = muted || (clean && !shownRef.current); // mobile: chưa thấy hình thì chưa cho có tiếng
     send('setVolume', [Math.round(v)]);
     send(m || v === 0 ? 'mute' : 'unMute');
   };
 
   // Áp lại mỗi khi người dùng đổi tiếng (không đụng tới iframe)
-  useEffect(() => { applyAudio(); }, [muted, volume]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { shownRef.current = shown; applyAudio(); }, [muted, volume, shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Khi player báo sẵn sàng thì áp trạng thái âm thanh hiện tại
   useEffect(() => {
@@ -58,6 +62,7 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, cle
       if (typeof state === 'number') {
         if (state === 1) {
           started.current = true;
+          setTap(false);
           // Lộ iframe sau REVEAL_DELAY (lớp phủ của YouTube đã tự ẩn); trong lúc chờ vẫn thấy ảnh nền
           if (!revealTimer.current) revealTimer.current = setTimeout(() => setShown(true), clean ? REVEAL_DELAY : 0);
         } else if (state === 0 && clean) {
@@ -89,10 +94,15 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, cle
       listen(); applyAudio(); send('playVideo');
     }, 350);
     timers.current.push(id);
-    // Phòng hờ: 4s vẫn không có tín hiệu nào thì cứ hiện iframe (autoplay muted hầu như luôn chạy)
-    timers.current.push(setTimeout(() => { if (!gotMsg.current) setShown(true); }, 4000));
-    // Player có phản hồi nhưng 7s vẫn chưa phát được → tải lại iframe (tối đa 2 lần, do wrapper giới hạn)
-    timers.current.push(setTimeout(() => { if (gotMsg.current && !started.current) onStall?.(); }, 7000));
+    if (clean) {
+      // Mobile: 5s vẫn chưa phát được (iOS chặn autoplay) → bật chế độ chạm để người xem tự bấm ▶ của YouTube
+      timers.current.push(setTimeout(() => { if (!started.current) { setTap(true); setShown(true); } }, 5000));
+    } else {
+      // Phòng hờ: 4s vẫn không có tín hiệu nào thì cứ hiện iframe (autoplay muted hầu như luôn chạy)
+      timers.current.push(setTimeout(() => { if (!gotMsg.current) setShown(true); }, 4000));
+      // Player có phản hồi nhưng 7s vẫn chưa phát được → tải lại iframe (tối đa 2 lần, do wrapper giới hạn)
+      timers.current.push(setTimeout(() => { if (gotMsg.current && !started.current) onStall?.(); }, 7000));
+    }
   };
 
   useEffect(() => () => { timers.current.forEach((t) => { clearInterval(t); clearTimeout(t); }); clearTimeout(revealTimer.current); }, []);
@@ -100,8 +110,9 @@ function YouTubePlayer({ item, trailerKey: k, muted, volume, style, onStall, cle
   return (
     <iframe
       ref={frameRef} title={`Trailer ${item.title}`} src={src} onLoad={onLoad}
-      allow="autoplay; encrypted-media" tabIndex={-1}
-      style={{ position: 'absolute', border: 0, pointerEvents: 'none', opacity: shown ? 1 : 0, transition: 'opacity .5s ease', ...style }}
+      allow="autoplay; encrypted-media" tabIndex={tap ? 0 : -1}
+      // opacity 0.01 thay vì 0: WebKit coi phần tử opacity 0 là "không nhìn thấy" và có thể không cho video autoplay
+      style={{ position: 'absolute', border: 0, pointerEvents: tap ? 'auto' : 'none', opacity: shown ? 1 : 0.01, transition: 'opacity .5s ease', ...style }}
     />
   );
 }
@@ -116,8 +127,18 @@ function UploadedVideo({ item, muted, volume, style }) {
     v.muted = muted || volume === 0;
   }, [muted, volume]);
 
+  // iOS Safari đôi khi bỏ qua thuộc tính autoPlay → chủ động gọi play() khi đủ dữ liệu (video đang muted nên được phép)
+  const tryPlay = () => { const v = ref.current; if (v && v.paused) v.play?.().catch(() => {}); };
+  useEffect(() => { tryPlay(); }, []);
+
   // `muted` luôn có ở lần render đầu để autoplay được; sau đó effect ở trên quản lý
-  return <video ref={ref} src={item.trailerVideoUrl} autoPlay muted loop playsInline style={{ position: 'absolute', objectFit: 'cover', pointerEvents: 'none', ...style }} />;
+  return (
+    <video
+      ref={ref} src={item.trailerVideoUrl} autoPlay muted loop playsInline preload="auto" disablePictureInPicture
+      onCanPlay={tryPlay}
+      style={{ position: 'absolute', objectFit: 'cover', pointerEvents: 'none', ...style }}
+    />
+  );
 }
 
 // Ưu tiên YouTube (iframe muted autoplay), sau đó video upload. Không có thì trả null.

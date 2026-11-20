@@ -180,15 +180,15 @@ export function TrailerSection({ section }) {
 
       {/* Phòng chiếu */}
       <div
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
+        onMouseEnter={isMobile ? undefined : () => setPaused(true)} onMouseLeave={isMobile ? undefined : () => setPaused(false)}
+        onFocus={isMobile ? undefined : () => setPaused(true)} onBlur={isMobile ? undefined : () => setPaused(false)}
         style={{ position: 'relative', overflow: 'hidden', isolation: 'isolate', borderRadius: isMobile ? 12 : 18, background: '#000', padding: isMobile ? 12 : 28 }}
       >
         <div className="hsl-tr-grid">
           {/* Khung video */}
           <div
             ref={stageRef}
-            style={{ position: 'relative', overflow: 'hidden', aspectRatio: '16 / 9', alignSelf: 'start', borderRadius: isMobile ? 8 : 12, background: '#000' }}
+            style={{ position: 'relative', overflow: 'hidden', aspectRatio: '16 / 9', alignSelf: 'start', borderRadius: isMobile ? 8 : 12, background: '#000', ...(isMobile ? { transform: 'translateZ(0)', WebkitMaskImage: '-webkit-radial-gradient(white, black)' } : {}) }}
           >
             <AnimatePresence initial={false}>
               <motion.div
@@ -198,9 +198,9 @@ export function TrailerSection({ section }) {
                 style={{ position: 'absolute', inset: 0 }}
               >
                 <motion.div
-                  initial={reduce ? false : { scale: 1.05 }} animate={{ scale: 1 }}
+                  initial={reduce || isMobile ? false : { scale: 1.05 }} animate={{ scale: 1 }}
                   transition={{ duration: 1.8, ease: HOME_EASE }}
-                  style={{ position: 'absolute', inset: 0, willChange: reduce ? undefined : 'transform' }}
+                  style={{ position: 'absolute', inset: 0, willChange: reduce || isMobile ? undefined : 'transform' }}
                 >
                   <Cover item={item} src={imgOf(item)} />
                 </motion.div>
@@ -219,7 +219,7 @@ export function TrailerSection({ section }) {
             {showPlayBtn && (
               <button
                 type="button" className="hsl-tr-bigplay" aria-label={`Phát trailer ${item.title}`} onClick={() => setManualKey(itemKey)}
-                style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 3, width: 68, height: 68, borderRadius: '50%', border: '1px solid rgba(255,255,255,.4)', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 3, width: 68, height: 68, borderRadius: '50%', border: '1px solid rgba(255,255,255,.4)', background: 'rgba(255,255,255,.18)', ...(isMobile ? {} : { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }), color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
               >
                 <Play size={28} fill="#fff" strokeWidth={0} style={{ marginLeft: 3 }} />
               </button>
