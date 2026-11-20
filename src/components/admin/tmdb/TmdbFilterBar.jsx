@@ -3,8 +3,8 @@
 
 import React, { useState } from 'react';
 import { SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
-import { T, FONT_BODY as FONT } from '../../context/adminTokens';
-import { useTmdbGenres } from '../../hooks/useTmdbDiscover';
+import { T, FONT_BODY as FONT } from '../../../context/adminTokens';
+import { useTmdbGenres } from '../../../hooks/useTmdbDiscover';
 
 export const EMPTY_FILTERS = {
   genres: [],      // id thể loại TMDB (số)
@@ -42,7 +42,7 @@ const COUNTRIES = [
   ['US', 'Mỹ'], ['GB', 'Anh'], ['FR', 'Pháp'], ['TH', 'Thái Lan'],
   ['IN', 'Ấn Độ'], ['HK', 'Hồng Kông'], ['TW', 'Đài Loan'],
 ];
-const flagOf = (code) => String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+export const flagOf = (code) => String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 
 const RATINGS = [['', 'Mọi điểm'], ['5', '≥ 5.0'], ['6', '≥ 6.0'], ['7', '≥ 7.0'], ['8', '≥ 8.0']];
 const VOTES   = [['', 'Mọi lượt vote'], ['50', '≥ 50 vote'], ['100', '≥ 100 vote'], ['500', '≥ 500 vote'], ['1000', '≥ 1000 vote']];

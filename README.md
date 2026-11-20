@@ -143,7 +143,13 @@ Whether you're a user browsing the latest K-Drama or an admin importing films fr
 - **TV show management** — table with server-side paging, detail panel, edit / add modals (genres, poster, backdrop gallery, cast picker) and a Seasons tab:
   - Each season is an accordion; episodes load on open and share one cache entry with the season edit modal, so adding, editing or deleting an episode (or pressing **Sync tập mới**) updates the list everywhere with no manual reload
   - Per-episode video upload (progress bar, cancel-safe) / delete, HLS preview through `/playback`, and per-episode **subtitles** (upload, AI translate, AI generate from text, set default, delete). Subtitles still processing are polled from the list query itself (no per-row timers)
-- **TMDB import tool** — search TMDB and one-click import with conflict detection
+- **TMDB import** (movies & TV shows) — a side panel (`AdminTmdbSearch`) plus a **background import queue** (see [TMDB import](#tmdb-import-background-queue)):
+  - Two tabs, **🎬 Phim** / **📺 TV Show**, each with **🔍 Tìm theo tên** and **# Nhập ID**. Both sub-tabs stay mounted, so the keyword and filters survive switching. `singleTab` locks the panel to one kind when opened from the Movies or TV Shows page
+  - **Search + filters** (`TmdbFilterBar`): genre (match all), production country, release year range, minimum TMDB score, minimum votes and sort (popular / rating / newest / oldest). With a keyword the sort is disabled (results stay in relevance order) and the filters apply to the search results. Keyword and filters are debounced 350 ms; changing either goes back to page 1
+  - **Cursor paging**: the server returns `nextPage`, so *Trước / Sau* walk a stack of cursors (a filtered page can scan several TMDB pages and may hold fewer than 20 hits). `notes` from the server are shown as warnings
+  - **Result cards** (`TmdbResultCard`): poster, score, year, country flag, seasons / episodes, copy-ID button, **Xem trước** (`TmdbPreviewModal`: checklist of cast / images / trailer / director / seasons that will be imported) and **Import**. Titles already in the library show **✓ Đã có** (server check via `useTmdbExisting`, or a job finished in this session)
+  - **Bulk import**: tick several cards (or **Chọn tất cả**), confirm and queue them at once. Each imported title sends a "new release" notification to users, which the confirm dialog says
+  - **Runs in the background**: closing the panel, navigating or reloading does not stop an import. Progress shows on the card and as toasts in `TmdbImportTray` (bottom-right of the admin layout), each with its own progress bar, elapsed time and **Thử lại** on failure
 - **Video upload panel** — drag-and-drop upload to Cloudinary with real-time progress, cancel support, and quality/type selection
 - **Genre CRUD** — create, edit, delete genres with color-coded cards; accent-insensitive search, one shared modal for the form and the delete confirmation (locked while a request is running), data and mutations through `useAdminGenres` / `useGenreMutations`
 - **Review moderation** — pick a film / TV show (and optionally one episode), then browse its reviews:
@@ -317,6 +323,7 @@ The rule of thumb: **who owns the data decides where it lives.**
 | **Auth session** (needed *outside* React, by the Axios interceptor) | `tokenStore` + `sessionStore`, read in components with `useSyncExternalStore` | access token (memory), display profile, cross-tab sign-out |
 | **Local UI state** (one component or a small subtree) | `useState` / `useReducer` | hover, carousel page, open dialog, form fields |
 | **Shared UI state** (a few distant components, changes rarely) | React Context | design tokens, toast |
+| **Background job state** (long-running work that must outlive a component) | `tmdbImportStore`: module-level, read with `useSyncExternalStore`, persisted to `localStorage` (`admin.tmdbImports.v1`) | TMDB import queue |
 | **Redux** | **not used** | see "Why no Redux" |
 
 ### Why no Redux
@@ -349,7 +356,10 @@ Add Redux Toolkit **only** when there is genuine *client* state that many distan
 | `hooks/useAdminDashboard.js` | Admin → Dashboard: mỗi nguồn dữ liệu một query riêng (`admin.dashboard.*`, `STALE.admin`) và bốn hook theo section — `useDashboardContent`, `useDashboardUsers`, `useDashboardReviews` (trả thống kê đã tính + `isPending` / `isError` / `refetch`), `useViewOverview` / `useViewTop` / `useViewGenres` (`keepPreviousData`, đổi bộ lọc không nháy skeleton) — cùng `useDashboardRefresh()` → `{ refresh, isRefreshing, updatedAt }` (invalidate `admin.dashboard.all`). Query phim / show / user / review dùng chung giữa các tab nên chỉ gọi API một lần; nhãn tập của review dùng key `admin.reviews.episodes(showId)`, chung cache với trang Đánh giá |
 | `helper/dashboardStats.js` | Các phép tính của Dashboard ở dạng hàm thuần (không React, không API, dễ test): `buildContentStats`, `buildUserStats`, `buildReviewStats`, `summarizeViews`, `buildEpisodeLabelMap`, `pctChange`, `nf`. Hook bọc chúng bằng `useMemo` |
 | `hooks/useAdminAnnouncements.js` | Admin → Thông báo & Lịch bảo trì: `useAdminAnnouncements` (một danh sách, lọc / sắp xếp / phân trang ở client) và `useBroadcastAnnouncement`, `useUpdateAnnouncement`, `useDeleteAnnouncement`. Sửa / xoá vá cache ngay; cả ba làm mới trang Tin tức công khai (`queryKeys.announcements.all`) |
-| `hooks/useAdminTmdb.js` | Admin → Import TMDB: `useTmdbSearch(kind, query, page)` (cache theo từ khoá + trang), `useTmdbPreview(kind, tmdbId)`, `useImportTmdb(kind)` — import xong làm mới bảng phim / TV show, danh sách diễn viên, thể loại và catalogue người dùng; 409 (đã import) do trang tự xử lý |
+| `hooks/useAdminTmdb.js` | Admin → Import TMDB, **read-only preview**: `useTmdbPreview(kind, tmdbId)` (`admin.tmdb.preview`, `STALE.static`, reopening the same title is instant). Importing is **not** a mutation any more: it lives in `tmdbImportStore` |
+| `hooks/useTmdbDiscover.js` | TMDB browsing: `useTmdbDiscover(kind, query, filters, page, enabled)` (search + filters in one query, key `admin.tmdb.discover` with genre ids sorted so `[1,2]` and `[2,1]` share a cache entry), `useTmdbGenres(kind)` and `useTmdbExisting(kind, ids)` (which TMDB ids are already in the DB, key `admin.tmdb.exists`) |
+| `hooks/useTmdbImports.js` | React bindings for `tmdbImportStore`: `useImportJobs()` (jobs by key), `useImportJobList()` (array, for the tray), `useOnImportsSettled(fn)` (debounced callback after a group of imports ends, used as `onImported` by the parent page) and `batchStats(jobs)` (`{ total, finished, failed, percent }` for the bulk bar) |
+| `stores/tmdbImportStore.js` | The background import queue, outside React (see [TMDB import](#tmdb-import-background-queue)) |
 | `hooks/useAdminRevenue.js` | Admin → Doanh thu: `useRevenueSummary`, `useRevenueChart` (biểu đồ + doanh thu theo gói chung một kỳ → một query), `useAdminRevenueOrders(filter)` và `useRevenuePlanOptions`. Polling bằng `refetchInterval` do trang truyền vào (20 giây khi còn đơn pending, 60 giây khi không), tự dừng khi tab ẩn, `refetchOnWindowFocus` thay cho handler `visibilitychange`; refetch nền lỗi thì giữ số cũ. Xuất Excel vẫn gọi `paymentService.adminExportRevenue` trực tiếp (tải file, không cache) |
 | `hooks/useAdminGenres.js` | Admin → Thể loại: `useAdminGenres()` (một query `genres.admin`, chuẩn hoá về mảng) và `useGenreMutations()` → `{ save, remove }` (`save` tạo hoặc sửa theo id). Mọi thay đổi làm mới `genres.all` (ô chọn thể loại, trang chủ) và, khi xoá, cả nhóm `CATALOG_ROOTS` cùng bảng phim admin |
 | `hooks/useAdminAds.js` | Admin → Quảng cáo: `useAdminAds({ page, pageSize, search, isActive })` (phân trang server, `keepPreviousData`), `useAdDetail(id, initial)` (panel chi tiết, dùng dòng của bảng làm dữ liệu ban đầu), `useAdScheduleSettings()` (cấu hình lịch phát, key riêng `admin.adScheduleSettings`), `useSetScheduleSettings()`, `useRefreshAds()` và `useAdMutations()` → `{ toggleActive, deleteAd, toggleSlot, deleteSlot }`. Mỗi mutation làm mới cả nhóm `admin.ads.all` nên bảng, panel chi tiết và số slot luôn khớp nhau. Xuất thêm `isRandomSchedule(settings)` |
@@ -379,6 +389,51 @@ When the signed-in user changes (sign in, sign out, switch account, also from an
 3. Clicking the heart runs `useToggleFavorite`: the cache is updated **immediately**, the API call follows, and on failure only that item is rolled back and a toast is shown. When the last pending toggle settles, `["me","favorites"]` is invalidated to re-sync with the server.
 4. Result: the same movie shown in five rows flips in all five at once, with no loading spinner on the happy path.
 
+### TMDB import (background queue)
+
+Importing a title makes the backend fetch cast, images, trailer and (for TV) every season and episode, which can take from a few seconds to over a minute. So the import is **not** a component-bound `useMutation`: a mutation dies with the panel that started it. It is a small store that lives outside React.
+
+| File | Responsibility |
+|---|---|
+| `stores/tmdbImportStore.js` | Queue, polling, persistence, cache refresh. API: `enqueueImports(items)`, `dismissImport(key)`, `clearFinishedImports()`, `initTmdbImports(queryClient)`, `subscribe` / `getJobs`, `subscribeSettled`, helpers `jobKey`, `isActive`, `isSuccess` |
+| `components/admin/AdminTmdbSearch.jsx` | The panel. It only **enqueues**; it never waits for the result |
+| `components/admin/tmdb/TmdbImportTray.jsx` | Toast-style progress cards. **Mount it once in the admin layout**, outside the panel, so progress survives closing the panel. Also calls `initTmdbImports(queryClient)` |
+| `components/admin/tmdb/TmdbResultCard.jsx` · `TmdbFilterBar.jsx` · `TmdbPreviewModal.jsx` | Result card, filter bar, preview dialog |
+| `components/admin/tmdb/TmdbImportUi.jsx` | Shared pieces: `Spin`, `ProgressBar` (determinate or indeterminate), `JobProgress`, `Notice`, `ResultBadges`, `describeResult`, `toImportItem`, and one shared 1 s clock (`useNow`) for every elapsed-time label |
+
+> `tmdbImportStore.js` currently imports `../src/config/axios`, so it sits in a `stores/` folder **next to** `src/`, not inside it, and the components reach it with `../../../stores/...`. Its own header comment says `src/stores/`; see [Future Improvements](#-future-improvements).
+
+**Server contract**
+
+```
+POST /movies/tmdb/{tmdbId}/import      → 202 { jobId }      (TV: /tvshows/tmdb/{tmdbId}/import)
+GET  /admin/tmdb/import-jobs/{jobId}   → { status: "running" | "done" | "failed",
+                                           step?, progress? (0–100), result?, error?, errorStatus? }
+GET  .../tmdb/{tmdbId}                 → preview (read-only)
+```
+
+`progress` is optional: when the server has no number yet the UI shows an **indeterminate** bar instead of inventing a percentage. `409` means "already in the library".
+
+**Job lifecycle** (`status`)
+
+```
+queued ──► running ──► done      (result: castCount, imageCount, trailerCount, seasonCount, episodeCount, hasDirector…)
+   │          ├──────► exists    (409 from the server, or the job vanished but the title is already in the DB)
+   │          └──────► failed    (error + errorStatus; "Thử lại" enqueues a fresh job)
+```
+
+- **Key** = `kind:tmdbId` (`movie:603`, `tv:1396`). Enqueueing a key that is already `queued` / `running` is ignored; a finished or failed one is replaced by a new job
+- **Concurrency per kind**: 3 movies and 2 TV shows at a time (TV is heavier); the rest wait in `queued`, oldest first
+- **Polling**: every 1.5 s (5 s when the tab is hidden), up to 30 min. 5 consecutive network errors in a row end the job as failed; a single blip just retries. Starting the remote job retries once on a network error / 5xx
+- **Missing job (`404`)**: if the server restarted and forgot the job, the store asks `tmdbService.getExisting`. If the title is already in the DB the job becomes `exists`; otherwise it fails with a message telling the admin to check the list
+- **Persistence**: every change is written to `localStorage` (`admin.tmdbImports.v1`), including the server's `jobId`. After a reload, `initTmdbImports` resumes `running` jobs by polling the saved `jobId`, and requeues jobs whose server job was never created. Finished jobs are kept for 24 h, at most 50 jobs in total (running / queued ones are never trimmed). A full or blocked `localStorage` is ignored; the store keeps working in memory
+- **Running jobs cannot be cancelled** (the server job keeps going), so `dismissImport` ignores them; queued and finished ones can be removed
+- **Cache refresh**: when jobs finish, the store waits 800 ms (so a bulk import refreshes once, not once per title) and then invalidates the admin movie / TV tables, `admin.persons` (new cast and directors), `genres`, `admin.tmdb.exists` (the "Đã có" badges) and every public root in `CATALOG_ROOTS`. It then calls the `subscribeSettled` listeners (`useOnImportsSettled`), which is how the parent page reloads its own local data
+- **Toasts**: `TmdbImportTray` shows one card per job. A finished card hides itself after 5 s, a failed one stays until closed. Jobs that were already finished before a reload are hidden on mount, and the "Đã thêm … vào thư viện" success toast fires only when a job *changes* to `done` during the session
+- **Import by ID** does not know the title yet, so the card shows `TMDB #id` until the result arrives with `title` / `name` and `posterUrl`
+
+**Add a new field to the import result**: return it in `result` from the job endpoint, then add one line to `summarizeResult` in `TmdbImportUi.jsx`. The badges, the toast text (`describeResult`) and the "missing data" warning follow from it.
+
 ### Conventions
 - A new endpoint = a new hook in `src/hooks` + a key in `queryKeys.js`. Components never call a service inside `useEffect` and never `useState` the result.
 - Put normalisation in `select` (module-level function, so the reference is stable) or in the `queryFn`; never repeat it in a component.
@@ -388,7 +443,7 @@ When the signed-in user changes (sign in, sign out, switch account, also from an
 - Navigate with `useNavigate()`, never `window.location.href`: a full reload throws away the Query cache and the in-memory access token.
 - Personal data lives under the `me` root so it is reset automatically on account change.
 - **Announcements keys**: `admin.announcements.list` holds the admin list; every mutation patches it and invalidates the public `announcements.all` so the news page refreshes. The user-side notification bell has no key in `queryKeys` yet — add it to `refreshPublic` in `useAdminAnnouncements.js` if it uses react-query.
-- **Plans, reviews and TMDB keys**: `admin.plans.list` is the single cache of Premium plans, shared by the Plans page and the Revenue plan filter. `admin.reviews.*` splits catalogue → episodes → review list → replies (`repliesOf(reviewId)` is the prefix of `replies(reviewId, page)`), so deleting a reply refreshes only its own replies. `admin.tmdb.*` is read-only (search / preview), the import itself is a mutation that refreshes the admin tables and public catalogue.
+- **Plans, reviews and TMDB keys**: `admin.plans.list` is the single cache of Premium plans, shared by the Plans page and the Revenue plan filter. `admin.reviews.*` splits catalogue → episodes → review list → replies (`repliesOf(reviewId)` is the prefix of `replies(reviewId, page)`), so deleting a reply refreshes only its own replies. `admin.tmdb.*` is read-only (`discover`, `genres`, `preview`, `exists`; `existingAll()` is the prefix used to invalidate every "already imported" check). The import itself is **not** a query or a mutation: it runs in `tmdbImportStore`, which invalidates the admin tables and the public catalogue when jobs settle.
 - **Ads & genres keys**: `admin.ads.*` takes ONE filter object (`page`, `pageSize`, `search`, `isActive`); `detail(id)` sits under `admin.ads.all`, so invalidating `admin.ads.all` refreshes the list and every open detail panel. The schedule settings (Fixed / Random) are a separate key, `admin.adScheduleSettings`, so editing one ad never refetches them. `genres.admin` shares the `genres` root with the public picker, so a genre change refreshes both. **Every key used by a query must exist in `queryKeys.js`**: a missing group makes `PersistQueryClientProvider` crash with `Cannot read properties of undefined (reading '0')`.
 - **Home collections keys**: `admin.homeSections.{all, list, meta, search(kind, term)}` plus the public `home.sections`. Save, delete, toggle and reorder invalidate both, so the home page follows the admin. The list page keeps a local copy (`order`) only so drag-and-drop feels instant; it is re-synced from the query whenever new data arrives.
 - **Dashboard keys** `admin.dashboard.*` (movies, tvShows, totals, trending, genres, users, reviews, `viewStats.{overview,top,genres}(params)`): one query per source, with `viewStats` params as ONE object. `admin.dashboard.all` is the only thing the **Làm mới** button invalidates; queries of tabs that are not open are just marked stale and load when the tab opens. These keys are **not** invalidated by admin movie / show / review mutations, so the Dashboard catches up through `STALE.admin` (30 s) on the next visit; add `invalidateQueries({ queryKey: queryKeys.admin.dashboard.all })` to a mutation if it must be instant. Derived numbers belong in `helper/dashboardStats.js`, never in the component.
@@ -431,6 +486,7 @@ Base URL: http://localhost:5000/api/
 | `genreService.js` | Genre CRUD |
 | `personService.js` | Cast, person detail & images via TMDB proxy |
 | `reviewService.js` | Movie reviews — create, edit, delete, stats, check-if-reviewed |
+| `tmdbService.js` | TMDB admin calls that are not hooks: `getExisting(kind, tmdbIds)` → the ids already in the library (also used by the import store to settle a job the server no longer remembers) |
 | `userService.js` | Own profile, change password, and admin user CRUD / role / ban / unban |
 | `paymentService.js` | **Plans:** `getPlans` (with eligibility when signed in). **Checkout:** `createOrder` (returns `paymentMethod` `redirect` / `form_post` / `none`), `redirectToPayment` (VNPay redirect / SePay form post). **User:** `getSubscriptionStatus` (`planId`, `planName`), `getPaymentHistory`, `getOrderByCode`, `cancelMySubscription`, `isPremium`. **Admin plans:** `adminGetPlans`, `adminCreatePlan`, `adminUpdatePlan`, `adminSetPlanActive`. **Admin subscriptions:** `adminGrantSubscription`, `adminRevokeSubscription`. **Admin revenue:** `adminGetRevenueSummary`, `adminGetRevenueChart`, `adminGetRevenueByPlan`, `adminGetOrders`, `adminExportRevenue` (Blob download) |
 | `adService.js` | Ad CRUD, global slots / overrides, `getAdsForContent(type, id, durationSeconds)` for the player, admin `getScheduleSettings` / `updateScheduleSettings` / `previewSchedule` |
@@ -446,6 +502,9 @@ src/
 │   ├── admin/          # Admin-only panels, modals, tables
 │   │   ├── AdminPlans.jsx  # Premium plan management + manual grant / revoke
 │   │   ├── AdminHomeSections.jsx # Collections: list (drag & drop), create / edit drawer, delete dialog
+│   │   ├── AdminTmdbSearch.jsx   # TMDB import panel (search / ID tabs, bulk import) - only enqueues jobs
+│   │   ├── tmdb/       # TmdbFilterBar, TmdbResultCard, TmdbPreviewModal,
+│   │   │               # TmdbImportTray (mount once in the admin layout), TmdbImportUi
 │   │   ├── common/     # ConfirmDeleteModal (+ InfoBox, WarnBox, IrreversibleNote), Toast
 │   │   ├── movie/      # MovieDetailPanel, VideoUploadPanel
 │   │   ├── user/       # UserDetailPanel, UserEditModal
@@ -499,7 +558,8 @@ src/
 │   ├── useMediaDetail.js # Movie / TV detail (shared Info + Watch cache)
 │   ├── useAdminMovies.js / useAdminUsers.js / useAdminTvShows.js # Admin tables + mutations
 │   ├── useAdminPersons.js / useAdminRevenue.js # Admin persons + revenue dashboard
-│   ├── useAdminPlans.js / useAdminReviews.js / useAdminTmdb.js # Admin plans, reviews, TMDB import
+│   ├── useAdminPlans.js / useAdminReviews.js # Admin plans, reviews
+│   ├── useAdminTmdb.js / useTmdbDiscover.js / useTmdbImports.js # TMDB preview, search + filters, import-queue bindings
 │   ├── useAdminAnnouncements.js # Admin announcements (broadcast / edit / delete)
 │   ├── useAdminGenres.js / useAdminAds.js # Admin genres, ads (list, detail, schedule settings, mutations)
 │   ├── useAdminHomeSections.js # Admin collections (list, meta, content search, save / delete / toggle / reorder)
@@ -517,7 +577,7 @@ src/
 ├── pages/
 │   ├── admin/          # AdminPage, AdminDashboard, AdminMovies,
 │   │   │               # AdminGenres, AdminReviews, AdminUsers,
-│   │   │               # AdminPersons, AdminTmdbSearch, AdminRevenue, AdminAds
+│   │   │               # AdminPersons, AdminRevenue, AdminAds
 │   └── user/           # HomePage, MovieDetailPage, MovieInfoPage,
 │                       # SearchPage, BrowsePage, ProfilePage,
 │                       # SecurityPage, FavoritesPage, WatchHistoryPage,
@@ -542,7 +602,7 @@ src/
 │   └── dashboardStats.js # Pure dashboard calculations (stats, trends, labels)
 │
 └── services/           # authService, movieService, tvShowService, genreService,
-                        # personService, reviewService,
+                        # personService, reviewService, tmdbService,
                         # userService, paymentService, adService, homeSectionService
 ```
 
@@ -614,7 +674,10 @@ VITE_API_URL=http://localhost:5000/api
 ### As an Admin
 1. Log in with an Admin-role account — you will see an **Admin** link in the navbar
 2. Use the **Dashboard** for a system overview: start on **Tổng quan**, follow **Cần xử lý** to the tab with work to do, switch tabs for content / users / reviews / views, and press **Làm mới** to reload everything
-3. Go to **Movies → TMDB Search** to search and import new films
+3. Open the **TMDB import** panel (from Movies or TV Shows) to bring in new titles:
+   - Search by name, or open **Bộ lọc** (genre, country, year, score, votes, sort) to browse without a keyword; use **Xem trước** to check what TMDB has before importing
+   - **Import** one title, or tick several cards → **Import N đã chọn** (each title notifies users of a new release). Or use **# Nhập ID** with the number from the TMDB URL (`/movie/496243`, `/tv/1396`)
+   - Imports run in the background: close the panel and keep working. Watch the progress cards at the bottom-right; a failed one stays there with **Thử lại**. TV shows with many seasons can take 30–60 s
 4. Upload video files from the **Movie Detail panel** with quality and type selection
 5. Manage **Genres**, **Reviews**, **Users**, and **Persons** from the sidebar
    - **TV Shows**: open a show → **Seasons** tab to edit a season, add / edit / delete episodes, upload an episode video and manage its subtitles; use **Sync tập mới** to pull new episodes from TMDB
@@ -724,6 +787,9 @@ git push -u origin feat/navbar-instant-search   # then open a PR into main
 - [ ] **Navbar search keys** — move `["nav-search", …]` under `queryKeys.search.*` so they are public cache and defined in one place
 - [ ] **Smaller home payloads** — the home page still downloads two 100-item lists only to find trailers and artwork. Add backend filters (for example `hasTrailer=true&pageSize=15`) and put the movie / show title and poster inside the review DTO, which removes the per-review `getMovieById` calls
 - [ ] **Prefetch on intent** — Search / Browse already prefetch the next page; still missing: `prefetchQuery(queryKeys.movies.detail(id))` when a card or search result is hovered / focused (`useMovie` / `useTvShow` share the key)
+- [ ] **TMDB import: move the store into `src/`** — `tmdbImportStore.js` lives in a root `stores/` folder (it imports `../src/config/axios`); move it to `src/stores/`, switch to the `@/`-style imports used elsewhere and update the four importers
+- [ ] **TMDB import: tests** — Vitest for the store: per-kind concurrency, resume after reload (`jobId` kept), `404` → `exists`, 409 → `exists`, 5 consecutive poll errors → `failed`, debounced cache refresh
+- [ ] **TMDB import: cancel** — running jobs cannot be cancelled (no server endpoint); also the "Import N đã chọn" confirmation uses `window.confirm`, swap it for `ConfirmDeleteModal`-style dialog
 - [ ] **Hook tests** — Vitest + `QueryClientProvider` for the optimistic favorite toggle (rollback) and the session reset
 - [ ] **Remove the hidden SePay form** from the DOM after submitting it
 - [ ] **Free-plan card copy** (720p, 1 device) is static; align it with what the backend actually enforces

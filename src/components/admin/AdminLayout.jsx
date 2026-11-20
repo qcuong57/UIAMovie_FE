@@ -32,6 +32,7 @@ import {
 } from "../../context/adminTokens";
 import { ToastProvider, useToast } from "./common/Toast";
 import AnnouncementModal from "../admin/announcement/AdminBroadcastModal";
+import TmdbImportTray from "./tmdb/TmdbImportTray";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -517,6 +518,9 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           }
         }}
       />
+
+      {/* Khay tiến trình import TMDB: luôn hiện, không phụ thuộc tab đang mở */}
+      <TmdbImportTray />
     </div>
   );
 }

@@ -146,11 +146,19 @@ export const queryKeys = {
         genres: (params) => ["admin", "dashboard", "view-stats", "genres", params],
       },
     },
-    // Import TMDB: tìm kiếm và preview chỉ đọc, cache theo từ khoá / id.
+    // Import TMDB: tìm/lọc, thể loại và preview chỉ đọc; `existing` đánh dấu phim đã có trong DB.
     tmdb: {
       all: ["admin", "tmdb"],
-      search: (kind, query, page) => ["admin", "tmdb", "search", kind, { query, page }],
       preview: (kind, tmdbId) => ["admin", "tmdb", "preview", kind, String(tmdbId)],
+      // Sắp xếp thể loại để chọn [1,2] và [2,1] dùng chung một cache entry
+      discover: (kind, query, filters, page) => [
+        "admin", "tmdb", "discover", kind, query,
+        { ...filters, genres: [...(filters?.genres ?? [])].sort((a, b) => a - b) },
+        page,
+      ],
+      genres: (kind) => ["admin", "tmdb", "genres", kind],
+      existing: (kind, ids) => ["admin", "tmdb", "exists", kind, ids.join(",")],
+      existingAll: () => ["admin", "tmdb", "exists"], // tiền tố — dùng để invalidate
     },
     persons: {
       all: ["admin", "persons"],
