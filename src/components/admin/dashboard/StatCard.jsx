@@ -47,7 +47,7 @@ export const StatCard = ({ label, value, hint, icon: Icon, color = ACCENT, delta
     {loading ? (
       <Skeleton h={30} w="55%" r={6} />
     ) : (
-      <span style={{
+      <span data-kpi-value="" style={{
         fontFamily: FONT_TITLE, fontSize: 28, fontWeight: 700, color: T.text,
         letterSpacing: "-0.02em", lineHeight: 1.1, fontVariantNumeric: "tabular-nums",
       }}>
@@ -70,7 +70,7 @@ export const StatCard = ({ label, value, hint, icon: Icon, color = ACCENT, delta
 
 /** Hàng KPI responsive (4 → 2 → 1 cột). */
 export const KpiGrid = ({ items, loading }) => (
-  <div className="dg dg--4">
+  <div className="dg dg--4" data-dash-kpis="">
     {items.map((k) => <StatCard key={k.label} {...k} loading={loading} />)}
   </div>
 );

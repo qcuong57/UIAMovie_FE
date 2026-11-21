@@ -39,6 +39,7 @@ import {
   ADMIN_GOOGLE_FONTS,
 } from "../../context/adminTokens";
 import { fmtDuration } from "../../helper/format";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import AdminPagination from "../common/AdminPagination";
 import AdStatusBadge from "./ads/AdStatusBadge";
 import AdCreateModal from "./ads/AdCreateModal";
@@ -112,7 +113,7 @@ const Th = ({ children, width }) => (
   </th>
 );
 
-const ActionBtn = ({ children, color, bg, border, title, onClick }) => (
+const ActionBtn = ({ children, color, bg, border, title, onClick, size = 30 }) => (
   <motion.button
     type="button"
     whileHover={{ scale: 1.08 }}
@@ -121,8 +122,8 @@ const ActionBtn = ({ children, color, bg, border, title, onClick }) => (
     title={title}
     aria-label={title}
     style={{
-      width: 30,
-      height: 30,
+      width: size,
+      height: size,
       borderRadius: 7,
       background: bg,
       border: `1px solid ${border}`,
@@ -137,7 +138,7 @@ const ActionBtn = ({ children, color, bg, border, title, onClick }) => (
   </motion.button>
 );
 
-const GhostBtn = ({ onClick, children, accent, icon: Icon, disabled }) => {
+const GhostBtn = ({ onClick, children, accent, icon: Icon, disabled, fullWidth }) => {
   const [hov, setHov] = useState(false);
   return (
     <button
@@ -163,6 +164,7 @@ const GhostBtn = ({ onClick, children, accent, icon: Icon, disabled }) => {
         outline: "none",
         transition: "all 0.13s",
         whiteSpace: "nowrap",
+        ...(fullWidth ? { width: "100%", justifyContent: "center", minHeight: 40 } : null),
       }}
     >
       {Icon && <Icon size={14} />}
@@ -179,6 +181,7 @@ const Muted = ({ children }) => (
 
 /** Banner chế độ lịch phát (Cố định / Ngẫu nhiên) */
 const ScheduleModeBanner = ({ settings, onConfigure }) => {
+  const isMobile = useIsMobile();
   const random = isRandomSchedule(settings);
   const weights = settings.preRollWeights ?? [];
   const weightSum = weights.reduce((a, w) => a + w, 0);
@@ -215,7 +218,7 @@ const ScheduleModeBanner = ({ settings, onConfigure }) => {
       >
         <Shuffle size={16} color={random ? "#fff" : T.textMuted} />
       </div>
-      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+      <div style={{ flex: "1 1 220px", minWidth: 0 }}>
         <p
           style={{
             fontFamily: FONT,
@@ -238,16 +241,19 @@ const ScheduleModeBanner = ({ settings, onConfigure }) => {
           {summary}
         </p>
       </div>
-      <GhostBtn onClick={onConfigure} accent={!random} icon={Shuffle}>
+      <GhostBtn onClick={onConfigure} accent={!random} icon={Shuffle} fullWidth={isMobile}>
         Cấu hình lịch phát
       </GhostBtn>
     </div>
   );
 };
 
-const FilterTabs = ({ value, onChange }) => (
+const FilterTabs = ({ value, onChange, fullWidth }) => (
   <div
+    data-admin-chips=""
     style={{
+      width: fullWidth ? "100%" : undefined,
+      boxSizing: "border-box",
       display: "flex",
       gap: 4,
       background: T.surfaceAlt,
@@ -264,7 +270,9 @@ const FilterTabs = ({ value, onChange }) => (
           type="button"
           onClick={() => onChange(opt.value)}
           style={{
-            padding: "5px 14px",
+            padding: fullWidth ? "8px 14px" : "5px 14px",
+            flex: fullWidth ? 1 : undefined,
+            whiteSpace: "nowrap",
             borderRadius: 8,
             border: "none",
             cursor: "pointer",
@@ -507,10 +515,257 @@ const AdRow = memo(function AdRow({ ad, index, toggling, onToggle, onOpen }) {
   );
 });
 
+// ── Mobile: thẻ quảng cáo (thay cho bảng, cùng cách làm MobileUserList) ──────
+
+const MobileAdCard = memo(function MobileAdCard({ ad, toggling, onToggle, onOpen }) {
+  const slotCount = ad.globalSlotCount;
+  return (
+    <div
+      style={{
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 14,
+        boxShadow: T.shadow,
+        padding: 14,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        minWidth: 0,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            width: 64,
+            height: 40,
+            borderRadius: 8,
+            overflow: "hidden",
+            flexShrink: 0,
+            background: ad.brandImageUrl
+              ? "#fff"
+              : `linear-gradient(135deg, ${T.accentLight}, ${T.surfaceAlt})`,
+            border: `1px solid ${T.border}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {ad.brandImageUrl ? (
+            <img
+              src={ad.brandImageUrl}
+              alt=""
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                padding: 4,
+                boxSizing: "border-box",
+              }}
+            />
+          ) : (
+            <Play size={15} color={T.accent} style={{ opacity: 0.7 }} />
+          )}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p
+            style={{
+              fontFamily: FONT,
+              fontSize: 14,
+              fontWeight: 600,
+              color: T.text,
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {ad.title}
+          </p>
+          <p
+            style={{
+              fontFamily: FONT,
+              fontSize: 11,
+              color: T.textMuted,
+              margin: "2px 0 0",
+            }}
+          >
+            ID: {ad.id?.slice(0, 8)}…
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggle(ad)}
+          disabled={toggling}
+          aria-label={ad.isActive ? "Tạm dừng quảng cáo" : "Kích hoạt quảng cáo"}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            flexShrink: 0,
+            cursor: toggling ? "wait" : "pointer",
+            opacity: toggling ? 0.6 : 1,
+          }}
+        >
+          <AdStatusBadge isActive={ad.isActive} />
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "6px 16px",
+          fontFamily: FONT,
+          fontSize: 12.5,
+          color: T.textSub,
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 600 }}>
+          <Clock size={12} color={T.textMuted} />
+          {fmtDuration(ad.durationSeconds)}
+        </span>
+        <span>
+          {ad.skipAfterSeconds != null ? `Skip sau ${ad.skipAfterSeconds}s` : "Không skip"}
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 600 }}>
+          <CalendarRange size={12} color={slotCount > 0 ? T.accent : T.textMuted} />
+          {slotCount > 0 ? `${slotCount} slot` : "Chưa có slot"}
+        </span>
+      </div>
+
+      {ad.clickThroughUrl && (
+        <a
+          href={ad.clickThroughUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            fontFamily: FONT,
+            fontSize: 12,
+            color: T.blue,
+            textDecoration: "none",
+            minWidth: 0,
+          }}
+        >
+          <Link size={12} style={{ flexShrink: 0 }} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {ad.clickThroughUrl.replace(/^https?:\/\//, "")}
+          </span>
+        </a>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          paddingTop: 10,
+          borderTop: `1px solid ${T.border}`,
+        }}
+      >
+        <ActionBtn size={36} color={T.textSub} bg={T.surfaceAlt} border={T.border} title="Xem chi tiết" onClick={() => onOpen("detail", ad)}>
+          <Eye size={15} />
+        </ActionBtn>
+        <ActionBtn size={36} color={T.accent} bg={T.accentLight} border={`${T.accent}33`} title="Gắn lịch phát" onClick={() => onOpen("schedule", ad)}>
+          <CalendarRange size={15} />
+        </ActionBtn>
+        <ActionBtn size={36} color={T.blue} bg="rgba(37,99,235,0.07)" border="rgba(37,99,235,0.2)" title="Chỉnh sửa" onClick={() => onOpen("edit", ad)}>
+          <Pencil size={15} />
+        </ActionBtn>
+        <ActionBtn size={36} color={T.red} bg="#FEF2F2" border="rgba(220,38,38,0.2)" title="Xóa" onClick={() => onOpen("delete", ad)}>
+          <Trash2 size={15} />
+        </ActionBtn>
+      </div>
+    </div>
+  );
+});
+
+function MobileAdList({
+  ads,
+  loading,
+  loadError,
+  isFiltered,
+  isFetching,
+  togglingId,
+  onToggle,
+  onOpen,
+  onRetry,
+  pagination,
+}) {
+  const box = {
+    background: T.surface,
+    border: `1px solid ${T.border}`,
+    borderRadius: 14,
+    boxShadow: T.shadow,
+    padding: "40px 16px",
+    textAlign: "center",
+  };
+
+  if (loading)
+    return (
+      <div style={box}>
+        <Spinner />
+      </div>
+    );
+
+  if (loadError)
+    return (
+      <div style={box}>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.red, margin: "0 0 12px" }}>
+          Không tải được danh sách quảng cáo.
+        </p>
+        <GhostBtn onClick={onRetry}>Thử lại</GhostBtn>
+      </div>
+    );
+
+  if (ads.length === 0)
+    return (
+      <div style={box}>
+        <MonitorPlay
+          size={28}
+          color={T.textMuted}
+          style={{ margin: "0 auto 10px", display: "block", opacity: 0.35 }}
+        />
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted, margin: 0 }}>
+          {isFiltered ? "Không có quảng cáo nào khớp bộ lọc" : "Chưa có quảng cáo nào"}
+        </p>
+      </div>
+    );
+
+  return (
+    <>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          opacity: isFetching ? 0.7 : 1,
+          transition: "opacity 0.15s",
+        }}
+      >
+        {ads.map((ad) => (
+          <MobileAdCard
+            key={ad.id}
+            ad={ad}
+            toggling={togglingId === ad.id}
+            onToggle={onToggle}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
+      {pagination}
+    </>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AdminAds() {
+  const isMobile = useIsMobile();
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
@@ -621,7 +876,13 @@ export default function AdminAds() {
   const dialogAd = (type) => (dialog?.type === type ? dialog.ad : null);
 
   return (
-    <div style={{ padding: 28, fontFamily: FONT }}>
+    <div
+      data-page=""
+      style={{
+        padding: isMobile ? "20px 16px 32px" : 28,
+        fontFamily: FONT,
+      }}
+    >
       <style>{ADMIN_GOOGLE_FONTS}</style>
       <style>{CSS}</style>
 
@@ -660,7 +921,10 @@ export default function AdminAds() {
             Quản lý video quảng cáo và lịch phát trên nội dung
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div
+          data-admin-actions=""
+          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+        >
           <GhostBtn
             onClick={refresh}
             icon={RefreshCw}
@@ -691,7 +955,11 @@ export default function AdminAds() {
           alignItems: "center",
         }}
       >
-        <div style={{ position: "relative", flex: "1 1 240px", minWidth: 180 }}>
+        <div style={{
+          position: "relative",
+          flex: isMobile ? "1 1 100%" : "1 1 240px",
+          minWidth: isMobile ? 0 : 180,
+        }}>
           <Search
             size={14}
             color={T.textMuted}
@@ -731,14 +999,14 @@ export default function AdminAds() {
           />
         </div>
 
-        <FilterTabs value={filterActive} onChange={changeFilter} />
+        <FilterTabs value={filterActive} onChange={changeFilter} fullWidth={isMobile} />
 
         <p
           style={{
             fontFamily: FONT,
             fontSize: 12.5,
             color: T.textMuted,
-            margin: "0 0 0 auto",
+            margin: isMobile ? 0 : "0 0 0 auto",
             whiteSpace: "nowrap",
           }}
         >
@@ -746,7 +1014,35 @@ export default function AdminAds() {
         </p>
       </div>
 
-      {/* Table */}
+      {/* Table (desktop) / Cards (mobile) */}
+      {isMobile ? (
+        <MobileAdList
+          ads={ads}
+          loading={loading}
+          loadError={loadError}
+          isFiltered={!!search || filterActive !== undefined}
+          isFetching={adsQ.isFetching}
+          togglingId={togglingId}
+          onToggle={handleToggleActive}
+          onOpen={openDialog}
+          onRetry={() => adsQ.refetch()}
+          pagination={
+            totalPages > 1 && (
+              <div style={{ marginTop: 12 }}>
+                <AdminPagination
+                  page={page}
+                  totalPages={totalPages}
+                  total={total}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setPage}
+                  itemLabel="quảng cáo"
+                  isFetching={adsQ.isFetching}
+                />
+              </div>
+            )
+          }
+        />
+      ) : (
       <div
         style={{
           background: T.surface,
@@ -862,6 +1158,7 @@ export default function AdminAds() {
           </div>
         )}
       </div>
+      )}
 
       {/* Modals / panels */}
       <AdCreateModal

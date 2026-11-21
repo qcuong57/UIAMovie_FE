@@ -4,11 +4,12 @@
 // không có Id thật nên không thể Sửa/Xóa). Bản này gọi thẳng PersonsController qua
 // personService.searchPersons — trả về Person thật trong DB (Guid Id), cho phép Thêm/Sửa/Xóa
 // hoạt động đúng với PersonAddModal / PersonEditModal / PersonDeleteModal / PersonDetailPanel.
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, User, Plus, RefreshCw } from "lucide-react";
 import { usePagination } from "../../hooks/common/usePagination";
 import AdminPagination from "../common/AdminPagination";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { useAdminPersons } from "../../hooks/admin/useAdminPersons";
 import PersonAddModal from "./person/PersonAddModal";
 import PersonEditModal from "./person/PersonEditModal";
@@ -30,11 +31,9 @@ const PersonCard = ({ person, index, onClick }) => {
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ delay: index * 0.018 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       onClick={() => onClick(person)}
       style={{
         background: T.surface,
@@ -192,6 +191,7 @@ const SkeletonCard = () => (
 
 // ── AdminPersons ──────────────────────────────────────────────────────────────
 export default function AdminPersons() {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -215,6 +215,13 @@ export default function AdminPersons() {
     refetch,
   } = useAdminPersons({ page, pageSize: PAGE_SIZE, search: debouncedSearch });
   const items = data?.items ?? [];
+
+  // Khoá của khối lưới: chỉ đổi khi dữ liệu trang mới đã về (không đổi lúc đang hiện dữ liệu cũ)
+  const settledKey = useRef("");
+  if (!loading && !isPlaceholderData) {
+    settledKey.current = `${page}|${debouncedSearch}`;
+  }
+  const gridKey = settledKey.current;
   const error = queryError
     ? (queryError?.response?.data?.message ??
       queryError?.message ??
@@ -256,10 +263,21 @@ export default function AdminPersons() {
 
   return (
     <div
-      style={{ padding: "28px 32px 64px", maxWidth: 1200, fontFamily: FONT }}
+      data-page=""
+      style={{
+        padding: isMobile ? "20px 16px 32px" : "28px 32px 64px",
+        maxWidth: 1200,
+        fontFamily: FONT,
+      }}
     >
       <style>{ADMIN_GOOGLE_FONTS}</style>
       <style>{`@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }`}</style>
+      {/* Lưới cố định số cột (5 / 4 / 2) để 20 người luôn lấp đủ hàng */}
+      <style>{`
+        [data-person-grid] { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+        @media (max-width: 1000px) { [data-person-grid] { grid-template-columns: repeat(4, 1fr); } }
+        @media (max-width: 767px) { [data-person-grid] { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
+      `}</style>
 
       {/* ── Header ── */}
       <div
@@ -429,12 +447,8 @@ export default function AdminPersons() {
       {/* ── Grid ── */}
       {loading ? (
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-            gap: 12,
-            marginBottom: 24,
-          }}
+          data-person-grid=""
+          style={{ marginBottom: 24 }}
         >
           {Array.from({ length: PAGE_SIZE }).map((_, i) => (
             <SkeletonCard key={i} />
@@ -506,25 +520,29 @@ export default function AdminPersons() {
         </div>
       ) : (
         <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-              gap: 12,
-              marginBottom: 24,
-            }}
-          >
-            <AnimatePresence>
-              {items.map((p, i) => (
-                <PersonCard
-                  key={p.id}
-                  person={p}
-                  index={i}
-                  onClick={(person) => setDetailId(person.id)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
+          {/* Chuyển trang / đổi từ khoá: lưới cũ mờ đi rồi lưới mới hiện lên (giống SearchPage) */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={gridKey}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isPlaceholderData ? 0.55 : 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div
+                data-person-grid=""
+                style={{ marginBottom: 24 }}
+              >
+                {items.map((p, i) => (
+                  <PersonCard
+                    key={p.id}
+                    person={p}
+                    index={i}
+                    onClick={(person) => setDetailId(person.id)}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          </AnimatePresence>
           <AdminPagination {...pagination.props} itemLabel="người" />
         </>
       )}

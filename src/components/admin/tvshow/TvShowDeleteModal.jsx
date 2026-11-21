@@ -51,6 +51,7 @@ export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
           {/* Modal */}
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -120,7 +121,7 @@ export default function TvShowDeleteModal({ show, onClose, onDeleted }) {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <div data-tv-foot="" style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button
                 onClick={onClose}
                 disabled={deleting}

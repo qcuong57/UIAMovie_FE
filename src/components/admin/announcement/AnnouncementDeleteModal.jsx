@@ -30,7 +30,7 @@ export default function AnnouncementDeleteModal({ item, onClose, onDeleted }) {
 
   return (
     <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div data-admin-overlay="" style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -40,6 +40,7 @@ export default function AnnouncementDeleteModal({ item, onClose, onDeleted }) {
         />
 
         <motion.div
+          data-ann-sheet=""
           initial={{ opacity: 0, scale: 0.96, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
@@ -73,7 +74,7 @@ export default function AnnouncementDeleteModal({ item, onClose, onDeleted }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22 }}>
+          <div data-ann-actions="" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22 }}>
             <button
               onClick={onClose}
               disabled={loading}

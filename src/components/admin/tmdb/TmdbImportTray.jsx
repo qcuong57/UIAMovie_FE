@@ -167,7 +167,7 @@ export default function TmdbImportTray({ side = 'right', bottom = 20, offset = 2
   const visible = jobs.filter((j) => !hidden.has(sigOf(j)));
 
   return (
-    <div style={{
+    <div data-tmdb-tray="" style={{
       position: 'fixed', [side]: offset, bottom, zIndex: 250, display: 'flex', flexDirection: 'column-reverse',
       gap: 10, width: 340, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100vh - 120px)',
       overflowY: 'auto', overflowX: 'hidden', pointerEvents: 'none',

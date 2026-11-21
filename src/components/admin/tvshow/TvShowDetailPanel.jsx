@@ -28,41 +28,12 @@ import {
 } from "../../../hooks/admin/useAdminTvShows";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../../config/queryKeys";
+import { T, FONT_BODY as FONT } from "../../../context/adminTokens";
+import { fmtDate } from "../../../helper/format";
+import { COUNTRY_FLAG } from "./tvShowBadges";
 import { UploadZone } from "../movie/VideoUploadPanel";
 import EpisodeSubtitlePanel from "./EpisodeSubtitlePanel";
 import { SeasonEditModal, EpisodeEditModal } from "./SeasonEpisodeFields";
-
-const FONT = "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif";
-const T = {
-  bg: "#F4F3EF",
-  surface: "#FFFFFF",
-  surfaceAlt: "#FAFAF8",
-  surfaceHov: "#F6F6F3",
-  accent: "#1C5F3A",
-  accentLight: "#EAF5EF",
-  accentText: "#155230",
-  text: "#18181B",
-  textSub: "#71717A",
-  textMuted: "#A1A1AA",
-  border: "rgba(0,0,0,0.08)",
-  borderMed: "rgba(0,0,0,0.13)",
-  shadow: "0 1px 3px rgba(0,0,0,0.07)",
-  shadowLg: "0 20px 60px rgba(0,0,0,0.14)",
-  gold: "#D97706",
-  red: "#DC2626",
-};
-
-const COUNTRY_FLAG = {
-  KR: "🇰🇷",
-  US: "🇺🇸",
-  JP: "🇯🇵",
-  CN: "🇨🇳",
-  VN: "🇻🇳",
-  FR: "🇫🇷",
-  GB: "🇬🇧",
-  IN: "🇮🇳",
-  TH: "🇹🇭",
-};
 
 const VIDEO_TYPES = ['main', 'trailer', 'clip', 'behind'];
 const TYPE_LABEL  = { main: 'Phim chính', trailer: 'Trailer', clip: 'Clip', behind: 'Hậu trường' };
@@ -635,7 +606,7 @@ const SeasonAccordion = ({ season, showId }) => {
                               {ep.name ?? ep.title ?? `Tập ${ep.episodeNumber ?? idx + 1}`}
                             </p>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             {ep.runtime && (
                               <span style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
                                 <Clock size={9} /> {ep.runtime} phút
@@ -643,7 +614,7 @@ const SeasonAccordion = ({ season, showId }) => {
                             )}
                             {ep.airDate && (
                               <span style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted }}>
-                                {new Date(ep.airDate).toLocaleDateString("vi-VN")}
+                                {fmtDate(ep.airDate)}
                               </span>
                             )}
                             {(ep.hasVideo || ep.videoUrl) && (
@@ -678,8 +649,8 @@ const SeasonAccordion = ({ season, showId }) => {
                       {ep.id && <EpisodeVideoZone episode={ep} tvShowId={showId} />}
                       {/* Subtitle panel — quản lý subtitle cho tập phim */}
                       {ep.id && (
-                        <div style={{
-                          margin: "0 14px 12px",
+                        <div data-tvd-sub="" style={{
+                           margin: "0 14px 12px",
                           padding: "12px 14px",
                           background: T.surfaceAlt,
                           borderRadius: 10,
@@ -787,6 +758,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
       />
 
       <motion.div
+        data-admin-panel=""
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
@@ -856,14 +828,14 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                 }}
               />
 
-              <div style={{ position: "relative", padding: "20px 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+              <div data-tvd-head="" style={{ position: "relative", padding: "20px 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
                 {show.posterUrl && (
                   <div style={{ width: 64, flexShrink: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${T.border}`, boxShadow: T.shadow }}>
                     <img src={show.posterUrl} alt="" style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", display: "block" }} />
                   </div>
                 )}
                 
-                <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <div data-tvd-info="" style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                   <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, marginBottom: 4, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                     Chi tiết TV show
                   </p>
@@ -894,7 +866,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
+                <div data-tvd-actions="" style={{ display: "flex", gap: 7, flexShrink: 0 }}>
                   {/* --- NÚT SYNC TẬP MỚI --- */}
                   <button
                     onClick={handleSyncEpisodes}
@@ -924,6 +896,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                     </button>
                   )}
                   <button
+                    data-tvd-close=""
                     onClick={onClose}
                     style={{ width: 32, height: 32, borderRadius: "50%", background: T.surface, border: `1px solid ${T.border}`, cursor: "pointer", color: T.textSub, display: "flex", alignItems: "center", justifyContent: "center" }}
                   >
@@ -947,7 +920,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
           )}
 
           {!loading && show && (
-            <div style={{ display: "flex", borderBottom: `1px solid ${T.border}`, paddingLeft: 20 }}>
+            <div data-tvd-tabs="" style={{ display: "flex", borderBottom: `1px solid ${T.border}`, paddingLeft: 20 }}>
               {TABS.map((t) => (
                 <button
                   key={t.key}
@@ -968,7 +941,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: 20, background: T.bg }}>
+        <div data-tvd-body="" style={{ flex: 1, overflowY: "auto", padding: 20, background: T.bg }}>
           {loading && (
             <div style={{ padding: "64px 0", textAlign: "center" }}>
               <div style={{ width: 26, height: 26, borderRadius: "50%", border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: "spinCw 0.75s linear infinite", margin: "0 auto" }} />
@@ -988,7 +961,7 @@ export default function TvShowDetailPanel({ showId, onClose, onEdit }) {
                   <div style={{ padding: 16, background: T.surface, borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 14 }}>
                     <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Chi tiết</p>
                     <MetaRow icon={Star} label="Rating" value={show.rating ? `${Number(show.rating).toFixed(1)} / 10` : null} accent={T.gold} />
-                    <MetaRow icon={Calendar} label="Phát sóng" value={show.firstAirDate ? new Date(show.firstAirDate).toLocaleDateString("vi-VN") : null} />
+                    <MetaRow icon={Calendar} label="Phát sóng" value={show.firstAirDate ? fmtDate(show.firstAirDate) : null} />
                     <MetaRow icon={Tv} label="Seasons" value={show.numberOfSeasons != null ? `${show.numberOfSeasons} mùa` : null} accent={T.accent} />
                     <MetaRow icon={Globe} label="Quốc gia" value={show.originCountry ? `${COUNTRY_FLAG[show.originCountry] ?? ""} ${show.originCountry}` : null} />
                     <MetaRow icon={Tv} label="Thể loại" value={show.genres?.join(", ") || null} />

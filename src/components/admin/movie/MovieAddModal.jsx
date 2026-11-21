@@ -149,7 +149,7 @@ function LightTextarea({ label, value, onChange, placeholder, rows = 4 }) {
 /** Ô 2 cột dùng cho các field ngắn (năm/rating/quốc gia...) */
 function Row({ children }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    <div data-admin-grid2="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       {children}
     </div>
   );
@@ -385,6 +385,7 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
           />
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -472,6 +473,7 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
 
             {/* Body */}
             <div
+              data-admin-modal-body=""
               style={{
                 flex: 1,
                 overflowY: "auto",
@@ -619,6 +621,7 @@ export default function MovieAddModal({ open, onClose, onCreated }) {
 
             {/* Footer */}
             <div
+              data-movie-foot=""
               style={{
                 padding: "14px 20px",
                 borderTop: `1px solid ${T.border}`,

@@ -26,6 +26,7 @@ import {
   T, FONT_BODY as FONT, FONT_TITLE, ACCENT, ACCENT2,
 } from '../../context/adminTokens';
 import { fmtVnd } from '../../helper/format';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ const SALE = {
 const CSS = `
   @keyframes pl-spin { to { transform: rotate(360deg); } }
   .pl-kpis  { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
-  .pl-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .pl-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 14px; }
   .pl-two   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .pl-form  { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; }
   @media (max-width: 860px) { .pl-form { grid-template-columns: minmax(0, 1fr); } .pl-two { grid-template-columns: 1fr; } }
@@ -260,7 +261,7 @@ const StatCard = ({ label, value, sub, featured, index, loading }) => (
       <p style={{
         fontFamily: FONT_TITLE, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1,
         margin: '0 0 4px', color: featured ? '#fff' : T.text,
-      }}>{loading ? '…' : value}</p>
+      }} data-kpi-value="">{loading ? '…' : value}</p>
       {sub && <p style={{ fontFamily: FONT, fontSize: 11.5, margin: 0, color: featured ? 'rgba(255,255,255,0.6)' : T.textMuted }}>{sub}</p>}
     </div>
   </motion.div>
@@ -331,6 +332,7 @@ const Modal = ({ open, onClose, title, subtitle, width = 860, children, footer }
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+          data-admin-overlay=""
           style={{
             position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(24,24,27,0.45)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
@@ -339,7 +341,7 @@ const Modal = ({ open, onClose, title, subtitle, width = 860, children, footer }
           <motion.div
             initial={{ opacity: 0, y: 14, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }}
-            role="dialog" aria-modal="true"
+            role="dialog" aria-modal="true" data-admin-modal=""
             style={{
               width: '100%', maxWidth: width, maxHeight: '92vh', display: 'flex', flexDirection: 'column',
               background: T.surface, borderRadius: 18, boxShadow: T.shadowLg, overflow: 'hidden',
@@ -352,9 +354,9 @@ const Modal = ({ open, onClose, title, subtitle, width = 860, children, footer }
               </div>
               <Btn small onClick={onClose}>Đóng</Btn>
             </header>
-            <div style={{ padding: '18px 22px', overflowY: 'auto', flex: 1 }}>{children}</div>
+            <div data-admin-modal-body="" style={{ padding: '18px 22px', overflowY: 'auto', flex: 1 }}>{children}</div>
             {footer && (
-              <footer style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8, background: T.surfaceAlt }}>
+              <footer data-admin-modal-foot="" style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8, background: T.surfaceAlt }}>
                 {footer}
               </footer>
             )}
@@ -503,7 +505,7 @@ function PlanFormModal({ open, plan, onClose, onSaved, toast }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {f.features.map((x, i) => (
               <div key={i} style={{ display: 'flex', gap: 6 }}>
-                <input className="pl-input" style={inputStyle()} value={x} onChange={(e) => setFeature(i, e.target.value)}
+                <input className="pl-input" style={{ ...inputStyle(), flex: 1, minWidth: 0 }} value={x} onChange={(e) => setFeature(i, e.target.value)}
                   placeholder={`Quyền lợi ${i + 1}`}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFeature(); } }} />
                 <Btn small onClick={() => moveFeature(i, -1)} disabled={i === 0} title="Lên">↑</Btn>
@@ -544,7 +546,7 @@ function PlanFormModal({ open, plan, onClose, onSaved, toast }) {
 
         <div style={{ minWidth: 0 }}>
           <p style={{ fontFamily: FONT, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.textMuted, margin: '0 0 8px' }}>Xem trước</p>
-          <div style={{ position: 'sticky', top: 0 }}><PlanPreview f={f} /></div>
+          <div data-plan-preview="" style={{ position: 'sticky', top: 0 }}><PlanPreview f={f} /></div>
         </div>
       </div>
     </Modal>
@@ -752,6 +754,7 @@ export default function AdminPlans() {
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+  const isMobile = useIsMobile();
 
   // Một cache gói dùng chung với bộ lọc gói của trang Doanh thu; lỗi refetch nền giữ danh sách cũ.
   const plansQ = useAdminPlans();
@@ -803,7 +806,7 @@ export default function AdminPlans() {
   const popular = plans.find((p) => p.isMostPopular);
 
   return (
-    <div style={{ padding: '28px 28px 80px', maxWidth: 1400, fontFamily: FONT }}>
+    <div data-page="" style={{ padding: isMobile ? '20px 16px 32px' : '28px 28px 80px', maxWidth: 1400, fontFamily: FONT }}>
       <style>{CSS}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -819,14 +822,14 @@ export default function AdminPlans() {
             Sửa gói không ảnh hưởng các đơn đã mua.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div data-admin-actions="" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Btn onClick={() => plansQ.refetch()}>Làm mới</Btn>
           <Btn onClick={() => setGrantOpen(true)} disabled={plans.length === 0}>Cấp / thu hồi Premium</Btn>
           <Btn primary onClick={openCreate}>+ Tạo gói mới</Btn>
         </div>
       </div>
 
-      <div className="pl-kpis" style={{ marginBottom: 16 }}>
+      <div className="pl-kpis" data-admin-kpis="" style={{ marginBottom: 16 }}>
         <StatCard index={0} featured label="Đang bán" loading={loading} value={counts.onsale} sub={`${counts.all} gói tổng cộng`} />
         <StatCard index={1} label="Đã tắt / hết hạn bán" loading={loading} value={counts.off + counts.ended} sub={`${counts.off} tắt · ${counts.ended} hết hạn`} />
         <StatCard index={2} label="Chưa mở bán" loading={loading} value={counts.scheduled} sub="Đã hẹn giờ mở bán" />
@@ -838,19 +841,19 @@ export default function AdminPlans() {
         subtitle={`${shown.length}/${plans.length} gói · thời gian theo giờ Việt Nam (GMT+7)`}
         noPad
       >
-        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ padding: isMobile ? '12px 14px' : '14px 18px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${T.border}` }}>
+          <div data-admin-chips="" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {STATUS_FILTERS.map((s) => (
               <Btn key={s.value} active={filter === s.value} onClick={() => setFilter(s.value)}>
                 {s.label} ({counts[s.value]})
               </Btn>
             ))}
           </div>
-          <input className="pl-input" style={{ ...inputStyle(), maxWidth: 360 }} value={search}
+          <input className="pl-input" data-admin-search="" style={{ ...inputStyle(), maxWidth: 360 }} value={search}
             onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã gói" />
         </div>
 
-        <div style={{ padding: 18 }}>
+        <div style={{ padding: isMobile ? 14 : 18 }}>
           {loading ? <Spinner /> : error ? (
             <div style={{ textAlign: 'center', padding: '36px 0' }}>
               <p style={{ fontFamily: FONT, fontSize: 13, color: T.red, margin: '0 0 12px' }}>Không tải được danh sách gói.</p>
@@ -864,7 +867,7 @@ export default function AdminPlans() {
           ) : shown.length === 0 ? (
             <Empty text="Không có gói nào khớp bộ lọc" />
           ) : (
-            <div className="pl-grid">
+            <div className="pl-grid" data-plan-grid="">
               {shown.map((p, i) => (
                 <PlanCard key={p.id} p={p} index={i} onEdit={openEdit} onToggle={toggleActive} busy={busyId === p.id} />
               ))}

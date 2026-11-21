@@ -48,6 +48,7 @@ import {
 } from "../../context/adminTokens";
 import { fmtVnd, MONTHS_VI } from "../../helper/format";
 import AdminPagination from "../../components/common/AdminPagination";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -512,6 +513,7 @@ const StatCard = ({
         <Skeleton h={26} w="65%" />
       ) : (
         <p
+          data-kpi-value=""
           style={{
             fontFamily: FONT_TITLE,
             fontSize: 24,
@@ -598,12 +600,144 @@ const ChartTooltip = ({ active, payload, label, metric }) => {
   );
 };
 
+/** Mobile: mỗi đơn hàng là một thẻ (thay cho bảng 9 cột phải vuốt ngang). */
+const MobileOrderList = ({ orders, onCopy }) => (
+  <div style={{ display: "flex", flexDirection: "column" }}>
+    {orders.map((o) => (
+      <div
+        key={o.id}
+        style={{
+          padding: "14px 16px",
+          borderBottom: `1px solid ${T.border}`,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: FONT,
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: ACCENT,
+              overflowWrap: "anywhere",
+              minWidth: 0,
+            }}
+          >
+            {o.orderCode}
+          </span>
+          <StatusBadge status={o.status} />
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: FONT,
+              fontSize: 13,
+              fontWeight: 600,
+              color: T.text,
+              minWidth: 0,
+            }}
+          >
+            {o.planName}
+          </span>
+          <span
+            style={{
+              fontFamily: FONT_TITLE,
+              fontSize: 14,
+              fontWeight: 800,
+              color: T.text,
+              flexShrink: 0,
+            }}
+          >
+            {fmtVnd(o.amount)}
+          </span>
+        </div>
+
+        <p
+          style={{
+            fontFamily: FONT,
+            fontSize: 12,
+            color: T.textSub,
+            margin: 0,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {o.userEmail || "—"}
+        </p>
+
+        {o.status === "failed" && o.failureReason && (
+          <p
+            style={{
+              fontFamily: FONT,
+              fontSize: 11.5,
+              color: T.red,
+              margin: 0,
+              lineHeight: 1.45,
+            }}
+          >
+            {o.failureReason}
+          </p>
+        )}
+
+        <div
+          style={{
+            fontFamily: FONT,
+            fontSize: 11.5,
+            color: T.textMuted,
+            lineHeight: 1.6,
+          }}
+        >
+          <div>
+            {PROVIDER_LABEL[o.provider] ?? o.provider} · Tạo{" "}
+            {fmtVnDateTime(o.createdAt)}
+          </div>
+          {o.paidAt && <div>Thanh toán {fmtVnDateTime(o.paidAt)}</div>}
+          {o.gatewayTransId && (
+            <button
+              type="button"
+              onClick={() => onCopy(o.gatewayTransId)}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                fontSize: 11,
+                color: T.textMuted,
+                overflowWrap: "anywhere",
+                padding: "4px 0",
+              }}
+            >
+              Mã GD: {o.gatewayTransId} (chạm để sao chép)
+            </button>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function AdminRevenue() {
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+  const isMobile = useIsMobile();
   const report = useCallback((e, fallback) => {
     console.error(e);
     toastRef.current?.error?.(getApiErrorMessage(e, fallback));
@@ -810,7 +944,12 @@ export default function AdminRevenue() {
 
   return (
     <div
-      style={{ padding: "28px 28px 80px", maxWidth: 1400, fontFamily: FONT }}
+      data-page=""
+      style={{
+        padding: isMobile ? "20px 16px 32px" : "28px 28px 80px",
+        maxWidth: 1400,
+        fontFamily: FONT,
+      }}
     >
       <style>{CSS}</style>
 
@@ -866,6 +1005,7 @@ export default function AdminRevenue() {
           </p>
         </div>
         <div
+          data-admin-actions=""
           style={{
             display: "flex",
             alignItems: "center",
@@ -924,7 +1064,7 @@ export default function AdminRevenue() {
           />
         </Card>
       ) : (
-        <div className="rv-kpis" style={{ marginBottom: 16 }}>
+        <div className="rv-kpis" data-admin-kpis="" style={{ marginBottom: 16 }}>
           <StatCard
             index={0}
             featured
@@ -1010,6 +1150,7 @@ export default function AdminRevenue() {
           subtitle={periodLabel}
           action={
             <div
+              data-admin-card-action=""
               style={{
                 display: "flex",
                 gap: 8,
@@ -1111,7 +1252,7 @@ export default function AdminRevenue() {
                   </p>
                 </div>
               </div>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
                 <BarChart
                   data={chartData}
                   margin={{ top: 6, right: 4, left: 0, bottom: 0 }}
@@ -1123,6 +1264,8 @@ export default function AdminRevenue() {
                   />
                   <XAxis
                     dataKey="label"
+                    interval={isMobile ? "preserveStartEnd" : 0}
+                    minTickGap={isMobile ? 8 : 5}
                     tick={{ fontFamily: FONT, fontSize: 11, fill: T.textMuted }}
                     axisLine={false}
                     tickLine={false}
@@ -1137,7 +1280,7 @@ export default function AdminRevenue() {
                     }}
                     axisLine={false}
                     tickLine={false}
-                    width={48}
+                    width={isMobile ? 40 : 48}
                   />
                   <Tooltip
                     content={<ChartTooltip metric={metric} />}
@@ -1236,7 +1379,10 @@ export default function AdminRevenue() {
           subtitle={`${total.toLocaleString("vi-VN")} đơn${hasFilter ? " khớp bộ lọc" : ""} · giờ Việt Nam (GMT+7)`}
           noPad
           action={
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div
+              data-admin-actions=""
+              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+            >
               {hasFilter && <Btn onClick={resetFilters}>Xóa bộ lọc</Btn>}
               <Btn primary disabled={exporting} onClick={handleExport}>
                 {exporting ? "Đang xuất…" : exportLabel}
@@ -1247,14 +1393,17 @@ export default function AdminRevenue() {
           {/* Bộ lọc */}
           <div
             style={{
-              padding: "14px 18px",
+              padding: isMobile ? "12px 14px" : "14px 18px",
               display: "flex",
               flexDirection: "column",
               gap: 12,
               borderBottom: `1px solid ${T.border}`,
             }}
           >
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div
+              data-admin-chips=""
+              style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+            >
               {STATUS_FILTERS.map((s) => (
                 <Btn
                   key={s.value}
@@ -1265,7 +1414,10 @@ export default function AdminRevenue() {
                 </Btn>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div
+              data-rev-filters=""
+              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+            >
               <input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -1303,6 +1455,7 @@ export default function AdminRevenue() {
               />
             </div>
             <div
+              data-rev-dates=""
               style={{
                 display: "flex",
                 gap: 12,
@@ -1376,6 +1529,8 @@ export default function AdminRevenue() {
                   : "Chưa có đơn hàng nào"
               }
             />
+          ) : isMobile ? (
+            <MobileOrderList orders={orders} onCopy={copyId} />
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table
@@ -1482,7 +1637,7 @@ export default function AdminRevenue() {
             <div
               style={{
                 borderTop: `1px solid ${T.border}`,
-                padding: "0 18px 16px",
+                padding: isMobile ? "0 14px 16px" : "0 18px 16px",
               }}
             >
               <AdminPagination

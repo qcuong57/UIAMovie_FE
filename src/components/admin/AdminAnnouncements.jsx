@@ -17,6 +17,7 @@ import { useToast } from './common/Toast';
 import AnnouncementModal from './announcement/AnnouncementModal';
 import AnnouncementDeleteModal from './announcement/AnnouncementDeleteModal';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const PAGE_SIZE = 12;
 
@@ -115,7 +116,72 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
   );
 }
 
+const fmtDate = (d) =>
+  new Date(d).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// Mobile: mỗi thông báo là một thẻ (thay cho bảng 5 cột)
+function MobileAnnouncementList({ loading, items, onEdit, onDelete }) {
+  if (loading) return <div style={{ padding: '48px 0', textAlign: 'center' }}><SpinnerLight /></div>;
+  if (items.length === 0) {
+    return (
+      <div style={{ padding: '44px 16px', textAlign: 'center' }}>
+        <div style={{ fontSize: 28, marginBottom: 8 }}>📢</div>
+        <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted, margin: 0 }}>Không tìm thấy thông báo nào</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      {items.map((item) => (
+        <div key={item.id} style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ width: 44, height: 56, borderRadius: 6, overflow: 'hidden', background: T.bg, flexShrink: 0, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {item.thumbnailUrl
+                ? <img src={item.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <Megaphone size={16} color={T.textMuted} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: T.text, margin: 0, wordBreak: 'break-word' }}>{item.title}</p>
+              <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: '3px 0 0', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>
+                {item.message}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', fontSize: 11, fontWeight: 700, color: '#D97706', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+              <Megaphone size={11} /> Bản tin hệ thống
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: T.textSub }}>{fmtDate(item.createdAt)}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <a
+              href={item.linkUrl || '/announcements'}
+              target="_blank"
+              rel="noreferrer"
+              style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT, fontSize: 12, color: T.accentText, textDecoration: 'none', fontWeight: 600 }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.linkUrl || '/announcements'}</span>
+              <ExternalLink size={11} style={{ flexShrink: 0 }} />
+            </a>
+            <button type="button" aria-label="Chỉnh sửa thông báo" onClick={() => onEdit(item)}
+              style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, cursor: 'pointer', background: 'rgba(37,99,235,0.07)', border: '1px solid rgba(37,99,235,0.2)', color: T.blue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Pencil size={14} />
+            </button>
+            <button type="button" aria-label="Xóa vĩnh viễn" onClick={() => onDelete(item)}
+              style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, cursor: 'pointer', background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)', color: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminAnnouncements() {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
@@ -183,15 +249,15 @@ export default function AdminAnnouncements() {
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
+    <div data-page="" style={{ padding: isMobile ? '20px 16px 32px' : '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
       
       {/* ── Top Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 24, gap: 16 }}>
         <div>
           <p style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
             Quản trị nội dung
           </p>
-          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             Thông báo & Lịch bảo trì
             <span
               style={{
@@ -211,7 +277,7 @@ export default function AdminAnnouncements() {
           </h2>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div data-admin-actions="" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <GhostBtn onClick={() => listQ.refetch()}>
             <RefreshCw size={14} /> Tải lại
           </GhostBtn>
@@ -280,6 +346,14 @@ export default function AdminAnnouncements() {
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
         }}
       >
+        {isMobile ? (
+          <MobileAnnouncementList
+            loading={loading}
+            items={pageItems}
+            onEdit={(item) => { setEditingItem(item); setModalOpen(true); }}
+            onDelete={setDeleteItem}
+          />
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -466,16 +540,17 @@ export default function AdminAnnouncements() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* Phân trang */}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 18 }}>
+        <div style={{ display: 'flex', justifyContent: isMobile ? 'space-between' : 'flex-end', alignItems: 'center', gap: 8, marginTop: 18 }}>
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
             style={{
-              padding: '6px 12px',
+              padding: isMobile ? '10px 18px' : '6px 12px',
               borderRadius: 7,
               border: `1px solid ${T.border}`,
               background: T.surface,
@@ -494,7 +569,7 @@ export default function AdminAnnouncements() {
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
             style={{
-              padding: '6px 12px',
+              padding: isMobile ? '10px 18px' : '6px 12px',
               borderRadius: 7,
               border: `1px solid ${T.border}`,
               background: T.surface,

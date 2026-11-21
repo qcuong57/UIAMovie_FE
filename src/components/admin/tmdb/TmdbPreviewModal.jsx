@@ -38,6 +38,7 @@ export default function TmdbPreviewModal({ tmdbId, isMovie, onClose }) {
 
   return (
     <div
+      data-admin-overlay=""
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.5)',
@@ -45,6 +46,7 @@ export default function TmdbPreviewModal({ tmdbId, isMovie, onClose }) {
       }}
     >
       <div
+        data-admin-modal=""
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 480, maxHeight: '80vh', borderRadius: 14, overflow: 'hidden',

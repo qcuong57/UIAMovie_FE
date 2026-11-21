@@ -154,6 +154,7 @@ export default function UserEditModal({ user, onClose, onSaved }) {
           {/* Modal — centered, không phải slide-in */}
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -162,9 +163,9 @@ export default function UserEditModal({ user, onClose, onSaved }) {
               position: "fixed",
               inset: 0,
               margin: "auto",
-              width: 460,
+              width: "min(460px, calc(100vw - 24px))",
               height: "fit-content",
-              maxHeight: "90vh",
+              maxHeight: "calc(100dvh - 24px)",
               zIndex: 300,
               background: T.surface,
               borderRadius: 16,

@@ -96,7 +96,7 @@ export const OverviewSection = ({ onNavigate }) => {
   return (
     <div className="dash-stack">
       {/* Mỗi nguồn dữ liệu tải độc lập → từng thẻ tự hiện skeleton của riêng nó */}
-      <div className="dg dg--4">
+      <div className="dg dg--4" data-dash-kpis="">
         {kpis.map((k) => <StatCard key={k.label} {...k} />)}
       </div>
 

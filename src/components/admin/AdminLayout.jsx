@@ -1,5 +1,5 @@
 // src/pages/admin/AdminLayout.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -20,8 +20,10 @@ import {
   Megaphone,
   Crown,
   Layers,
+  Menu,
 } from "lucide-react";
 import authService from "../../services/authService";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 // Import tokens & Toast
 import {
@@ -120,7 +122,7 @@ const NavItem = ({ item, active, collapsed, onClick }) => {
 };
 
 // ── TopBar ─────────────────────────────────────────────────────────────────────
-const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
+const TopBar = ({ activeTab, user, onOpenBroadcast, isMobile, onMenu }) => {
   const TAB_LABELS = {
     dashboard: "Dashboard",
     collections: "Quản lý Bộ sưu tập phim",
@@ -144,27 +146,60 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 28px",
-        height: 60,
+        padding: isMobile ? "var(--safe-top, 0px) 12px 0" : "0 28px",
+        height: isMobile ? "auto" : 60,
+        minHeight: isMobile ? "calc(60px + var(--safe-top, 0px))" : 60,
+        boxSizing: "border-box",
+        gap: 8,
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
       }}
     >
-      <h1
-        style={{
-          fontFamily: FONT_TITLE,
-          fontSize: 18,
-          fontWeight: 700,
-          color: T.text,
-          margin: 0,
-          letterSpacing: "-0.01em",
-        }}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}
       >
-        {TAB_LABELS[activeTab] ?? "Dashboard"}
-      </h1>
+        {isMobile && (
+          <button
+            onClick={onMenu}
+            aria-label="Mở menu"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              border: `1px solid ${T.border}`,
+              background: T.surfaceHov,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: T.textSub,
+              flexShrink: 0,
+            }}
+          >
+            <Menu size={18} strokeWidth={1.8} />
+          </button>
+        )}
+        <h1
+          style={{
+            fontFamily: FONT_TITLE,
+            fontSize: isMobile ? 16 : 18,
+            fontWeight: 700,
+            color: T.text,
+            margin: 0,
+            letterSpacing: "-0.01em",
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {TAB_LABELS[activeTab] ?? "Dashboard"}
+        </h1>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {!isMobile && (
         <button
           style={{
             width: 36,
@@ -181,6 +216,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
         >
           <Search size={15} strokeWidth={1.7} />
         </button>
+        )}
 
         {/* Nút Chuông: Mở nhanh modal phát thông báo hệ thống */}
         <button
@@ -224,6 +260,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
           />
         </button>
 
+        {!isMobile && (
         <div
           style={{
             width: 1,
@@ -232,6 +269,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
             margin: "0 4px",
           }}
         />
+        )}
 
         <div
           style={{
@@ -258,6 +296,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
           >
             {initials}
           </div>
+          {!isMobile && (
           <div>
             <p
               style={{
@@ -283,6 +322,7 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
               {user?.email ?? "admin@uia.com"}
             </p>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -291,7 +331,16 @@ const TopBar = ({ activeTab, user, onOpenBroadcast }) => {
 
 // ── AdminLayout Content Wrapper ────────────────────────────────────────────────
 function AdminLayoutContent({ children, activeTab, onTabChange }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+  const [collapsedPref, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false); // sidebar dạng ngăn kéo trên mobile
+  const mainRef = useRef(null);
+  const collapsed = collapsedPref && !isMobile;
+
+  // Về desktop thì đóng ngăn kéo
+  useEffect(() => {
+    if (!isMobile) setDrawerOpen(false);
+  }, [isMobile]);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const user = authService.getCurrentUser();
   const toast = useToast();
@@ -306,9 +355,10 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
 
   return (
     <div
+      data-admin-shell=""
       style={{
         display: "flex",
-        height: "100vh",
+        height: "100dvh",
         background: T.bg,
         fontFamily: FONT,
         overflow: "hidden",
@@ -316,9 +366,34 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
     >
       <style>{ADMIN_GOOGLE_FONTS}</style>
 
+      {/* ── Backdrop của ngăn kéo (mobile) ── */}
+      <AnimatePresence>
+        {isMobile && drawerOpen && (
+          <motion.div
+            key="drawer-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setDrawerOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.3)",
+              backdropFilter: "blur(3px)",
+              zIndex: 399,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Sidebar ── */}
       <motion.aside
-        animate={{ width: collapsed ? 68 : 228 }}
+        initial={false}
+        animate={
+          isMobile
+            ? { x: drawerOpen ? 0 : "-100%", width: 264 }
+            : { x: 0, width: collapsed ? 68 : 228 }
+        }
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
         style={{
           flexShrink: 0,
@@ -330,6 +405,21 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           overflow: "hidden",
           zIndex: 50,
           boxShadow: T.shadow,
+          ...(isMobile
+            ? {
+                position: "fixed",
+                top: 0,
+                bottom: 0,
+                left: 0,
+                height: "auto",
+                zIndex: 400,
+                boxSizing: "border-box",
+                paddingTop: "var(--safe-top, 0px)",
+                paddingBottom: "var(--safe-bottom, 0px)",
+                pointerEvents: drawerOpen ? "auto" : "none",
+                boxShadow: drawerOpen ? "0 20px 60px rgba(0,0,0,0.18)" : "none",
+              }
+            : {}),
         }}
       >
         <div
@@ -414,7 +504,10 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
               item={item}
               active={activeTab === item.key}
               collapsed={collapsed}
-              onClick={() => onTabChange(item.key)}
+              onClick={() => {
+                onTabChange(item.key);
+                setDrawerOpen(false);
+              }}
             />
           ))}
         </nav>
@@ -457,6 +550,7 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
             <LogOut size={17} strokeWidth={1.7} />
             {!collapsed && <span>Đăng xuất</span>}
           </motion.button>
+          {!isMobile && (
           <button
             onClick={() => setCollapsed((v) => !v)}
             style={{
@@ -481,6 +575,7 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           >
             {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
+          )}
         </div>
       </motion.aside>
 
@@ -499,9 +594,28 @@ function AdminLayoutContent({ children, activeTab, onTabChange }) {
           activeTab={activeTab}
           user={user}
           onOpenBroadcast={() => setShowBroadcastModal(true)}
+          isMobile={isMobile}
+          onMenu={() => setDrawerOpen(true)}
         />
-        <main style={{ flex: 1, overflow: "auto", background: T.bg }}>
-          {children}
+        <main
+          ref={mainRef}
+          style={{ flex: 1, overflow: "auto", background: T.bg }}
+        >
+          {/* Chuyển trang: mờ dần trang cũ rồi trang mới hiện lên (giống SearchPage) */}
+          <AnimatePresence
+            mode="wait"
+            onExitComplete={() => mainRef.current?.scrollTo({ top: 0 })}
+          >
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ minHeight: "100%" }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 

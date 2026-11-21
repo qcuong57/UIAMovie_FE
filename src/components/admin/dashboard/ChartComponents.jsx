@@ -5,6 +5,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { T, FONT_BODY as FONT, FONT_TITLE } from "../../../context/adminTokens";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 
 export const AXIS_TICK = { fontFamily: FONT, fontSize: 11, fill: T.textMuted };
 
@@ -31,19 +32,25 @@ export const ChartTooltip = ({ active, payload, label }) => {
 
 // ── Thanh ngang (thể loại, trạng thái…) ───────────────────────────────────────
 // Nhãn đầy đủ nằm bên trái thay cho cột dọc bị cắt "Hành độ…"; chiều cao tự theo số hàng.
-export const HBarChart = ({ data, name = "Số lượng", labelWidth = 112, rowHeight = 28 }) => (
-  <ResponsiveContainer width="100%" height={Math.max(140, data.length * rowHeight + 16)}>
+export const HBarChart = ({ data, name = "Số lượng", labelWidth = 112, rowHeight = 28 }) => {
+  // Mobile: nhãn hẹp lại để chừa chỗ cho thanh; nhãn dài tự xuống 2 dòng nên hàng cao hơn một chút.
+  const isMobile = useIsMobile();
+  const lw = isMobile ? Math.min(labelWidth, 92) : labelWidth;
+  const rh = isMobile ? rowHeight + 6 : rowHeight;
+  return (
+  <ResponsiveContainer width="100%" height={Math.max(140, data.length * rh + 16)}>
     <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }} barCategoryGap="24%">
       <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false} />
       <XAxis type="number" tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
-      <YAxis type="category" dataKey="label" width={labelWidth} tick={AXIS_TICK} axisLine={false} tickLine={false} interval={0} />
+      <YAxis type="category" dataKey="label" width={lw} tick={AXIS_TICK} axisLine={false} tickLine={false} interval={0} />
       <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
       <Bar dataKey="value" name={name} radius={[0, 4, 4, 0]}>
         {data.map((d) => <Cell key={d.label} fill={d.color} fillOpacity={0.88} />)}
       </Bar>
     </BarChart>
   </ResponsiveContainer>
-);
+  );
+};
 
 // ── Donut + chú giải có phần trăm ─────────────────────────────────────────────
 export const GenreDonut = ({ slices }) => {

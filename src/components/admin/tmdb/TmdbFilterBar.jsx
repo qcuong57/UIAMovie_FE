@@ -59,7 +59,7 @@ const Label = ({ children }) => (
 
 const Chip = ({ active, onClick, children }) => (
   <button
-    type="button" onClick={onClick} aria-pressed={active}
+    type="button" data-tmdb-chip="" onClick={onClick} aria-pressed={active}
     style={{
       padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
       border: `1px solid ${active ? T.accent : T.border}`,
@@ -121,7 +121,7 @@ export default function TmdbFilterBar({ kind, filters, onChange, hasQuery }) {
         </button>
         {activeCount > 0 && (
           <button
-            type="button" onClick={() => onChange(EMPTY_FILTERS)}
+            type="button" data-tmdb-btn="" onClick={() => onChange(EMPTY_FILTERS)}
             style={{
               display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
               cursor: 'pointer', fontFamily: FONT, fontSize: 11, color: T.textMuted, padding: 0,
@@ -173,18 +173,18 @@ export default function TmdbFilterBar({ kind, filters, onChange, hasQuery }) {
           </div>
 
           {/* Năm + điểm + vote + sắp xếp */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <Label>Năm phát hành</Label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
-                  inputMode="numeric" placeholder="Từ" value={filters.yearFrom}
+                  data-tmdb-control="" inputMode="numeric" placeholder="Từ" value={filters.yearFrom}
                   onChange={(e) => patch({ yearFrom: digits(e.target.value) })}
                   style={{ ...controlStyle, width: '100%', minWidth: 0 }}
                 />
                 <span style={{ color: T.textMuted, fontSize: 11 }}>–</span>
                 <input
-                  inputMode="numeric" placeholder="Đến" value={filters.yearTo}
+                  data-tmdb-control="" inputMode="numeric" placeholder="Đến" value={filters.yearTo}
                   onChange={(e) => patch({ yearTo: digits(e.target.value) })}
                   style={{ ...controlStyle, width: '100%', minWidth: 0 }}
                 />
@@ -193,6 +193,7 @@ export default function TmdbFilterBar({ kind, filters, onChange, hasQuery }) {
             <div>
               <Label>Điểm TMDB</Label>
               <select
+                data-tmdb-control=""
                 value={filters.minRating} onChange={(e) => patch({ minRating: e.target.value })}
                 style={{ ...controlStyle, width: '100%' }}
               >
@@ -202,6 +203,7 @@ export default function TmdbFilterBar({ kind, filters, onChange, hasQuery }) {
             <div>
               <Label>Lượt vote</Label>
               <select
+                data-tmdb-control=""
                 value={filters.minVotes} onChange={(e) => patch({ minVotes: e.target.value })}
                 style={{ ...controlStyle, width: '100%' }}
               >
@@ -211,6 +213,7 @@ export default function TmdbFilterBar({ kind, filters, onChange, hasQuery }) {
             <div>
               <Label>Sắp xếp</Label>
               <select
+                data-tmdb-control=""
                 value={filters.sort} onChange={(e) => patch({ sort: e.target.value })}
                 disabled={hasQuery}
                 title={hasQuery ? 'Khi tìm theo tên, kết quả xếp theo độ liên quan' : undefined}

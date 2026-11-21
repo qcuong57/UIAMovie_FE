@@ -176,6 +176,7 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
           />
 
           <motion.div
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -185,6 +186,7 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
               inset: 0,
               margin: 'auto',
               width: 520,
+              maxWidth: '100%',
               height: 'fit-content',
               maxHeight: '90vh',
               zIndex: 300,
@@ -241,7 +243,7 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
             </div>
 
             {/* Form Body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div data-admin-modal-body="" style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <LightInput
                 label="Tiêu đề thông báo"
                 placeholder="VD: Thông báo bảo trì máy chủ, sự kiện..."
@@ -302,7 +304,7 @@ function AnnouncementModal({ open, onClose, onSaved, item = null }) {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <div data-admin-modal-foot="" style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button
                 onClick={onClose}
                 disabled={saving}

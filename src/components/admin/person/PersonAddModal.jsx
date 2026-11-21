@@ -97,6 +97,7 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
           {/* Modal */}
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -105,9 +106,9 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
               position: 'fixed',
               inset: 0,
               margin: 'auto',
-              width: 500,
+              width: 'min(500px, calc(100vw - 24px))',
               height: 'fit-content',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100dvh - 24px)',
               zIndex: 300,
               background: T.surface,
               borderRadius: 16,
@@ -235,7 +236,7 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label
                     style={{
@@ -523,7 +524,7 @@ export default function PersonAddModal({ open, onClose, onCreated }) {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label
                     style={{

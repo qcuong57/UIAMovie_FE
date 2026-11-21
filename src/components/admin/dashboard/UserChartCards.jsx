@@ -7,9 +7,12 @@ import { T, ACCENT2, ACCENT5, FONT_BODY as FONT } from "../../../context/adminTo
 import { AXIS_TICK, ChartTooltip } from "./ChartComponents";
 import { Card, Paginated } from "./Card";
 import { UserRow } from "./UserRow";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 
 // ── Tăng trưởng người dùng ────────────────────────────────────────────────────
-export const UserGrowthCard = ({ userGrowth, loading, error, onRetry }) => (
+export const UserGrowthCard = ({ userGrowth, loading, error, onRetry }) => {
+  const isMobile = useIsMobile();
+  return (
   <Card
     title="Tăng trưởng người dùng"
     subtitle="6 tháng gần nhất"
@@ -20,7 +23,7 @@ export const UserGrowthCard = ({ userGrowth, loading, error, onRetry }) => (
     isEmpty={!userGrowth.some((m) => m.cumulative > 0)}
     emptyText="Chưa có người dùng đăng ký"
   >
-    <ResponsiveContainer width="100%" height={240}>
+    <ResponsiveContainer width="100%" height={isMobile ? 200 : 240}>
       <AreaChart data={userGrowth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
@@ -42,7 +45,8 @@ export const UserGrowthCard = ({ userGrowth, loading, error, onRetry }) => (
       </AreaChart>
     </ResponsiveContainer>
   </Card>
-);
+  );
+};
 
 // ── Danh sách người dùng (mới đăng ký / hoạt động) ────────────────────────────
 export const UserListCard = ({ recentUsers, activeUsers, loading, error, onRetry }) => {

@@ -132,6 +132,7 @@ function SeasonCard({ season, onChange, onRemove, defaultOpen }) {
     <div style={{ borderRadius: 10, border: `1px solid ${T.border}`, overflow: 'hidden' }}>
       <div
         onClick={() => setOpen(o => !o)}
+        data-season-head=""
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: T.surfaceAlt, cursor: 'pointer' }}
       >
         {open ? <ChevronDown size={14} color={T.textMuted} /> : <ChevronRight size={14} color={T.textMuted} />}
@@ -400,6 +401,7 @@ function EditModalShell({ open, title, subtitle, onClose, error, saving, onSave,
           />
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -429,12 +431,12 @@ function EditModalShell({ open, title, subtitle, onClose, error, saving, onSave,
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div data-admin-modal-body="" style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {children}
               {error && <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.red, margin: 0 }}>{error}</p>}
             </div>
 
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <div data-tv-foot="" style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button
                 onClick={onClose}
                 style={{ padding: '8px 16px', borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub }}
@@ -778,7 +780,7 @@ export function EpisodeEditModal({ tvShowId, episode, onClose, onSaved }) {
       <ModalInput label="Tên tập" placeholder="Tên tập phim..." value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} />
       <ModalTextarea label="Mô tả" placeholder="Nội dung mô tả tập phim..." value={form.overview} onChange={v => setForm(f => ({ ...f, overview: v }))} rows={3} />
       <PosterField service={tvShowService} label="Ảnh still (thumbnail tập)" imageType="backdrop" value={form.stillUrl} onChange={v => setForm(f => ({ ...f, stillUrl: v }))} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <ModalInput label="Thời lượng (phút)" type="number" placeholder="VD: 45" value={form.runtime} onChange={v => setForm(f => ({ ...f, runtime: v }))} />
         <ModalInput label="Rating (0–10)" placeholder="VD: 8.2" value={form.rating} onChange={v => setForm(f => ({ ...f, rating: v }))} />
       </div>

@@ -48,7 +48,7 @@ export default function TmdbResultCard({ item, isMovie, job, imported, selected,
           {/* Poster + checkbox chọn nhiều */}
           <div style={{ width: 54, flexShrink: 0, background: T.bg, position: 'relative' }}>
             {!imported && !active && (
-              <label style={{
+              <label data-tmdb-check="" style={{
                 position: 'absolute', top: 4, left: 4, zIndex: 1, display: 'flex', cursor: 'pointer', padding: 3,
                 borderRadius: 5, background: 'rgba(255,255,255,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
               }}>
@@ -98,14 +98,14 @@ export default function TmdbResultCard({ item, isMovie, job, imported, selected,
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <button type="button" onClick={copyId} style={{ ...smallBtn, color: copied ? T.accentText : T.textMuted }}>
+              <button type="button" data-tmdb-btn="" onClick={copyId} style={{ ...smallBtn, color: copied ? T.accentText : T.textMuted }}>
                 {copied ? <Check size={9} color={T.accent} /> : <Copy size={9} />} #{item.id}
               </button>
-              <button type="button" onClick={() => setShowPreview(true)} style={smallBtn}>
+              <button type="button" data-tmdb-btn="" onClick={() => setShowPreview(true)} style={smallBtn}>
                 <Eye size={9} /> Xem trước
               </button>
               <button
-                type="button" disabled={imported || active} onClick={onImport}
+                type="button" data-tmdb-btn="" disabled={imported || active} onClick={onImport}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 6,
                   cursor: imported ? 'default' : active ? 'wait' : 'pointer',

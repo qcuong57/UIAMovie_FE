@@ -218,16 +218,16 @@ export function CastPickerField({ value = [], onChange }) {
       {value.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
           {value.map((c, i) => (
-            <div key={c.uid} style={{
+            <div key={c.uid} data-cast-row="" style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 10px', borderRadius: 9,
               background: T.surfaceAlt, border: `1px solid ${T.border}`,
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-                <button type="button" onClick={() => move(i, i - 1)} disabled={i === 0}
+                <button type="button" data-cast-move="" onClick={() => move(i, i - 1)} disabled={i === 0}
                   style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? T.border : T.textMuted, padding: 0, lineHeight: 0 }}
                   title="Lên">▲</button>
-                <button type="button" onClick={() => move(i, i + 1)} disabled={i === value.length - 1}
+                <button type="button" data-cast-move="" onClick={() => move(i, i + 1)} disabled={i === value.length - 1}
                   style={{ background: 'none', border: 'none', cursor: i === value.length - 1 ? 'default' : 'pointer', color: i === value.length - 1 ? T.border : T.textMuted, padding: 0, lineHeight: 0 }}
                   title="Xuống">▼</button>
               </div>
@@ -237,7 +237,7 @@ export function CastPickerField({ value = [], onChange }) {
                 : <div style={{ width: 30, height: 30, borderRadius: '50%', background: T.surface, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={13} color={T.textMuted} /></div>
               }
 
-              <div style={{ flex: '0 0 34%', minWidth: 0 }}>
+              <div data-cast-name="" style={{ flex: '0 0 34%', minWidth: 0 }}>
                 <p style={{ fontFamily: FONT, fontSize: 12.5, fontWeight: 600, color: T.text, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {c.name}
                 </p>
@@ -260,6 +260,7 @@ export function CastPickerField({ value = [], onChange }) {
 
               <button
                 type="button"
+                data-icon-btn=""
                 onClick={() => remove(c.uid)}
                 style={{ width: 26, height: 26, borderRadius: '50%', background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
               >
@@ -315,6 +316,7 @@ export function DirectorPickerField({ value, onChange }) {
           </div>
           <button
             type="button"
+            data-icon-btn=""
             onClick={() => onChange(null)}
             style={{ width: 26, height: 26, borderRadius: '50%', background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', color: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >

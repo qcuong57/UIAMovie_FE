@@ -322,7 +322,7 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled, onOpen
           <style>{`
             @keyframes spin { to { transform: rotate(360deg); } }
             .asm-grid { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); flex: 1; min-height: 0; }
-            @media (max-width: 900px) { .asm-grid { grid-template-columns: 1fr; overflow-y: auto; } .asm-pane { overflow: visible !important; } }
+            @media (max-width: 900px) { .asm-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; } .asm-pane { overflow: visible !important; min-height: auto !important; flex-shrink: 0; } .asm-pane { min-width: 0; } .asm-pane > * { flex-shrink: 0; min-width: 0; } }
           `}</style>
 
           <motion.div key="bd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={handleClose}
@@ -330,6 +330,7 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled, onOpen
 
           <motion.div
             key="modal"
+            data-admin-modal="" data-admin-modal-tall=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: 'spring', stiffness: 340, damping: 30 }}
             style={{
@@ -407,7 +408,7 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled, onOpen
                     <PositionPicker value={form.position} onChange={setF('position')} />
                   </Field>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMidRoll ? '1fr 1fr' : '1fr', gap: 12 }}>
+                  <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: isMidRoll ? '1fr 1fr' : '1fr', gap: 12 }}>
                     {isMidRoll && (
                       <Field label="Thời điểm (giây)" required hint={form.midRollOffsetSeconds !== '' && !isNaN(+form.midRollOffsetSeconds) ? `= ${fmtClock(+form.midRollOffsetSeconds)}` : 'từ đầu video'} error={errors.midRollOffsetSeconds}>
                         <LightInput type="number" min="0" value={form.midRollOffsetSeconds} onChange={setF('midRollOffsetSeconds')} placeholder="VD: 300" error={errors.midRollOffsetSeconds} />
@@ -446,7 +447,7 @@ export default function AdScheduleModal({ ad, open, onClose, onScheduled, onOpen
                   </Notice>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: T.text, margin: 0 }}>
                     Lịch đã gắn {slots ? `(${slots.length})` : ''}
                   </p>

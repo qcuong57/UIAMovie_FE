@@ -327,14 +327,14 @@ export default function AdEditModal({ ad, onClose, onSaved, onSchedule }) {
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
           />
 
-          <motion.div key="modal" role="dialog" aria-modal="true" aria-label="Chỉnh sửa quảng cáo"
+          <motion.div key="modal" data-admin-modal="" role="dialog" aria-modal="true" aria-label="Chỉnh sửa quảng cáo"
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: 'spring', stiffness: 340, damping: 30 }}
             style={{
               position: 'fixed', inset: 0, margin: 'auto',
-              width: 540, height: 'fit-content', maxHeight: '92vh',
+              width: 'min(540px, calc(100vw - 24px))', height: 'fit-content', maxHeight: '92vh',
               zIndex: 300, background: T.surface, borderRadius: 16,
               border: `1px solid ${T.border}`, boxShadow: T.shadowLg,
               display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden',
@@ -402,7 +402,7 @@ export default function AdEditModal({ ad, onClose, onSaved, onSchedule }) {
                 <LightInput value={form.title} onChange={setF('title')} placeholder="VD: Nike Summer 2025" error={errors.title} />
               </Field>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <Field label="Thời lượng (giây)" error={errors.durationSeconds}>
                   <LightInput type="number" value={form.durationSeconds} onChange={setF('durationSeconds')} placeholder="VD: 30" min="1" error={errors.durationSeconds} />
                 </Field>

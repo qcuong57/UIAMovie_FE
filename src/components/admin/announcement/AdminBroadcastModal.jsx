@@ -98,6 +98,7 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
   return (
     <AnimatePresence>
       <div
+        data-admin-overlay=""
         style={{
           position: "fixed",
           inset: 0,
@@ -124,6 +125,7 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
 
         {/* Modal Window */}
         <motion.div
+          data-ann-sheet=""
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -132,11 +134,12 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
             position: "relative",
             width: "100%",
             maxWidth: 540,
+            maxHeight: "92vh",
+            overflowY: "auto",
             background: T.surface,
             border: `1px solid ${T.border}`,
             borderRadius: 16,
             boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
-            overflow: "hidden",
             fontFamily: FONT,
             zIndex: 1,
           }}
@@ -207,7 +210,7 @@ export default function AdminBroadcastModal({ isOpen, onClose, onSuccess, editIt
           </div>
 
           {/* Form Content */}
-          <form onSubmit={handleSubmit} style={{ padding: "20px" }}>
+          <form onSubmit={handleSubmit} data-ann-form="" style={{ padding: "20px" }}>
             {error && (
               <div
                 style={{

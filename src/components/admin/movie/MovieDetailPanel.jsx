@@ -423,6 +423,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
 
       {/* Panel */}
       <motion.div
+        data-admin-panel=""
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
@@ -477,6 +478,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
               />
 
               <div
+                data-tvd-head=""
                 style={{
                   position: "relative",
                   padding: "20px 20px 16px",
@@ -509,7 +511,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
                     />
                   </div>
                 )}
-                <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <div data-tvd-info="" style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                   <p
                     style={{
                       fontFamily: FONT,
@@ -588,7 +590,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
                   </div>
                 </div>
                 {/* Actions */}
-                <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
+                <div data-tvd-actions="" style={{ display: "flex", gap: 7, flexShrink: 0 }}>
                   {onEdit && (
                     <button
                       onClick={() => onEdit(movie)}
@@ -611,6 +613,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
                     </button>
                   )}
                   <button
+                    data-tvd-close=""
                     onClick={onClose}
                     style={{
                       width: 32,
@@ -689,6 +692,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
           {/* Tabs */}
           {!loading && movie && (
             <div
+              data-tvd-tabs=""
               style={{
                 display: "flex",
                 borderBottom: `1px solid ${T.border}`,
@@ -722,6 +726,7 @@ export default function MovieDetailPanel({ movieId, onClose, onEdit }) {
 
         {/* Body */}
         <div
+          data-tvd-body=""
           style={{ flex: 1, overflowY: "auto", padding: 20, background: T.bg }}
         >
           {loading && (

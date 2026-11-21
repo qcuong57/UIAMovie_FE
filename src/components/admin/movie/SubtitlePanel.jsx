@@ -493,7 +493,7 @@ function UploadTab({ movieId, onRefresh }) {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div data-admin-grid2="" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <LangSelect
           label="Ngôn ngữ *"
           value={langCode}
@@ -723,7 +723,7 @@ function TranslateTab({ movieId, subtitles, onRefresh }) {
             </div>
           </div>
 
-          <div
+          <div data-admin-grid2=""
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
           >
             <LangSelect
@@ -900,7 +900,7 @@ function AiGenerateTab({ movieId, onRefresh }) {
         </p>
       </div>
 
-      <div
+      <div data-admin-grid2=""
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}
       >
         <LangSelect
@@ -1026,6 +1026,7 @@ function SubtitleRow({ subtitle, movieId }) {
     >
       {/* Row header */}
       <div
+        data-sub-row=""
         style={{
           display: "flex",
           alignItems: "center",
@@ -1163,6 +1164,7 @@ function SubtitleRow({ subtitle, movieId }) {
 
         {/* Actions — stop propagation để click nút không toggle expand */}
         <div
+          data-sub-actions=""
           style={{ display: "flex", gap: 6, flexShrink: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -1264,6 +1266,7 @@ function AddSubtitleForm({ movieId, subtitles, onRefresh }) {
           </div>
 
           <div
+            data-sub-modes=""
             style={{
               display: "flex",
               gap: 0,

@@ -390,6 +390,7 @@ export default function SubtitleEditorModal({ episodeId, subtitle, onClose, onSa
     <AnimatePresence>
       <motion.div
         key="overlay"
+        data-admin-overlay=""
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -406,6 +407,8 @@ export default function SubtitleEditorModal({ episodeId, subtitle, onClose, onSa
       >
         <motion.div
           key="dialog"
+          data-admin-modal=""
+          data-admin-modal-tall=""
           initial={{ opacity: 0, scale: 0.96, y: 12 }}
           animate={{ opacity: 1, scale: 1,    y: 0  }}
           exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -425,7 +428,7 @@ export default function SubtitleEditorModal({ episodeId, subtitle, onClose, onSa
           }}
         >
           {/* ── Modal Header ── */}
-          <div style={{
+          <div data-sub-head="" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '14px 20px',
             background: T.accentLight,
@@ -531,7 +534,7 @@ export default function SubtitleEditorModal({ episodeId, subtitle, onClose, onSa
 
           {/* ── Footer ── */}
           {!loading && (
-            <div style={{
+            <div data-sub-foot="" style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '12px 20px',
               borderTop: `1px solid ${T.border}`,

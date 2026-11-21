@@ -3,7 +3,7 @@ import React, { useState, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, Search, Eye, Pencil, Video, Crown, Plus,
+  AlertCircle, Search, Eye, Pencil, Video, Plus,
 } from 'lucide-react';
 import {
   useAdminMovies, useSetMoviePremium, usePendingPremiumIds, useRefreshMovies,
@@ -17,47 +17,15 @@ import MovieDeleteModal  from './movie/MovieDeleteModal';
 import MovieAddModal     from './movie/MovieAddModal';
 import VideoUploadPanel  from './movie/VideoUploadPanel';
 import AdminTmdbSearch   from './AdminTmdbSearch';
+import MobileMovieList   from './movie/MobileMovieList';
+import {
+  SpinnerLight, PremiumBadge, UpcomingBadge, PremiumToggle, ActionBtn,
+  COUNTRY_FLAG, fmtReleaseDate,
+} from './movie/movieAdminParts';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 
 const PAGE_SIZE = 15;
-const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
-
-// ── Spinner light ─────────────────────────────────────────────────────────────
-const SpinnerLight = () => (
-  <>
-    <div style={{ width: 26, height: 26, borderRadius: '50%', border: `2.5px solid ${T.accentLight}`, borderTopColor: T.accent, animation: 'spin 0.75s linear infinite', margin: '0 auto' }} />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-  </>
-);
-
-// ── Premium badge ─────────────────────────────────────────────────────────────
-const PremiumBadge = () => (
-  <span style={{
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    padding: '2px 7px', borderRadius: 5,
-    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-    fontSize: 10, fontWeight: 700, color: '#fff',
-    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
-    boxShadow: '0 1px 4px rgba(245,158,11,0.35)',
-  }}>
-    <Crown size={9} style={{ flexShrink: 0 }} /> PRO
-  </span>
-);
-
-// ── Badge "Sắp chiếu" (phim có ReleaseDate > hôm nay) ────────────────────────
-const UpcomingBadge = () => (
-  <span style={{
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    padding: '2px 7px', borderRadius: 5,
-    background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.35)',
-    fontSize: 10, fontWeight: 700, color: '#3B82F6',
-    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
-  }}>
-    SẮP CHIẾU
-  </span>
-);
-
-const fmtReleaseDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : null);
 
 // ── Table header ──────────────────────────────────────────────────────────────
 const Th = ({ children, sortKey, sortBy, sortDir, onSort, width }) => {
@@ -89,7 +57,7 @@ const GhostBtn = ({ onClick, children, accent }) => {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         fontFamily: FONT, fontSize: 13, fontWeight: accent ? 600 : 500,
         color: accent ? '#fff' : hov ? T.text : T.textSub,
         background: accent ? T.accent : hov ? T.surfaceHov : T.surface,
@@ -104,57 +72,17 @@ const GhostBtn = ({ onClick, children, accent }) => {
   );
 };
 
-// ── Premium toggle switch ─────────────────────────────────────────────────────
-function PremiumToggle({ isPremium, loading, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      title={isPremium ? 'Đang là Premium — bấm để chuyển về Free' : 'Đang là Free — bấm để đặt Premium'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '4px 10px', borderRadius: 20,
-        border: isPremium ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(0,0,0,0.1)',
-        background: isPremium
-          ? 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)'
-          : 'rgba(0,0,0,0.04)',
-        cursor: loading ? 'wait' : 'pointer',
-        fontFamily: FONT, fontSize: 11.5, fontWeight: 700,
-        color: isPremium ? '#92400E' : '#71717A',
-        transition: 'all 0.18s',
-        opacity: loading ? 0.6 : 1,
-        whiteSpace: 'nowrap',
-      }}
-      onMouseEnter={e => { if (!loading) e.currentTarget.style.filter = 'brightness(0.95)'; }}
-      onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; }}
-    >
-      {loading
-        ? <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
-        : <Crown size={11} style={{ flexShrink: 0 }} />
-      }
-      {isPremium ? 'Premium' : 'Free'}
-    </button>
-  );
-}
-
-// ── Action button helper ──────────────────────────────────────────────────────
-function ActionBtn({ children, color, bg, border, title, onClick }) {
-  return (
-    <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}
-      onClick={onClick} title={title}
-      style={{ width: 30, height: 30, borderRadius: 7, background: bg, border: `1px solid ${border}`, cursor: 'pointer', color, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'filter 0.15s' }}
-      onMouseEnter={e => e.currentTarget.style.filter = 'brightness(0.93)'}
-      onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}
-    >
-      {children}
-    </motion.button>
-  );
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════════════════════
+const SORT_OPTIONS = [
+  { key: 'releaseDate', label: 'Ngày phát hành' },
+  { key: 'rating',      label: 'Rating' },
+  { key: 'title',       label: 'Tên A–Z' },
+];
+
 export default function AdminMovies() {
+  const isMobile = useIsMobile();
   // Server state: TanStack Query (cache dùng chung với DetailPanel / EditModal)
   const { data: allMovies = [], isPending: loading, isFetching, refetch } = useAdminMovies();
   const refreshMovies = useRefreshMovies();
@@ -200,10 +128,13 @@ export default function AdminMovies() {
     togglePremium.mutate({ id: movie.id, isPremium: !movie.isPremium });
 
   return (
-    <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
+    <div
+      data-page=""
+      style={{ padding: isMobile ? '20px 16px 32px' : '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}
+    >
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? 18 : 24, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
             Quản lý
@@ -220,7 +151,7 @@ export default function AdminMovies() {
             </span>
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div data-admin-actions="" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <GhostBtn onClick={() => refetch()}>
             <RefreshCw size={14}/> {isFetching && !loading ? 'Đang tải...' : 'Tải lại'}
           </GhostBtn>
@@ -262,7 +193,46 @@ export default function AdminMovies() {
         )}
       </div>
 
-      {/* ── Table ── */}
+      {/* ── Sắp xếp (mobile: thay cho tiêu đề cột của bảng) ── */}
+      {isMobile && (
+        <div data-admin-chips="" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {SORT_OPTIONS.map(({ key, label }) => {
+            const active = sortBy === key;
+            return (
+              <button
+                key={key}
+                onClick={() => handleSort(key)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '7px 12px', borderRadius: 20, whiteSpace: 'nowrap',
+                  fontFamily: FONT, fontSize: 12, fontWeight: active ? 700 : 500,
+                  color: active ? T.accentText : T.textSub,
+                  background: active ? T.accentLight : T.surface,
+                  border: `1px solid ${active ? T.accent + '40' : T.border}`,
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+                {active && (sortDir === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Cards (mobile) / Table (desktop) ── */}
+      {isMobile ? (
+        <MobileMovieList
+          loading={loading}
+          movies={pageMovies}
+          pendingPremiumIds={pendingPremiumIds}
+          onTogglePremium={handleTogglePremium}
+          onUpload={(m) => setUploadMovie({ id: m.id, title: m.title })}
+          onDetail={(m) => setDetailId(m.id)}
+          onEdit={setEditMovie}
+          onDelete={setDeleteMovie}
+        />
+      ) : (
       <div style={{
         background: T.surface, border: `1px solid ${T.border}`,
         borderRadius: 16, overflow: 'hidden',
@@ -385,6 +355,7 @@ export default function AdminMovies() {
           </table>
         </div>
       </div>
+      )}
 
       <AdminPagination {...pagination.props} itemLabel="phim" />
 

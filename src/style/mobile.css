@@ -129,3 +129,724 @@ body {
     font-size: 12px !important;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN — responsive (< 768px)
+   Gắn data-attribute tương ứng vào component admin; dùng chung safe-area
+   và quy tắc font 16px (chặn Safari zoom) ở trên.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Stat chips: 3 ô đều nhau, xếp dọc icon / số ── */
+  [data-admin-stats] {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  [data-admin-stats] > div {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+    min-width: 0 !important;
+  }
+
+  /* ── Thanh lọc: search 1 hàng, 2 select chung 1 hàng ── */
+  [data-admin-filters] {
+    gap: 8px !important;
+  }
+
+  [data-admin-filters] > div {
+    min-width: 0 !important;
+  }
+
+  [data-admin-filters] > div:nth-child(1) {
+    flex: 1 1 100% !important;
+  }
+
+  [data-admin-filters] > div:nth-child(2) {
+    flex: 2 1 0 !important;
+  }
+
+  [data-admin-filters] > div:nth-child(3) {
+    flex: 3 1 0 !important;
+  }
+
+  [data-admin-filters] select {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 0 28px 0 12px !important;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Modal admin → bottom sheet ── */
+  [data-admin-modal] {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-height: 92dvh !important;
+    border-radius: 18px 18px 0 0 !important;
+    border-bottom: none !important;
+    padding-bottom: var(--safe-bottom);
+    box-sizing: border-box;
+  }
+
+  /* ── Xếp dọc các nút chọn (vd: chọn gói Premium) ── */
+  [data-admin-stack] {
+    flex-direction: column !important;
+  }
+
+  /* ── Panel chi tiết user: full màn hình ── */
+  [data-admin-panel] {
+    width: 100% !important;
+    max-width: 100vw !important;
+    border-left: none !important;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    box-sizing: border-box;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Diễn viên / Đạo diễn (< 768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Form 2 cột → 1 cột ── */
+  [data-admin-grid2] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Modal chi tiết person: thân gọn hơn, ảnh trên – thông tin dưới ── */
+  [data-person-body] {
+    padding: 16px !important;
+  }
+
+  [data-person-hero] {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+  }
+
+  [data-person-hero] > div:first-child {
+    width: min(55%, 180px) !important;
+  }
+
+  [data-person-hero] > div:last-child {
+    width: 100% !important;
+    flex: none !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Gói Premium / Doanh thu (< 768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Cụm nút ở header trang / header card: tự xuống hàng, nút giãn đều ── */
+  [data-admin-actions] {
+    width: 100% !important;
+  }
+
+  [data-admin-actions] > * {
+    flex: 1 1 auto !important;
+  }
+
+  /* ── Hàng chip lọc trạng thái: 1 hàng, vuốt ngang thay vì xuống nhiều dòng ── */
+  [data-admin-chips] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-admin-chips]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-admin-chips] > * {
+    flex-shrink: 0 !important;
+  }
+
+  /* ── Ô tìm kiếm full chiều ngang ── */
+  [data-admin-search] {
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  /* ── KPI: 2 cột, thẻ đầu (nổi bật) chiếm cả hàng ── */
+  [data-admin-kpis] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  [data-admin-kpis] > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  [data-admin-kpis] > * {
+    padding: 14px !important;
+    min-height: 0 !important;
+    gap: 10px !important;
+  }
+
+  [data-kpi-value] {
+    font-size: 19px !important;
+    overflow-wrap: anywhere;
+  }
+
+  [data-admin-kpis] > :first-child [data-kpi-value] {
+    font-size: 24px !important;
+  }
+
+  /* ── Lưới thẻ gói: 1 cột ── */
+  [data-plan-grid] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* ── Modal: nằm sát đáy màn hình (bottom sheet) ── */
+  [data-admin-overlay] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  [data-admin-modal-body] {
+    padding: 16px !important;
+  }
+
+  [data-admin-modal-foot] {
+    padding-bottom: calc(12px + var(--safe-bottom)) !important;
+  }
+
+  /* ── Xem trước gói: không sticky khi đã xếp dưới form ── */
+  [data-plan-preview] {
+    position: static !important;
+  }
+
+  /* ── Bộ lọc đơn hàng (Doanh thu): ô tìm kiếm 1 hàng, 2 select chung 1 hàng ── */
+  [data-rev-filters] > * {
+    flex: 1 1 calc(50% - 4px) !important;
+    min-width: 0 !important;
+  }
+
+  [data-rev-filters] > input {
+    flex-basis: 100% !important;
+  }
+
+  [data-rev-filters] select {
+    width: 100% !important;
+    min-width: 0 !important;
+    text-overflow: ellipsis;
+  }
+
+  [data-rev-dates] > label {
+    flex: 1 1 100% !important;
+    justify-content: space-between !important;
+  }
+
+  [data-rev-dates] input {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: 200px;
+  }
+
+  /* ── Tiêu đề card (chứa bộ chọn kỳ biểu đồ): bộ chọn chiếm cả hàng ── */
+  [data-admin-card-action] {
+    width: 100% !important;
+  }
+
+  [data-admin-card-action] select {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Thể loại / Đánh giá (< 768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Thể loại: ô tìm kiếm 1 hàng, nút Thêm 1 hàng ── */
+  [data-genre-tools] {
+    width: 100% !important;
+  }
+
+  [data-genre-tools] > div {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  [data-genre-tools] input {
+    width: 100% !important;
+  }
+
+  [data-genre-tools] > button {
+    flex: 1 1 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ── Nút icon sửa / xóa: vùng chạm 36px ── */
+  [data-icon-btn] {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  /* ── Đánh giá: ô chọn phim / tập / tìm kiếm full chiều ngang ── */
+  [data-review-field] {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* ── Dropdown chọn phim: full chiều ngang, bỏ khung poster lớn bên phải ── */
+  [data-dropdown-panel] {
+    width: 100% !important;
+  }
+
+  [data-poster-preview] {
+    display: none !important;
+  }
+}
+
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Thông báo & Lịch bảo trì (< 768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* Modal bottom sheet: bỏ giới hạn max-width inline, cho cuộn khi nội dung dài */
+  [data-admin-overlay] > [data-admin-modal] {
+    max-width: 100% !important;
+  }
+
+  /* Hộp xác nhận xóa / form phát thông báo (không dùng data-admin-modal) */
+  [data-ann-sheet] {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92dvh !important;
+    overflow-y: auto !important;
+    border-radius: 18px 18px 0 0 !important;
+    border-bottom: none !important;
+    padding-bottom: calc(20px + var(--safe-bottom)) !important;
+    box-sizing: border-box;
+  }
+
+  [data-ann-form] {
+    padding: 16px !important;
+  }
+
+  /* Nút hủy / xác nhận: chia đều 2 nút, dễ bấm */
+  [data-ann-actions] > button {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Quảng cáo (< 768px)
+   Dùng lại: data-page, data-admin-modal (bottom sheet), data-admin-panel,
+   data-admin-grid2, data-admin-actions, data-admin-chips ở trên.
+   Chỉ bổ sung: modal "cao" (Lịch phát / Cấu hình) có chiều cao cố định trên
+   desktop → trên mobile chiếm 92dvh để 2 cột xếp dọc và cuộn được.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  [data-admin-modal][data-admin-modal-tall] {
+    height: 92dvh !important;
+  }
+}
+
+/* ── Admin: bỏ phần đệm đáy 86px (dành cho bottom nav của trang người dùng) ── */
+@media (max-width: 768px) {
+  #root:has([data-admin-shell]) {
+    padding-bottom: 0 !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Import TMDB (< 768px)
+   Panel dùng data-admin-panel (full màn hình), modal xem trước dùng
+   data-admin-overlay + data-admin-modal (bottom sheet) ở trên.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  [data-tmdb-head] {
+    padding: 16px 16px 0 !important;
+  }
+
+  [data-tmdb-subtabs] {
+    padding-left: 12px !important;
+  }
+
+  [data-tmdb-body] {
+    padding: 14px !important;
+  }
+
+  /* Vùng chạm ≥ 34px cho nút nhỏ, chip, ô lọc */
+  [data-tmdb-btn] {
+    min-height: 34px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    font-size: 12px !important;
+    justify-content: center;
+  }
+
+  [data-tmdb-chip] {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
+  }
+
+  [data-tmdb-control] {
+    height: 40px !important;
+  }
+
+  [data-tmdb-check] {
+    padding: 6px !important;
+  }
+
+  [data-tmdb-check] input {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* Khay tiến trình: sát hai mép, tránh home indicator */
+  [data-tmdb-tray] {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(12px + var(--safe-bottom)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 120px) !important;
+  }
+
+  [data-tmdb-tray] button {
+    width: 28px !important;
+    height: 28px !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · TV Shows (< 768px)
+   Dùng lại: data-page, data-admin-stats, data-admin-filters, data-admin-actions,
+   data-admin-modal (bottom sheet), data-admin-modal-body, data-admin-grid2,
+   data-admin-panel (full màn hình), data-admin-overlay, data-icon-btn ở trên.
+   Chỉ bổ sung phần đặc thù của TV show.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Footer modal: 2 nút chia đều, vùng chạm 44px (safe-area đã do data-admin-modal lo) ── */
+  [data-tv-foot] {
+    padding: 12px 16px !important;
+  }
+
+  [data-tv-foot] > button {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+
+  /* ── Panel chi tiết: header xếp 2 hàng (poster + tên / cụm nút), nút đóng ghim góc phải ── */
+  [data-tvd-head] {
+    padding: 16px 14px 14px !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+
+  [data-tvd-info] {
+    padding-right: 40px;
+  }
+
+  [data-tvd-actions] {
+    flex: 1 1 100% !important;
+    order: 3;
+    gap: 8px !important;
+  }
+
+  [data-tvd-actions] > button:not([data-tvd-close]) {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    min-height: 40px;
+    justify-content: center !important;
+  }
+
+  [data-tvd-close] {
+    position: absolute !important;
+    top: 12px;
+    right: 12px;
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  /* Tab: 1 hàng, vuốt ngang */
+  [data-tvd-tabs] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    padding-left: 8px !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-tvd-tabs]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-tvd-tabs] > button {
+    flex-shrink: 0 !important;
+    white-space: nowrap;
+    padding: 12px 14px !important;
+  }
+
+  [data-tvd-body] {
+    padding: 14px 12px calc(14px + var(--safe-bottom)) !important;
+  }
+
+  /* Khung phụ đề trong từng tập: bớt đệm vì đã lồng nhiều lớp */
+  [data-tvd-sub] {
+    margin: 0 10px 10px !important;
+    padding: 10px !important;
+  }
+
+  /* ── Phụ đề ── */
+  [data-sub-row] {
+    flex-wrap: wrap !important;
+    padding: 10px 12px !important;
+  }
+
+  [data-sub-actions] {
+    flex: 1 1 100% !important;
+    justify-content: flex-end;
+  }
+
+  [data-sub-modes] > button {
+    gap: 4px !important;
+    padding: 12px 2px !important;
+    min-width: 0;
+    font-size: 11.5px !important;
+    white-space: nowrap;
+  }
+
+  /* Modal sửa phụ đề (bottom sheet cao): header / footer tự xuống hàng */
+  [data-sub-head] {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+  }
+
+  [data-sub-foot] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 12px 14px !important;
+  }
+
+  [data-sub-foot] > div:last-child {
+    flex: 1 1 100% !important;
+    justify-content: flex-end;
+  }
+
+  [data-sub-foot] > div:last-child > * {
+    flex: 1 1 auto;
+  }
+
+  /* ── Form: hàng season (số + tên) và hàng diễn viên (tên + vai) → tên/vai xuống dòng riêng ── */
+  [data-season-head] {
+    flex-wrap: wrap !important;
+  }
+
+  [data-season-head] > input:nth-of-type(2) {
+    order: 9;
+    flex: 1 1 100% !important;
+  }
+
+  [data-season-head] > span {
+    margin-left: auto;
+  }
+
+  [data-cast-row] {
+    flex-wrap: wrap !important;
+  }
+
+  [data-cast-row] > [data-cast-name] {
+    flex: 1 1 0 !important;
+  }
+
+  [data-cast-row] > input {
+    order: 9;
+    flex: 1 1 100% !important;
+    height: 40px !important;
+  }
+
+  [data-cast-move] {
+    padding: 6px 10px !important;
+    line-height: 1 !important;
+    font-size: 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Phim (< 768px)
+   Dùng lại: data-page, data-admin-actions, data-admin-chips, data-admin-modal
+   (bottom sheet), data-admin-modal-body, data-admin-grid2, data-admin-panel
+   (full màn hình), data-icon-btn, và bộ data-tvd-* / data-sub-* của TV Shows
+   cho panel chi tiết + phụ đề. Chỉ bổ sung footer modal phim.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Footer modal Thêm / Sửa / Xóa phim: 2 nút chia đều, vùng chạm 44px ── */
+  [data-movie-foot] {
+    padding: 12px 16px !important;
+  }
+
+  [data-movie-foot] > button {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+}
+
+/* ── ADMIN · Phim: modal sửa nội dung phụ đề (SubtitleContentEditor) ──
+   Dùng lại data-admin-overlay + data-admin-modal (bottom sheet), data-sub-head,
+   data-sub-foot, data-icon-btn. Chỉ giới hạn chiều cao vùng cuộn theo màn hình. */
+@media (max-width: 767px) {
+
+  [data-sub-cues] {
+    max-height: 50dvh !important;
+  }
+
+  [data-sub-raw] {
+    max-height: 45dvh !important;
+  }
+}
+
+/* ── ADMIN · Dùng chung: ConfirmDeleteModal + Toast ──
+   ConfirmDeleteModal dùng data-admin-overlay + data-admin-modal (bottom sheet),
+   data-admin-modal-body, data-ann-actions (2 nút chia đều 44px), data-icon-btn. */
+@media (max-width: 767px) {
+
+  /* Toast: trải ngang màn hình, tránh notch/status bar, nút đóng đủ vùng chạm */
+  [data-toast-viewport] {
+    top: calc(12px + var(--safe-top)) !important;
+    left: max(12px, var(--safe-left)) !important;
+    right: max(12px, var(--safe-right)) !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  [data-toast-close] {
+    width: 32px !important;
+    height: 32px !important;
+    margin: -6px -8px -6px 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN · Dashboard (< 768px)
+   Dùng lại: data-page (padding trang + safe-area), data-pagination (nút 36px),
+   data-kpi-value (cỡ số KPI). Chỉ bổ sung phần đặc thù của dashboard.
+   Các lưới .dg / .dash-stack khai báo trong DASHBOARD_LAYOUT_CSS (≥ 768px: 4→2 cột, 3→2→1).
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── Khoảng cách giữa các khối ── */
+  .dash-stack,
+  .dg {
+    gap: 12px !important;
+  }
+
+  /* ── Header dính đầu trang: gọn lại, tránh notch hai bên ── */
+  [data-dash-head] {
+    padding-left: max(16px, var(--safe-left)) !important;
+    padding-right: max(16px, var(--safe-right)) !important;
+  }
+
+  [data-dash-title] {
+    font-size: 19px !important;
+  }
+
+  /* Tab chính: vùng chạm 44px, vuốt ngang (dash-scroll-x) */
+  [data-dash-tab] {
+    min-height: 44px !important;
+    padding: 10px 12px 11px !important;
+  }
+
+  /* ── KPI: 2 cột đều nhau (4 thẻ → 2×2, không để thẻ lẻ một mình) ── */
+  [data-dash-kpis] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  [data-dash-kpis] > * {
+    padding: 12px !important;
+    min-height: 0 !important;
+    gap: 8px !important;
+  }
+
+  [data-dash-kpis] [data-kpi-value] {
+    font-size: 21px !important;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Thẻ: bớt đệm hai bên, tab trong thẻ đủ vùng chạm ── */
+  [data-dash-card-head] {
+    padding: 12px 14px 0 !important;
+  }
+
+  [data-dash-card-tabs] {
+    padding: 4px 14px 0 !important;
+  }
+
+  [data-dash-card-tabs] > button {
+    min-height: 40px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  [data-dash-card-body] {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* ── Bộ chọn khoảng thời gian / loại nội dung (tab Lượt xem): full chiều ngang ── */
+  [data-dash-filters] {
+    gap: 8px !important;
+  }
+
+  [data-dash-seg] {
+    display: flex !important;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+  }
+
+  [data-dash-seg]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-dash-seg] > button {
+    flex: 1 0 auto !important;
+    min-height: 36px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+/* Màn hình rất hẹp (iPhone SE…): KPI về 1 cột để số không bị cắt */
+@media (max-width: 359px) {
+  [data-dash-kpis] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

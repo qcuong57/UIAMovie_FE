@@ -207,6 +207,7 @@ export default function AdDetailPanel({ ad: initialAd, onClose, onEdit, onSchedu
       <style>{`@keyframes ad-spin { to { transform: rotate(360deg); } }`}</style>
 
       <motion.aside
+        data-admin-panel=""
         initial={{ x: "100%", opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: "100%", opacity: 0 }}

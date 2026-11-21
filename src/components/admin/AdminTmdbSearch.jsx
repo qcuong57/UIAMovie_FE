@@ -43,12 +43,12 @@ function BulkBar({ selectableCount, selectedCount, stats, onSelectAll, onClear, 
       display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 10px', margin: '4px 0 10px',
       borderRadius: 8, background: T.surface, border: `1px solid ${T.border}`,
     }}>
-      <button type="button" onClick={onSelectAll} disabled={selectableCount === 0} style={ghostBtn}>
+      <button type="button" data-tmdb-btn="" onClick={onSelectAll} disabled={selectableCount === 0} style={ghostBtn}>
         Chọn tất cả ({selectableCount})
       </button>
-      {selectedCount > 0 && <button type="button" onClick={onClear} style={ghostBtn}>Bỏ chọn</button>}
+      {selectedCount > 0 && <button type="button" data-tmdb-btn="" onClick={onClear} style={ghostBtn}>Bỏ chọn</button>}
       <button
-        type="button" onClick={onImport} disabled={selectedCount === 0}
+        type="button" data-tmdb-btn="" onClick={onImport} disabled={selectedCount === 0}
         style={{
           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 6,
           border: `1px solid ${T.accent}`, background: T.accent, fontFamily: FONT, fontSize: 11.5, fontWeight: 600,
@@ -198,11 +198,11 @@ function SearchTab({ kind }) {
 
           {(pageStack.length > 1 || nextPage) && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, gap: 8 }}>
-              <button type="button" disabled={pageStack.length <= 1} style={pagerBtn(pageStack.length <= 1)} onClick={() => goToPage((s) => s.slice(0, -1))}>
+              <button type="button" data-tmdb-btn="" disabled={pageStack.length <= 1} style={pagerBtn(pageStack.length <= 1)} onClick={() => goToPage((s) => s.slice(0, -1))}>
                 ← Trước
               </button>
               <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted }}>Trang {pageStack.length}</span>
-              <button type="button" disabled={!nextPage} style={pagerBtn(!nextPage)} onClick={() => goToPage((s) => [...s, nextPage])}>
+              <button type="button" data-tmdb-btn="" disabled={!nextPage} style={pagerBtn(!nextPage)} onClick={() => goToPage((s) => [...s, nextPage])}>
                 Sau →
               </button>
             </div>
@@ -326,7 +326,7 @@ function TabContent({ kind }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, flexShrink: 0, paddingLeft: 20 }}>
+      <div data-tmdb-subtabs="" style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, flexShrink: 0, paddingLeft: 20 }}>
         {SUB_TABS.map(({ key, label }) => (
           <button
             key={key} type="button" onClick={() => setSubTab(key)}
@@ -343,7 +343,7 @@ function TabContent({ kind }) {
       </div>
 
       {/* Cả hai tab luôn mounted (chỉ ẩn) để giữ từ khoá / bộ lọc khi chuyển qua lại */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.bg }}>
+      <div data-tmdb-body="" style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.bg }}>
         <div style={{ display: subTab === 'search' ? 'block' : 'none' }}><SearchTab kind={kind} /></div>
         <div style={{ display: subTab === 'id' ? 'block' : 'none' }}><IdTab kind={kind} /></div>
       </div>
@@ -368,6 +368,7 @@ export default function AdminTmdbSearch({ onClose, onImported, defaultTab = 'mov
 
   return (
     <motion.div
+      data-admin-panel=""
       initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
       style={{
@@ -376,7 +377,7 @@ export default function AdminTmdbSearch({ onClose, onImported, defaultTab = 'mov
         boxShadow: T.shadowLg ?? '0 20px 60px rgba(0,0,0,0.15)', fontFamily: FONT,
       }}
     >
-      <div style={{ padding: '20px 20px 0', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+      <div data-tmdb-head="" style={{ padding: '20px 20px 0', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <p style={{ fontFamily: FONT, fontSize: 10.5, color: T.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 4px', fontWeight: 600 }}>TMDB</p>

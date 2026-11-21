@@ -3,13 +3,16 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Download, Star, ChevronUp, ChevronDown,
-  AlertCircle, Search, Tv, Eye, Pencil, Crown, Plus,
+  AlertCircle, Search, Tv, Eye, Pencil, Crown, Plus, Unlock, Calendar,
 } from 'lucide-react';
 import AdminTmdbSearch from './AdminTmdbSearch';
 import TvShowDetailPanel from './tvshow/TvShowDetailPanel';
 import TvShowEditModal   from './tvshow/TvShowEditModal';
 import TvShowDeleteModal from './tvshow/TvShowDeleteModal';
 import TvShowAddModal    from './tvshow/TvShowAddModal';
+import MobileTvShowList  from './tvshow/MobileTvShowList';
+import { PremiumBadge, UpcomingBadge, PremiumToggle, COUNTRY_FLAG } from './tvshow/tvShowBadges';
+import { fmtDate } from '../../helper/format';
 import { T, FONT_BODY as FONT, FONT_TITLE } from '../../context/adminTokens';
 import AdminPagination from '../common/AdminPagination';
 import {
@@ -17,9 +20,9 @@ import {
 } from '../../hooks/admin/useAdminTvShows';
 import { useDebouncedValue } from '../../hooks/common/useDebouncedValue';
 import { usePageParam, usePagination } from '../../hooks/common/usePagination';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const PAGE_SIZE = 15;
-const COUNTRY_FLAG = { KR:'🇰🇷', US:'🇺🇸', JP:'🇯🇵', CN:'🇨🇳', VN:'🇻🇳', FR:'🇫🇷', GB:'🇬🇧', IN:'🇮🇳', TH:'🇹🇭' };
 
 // ── Spinner ───────────────────────────────────────────────────────────────────
 const SpinnerLight = () => (
@@ -28,69 +31,6 @@ const SpinnerLight = () => (
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </>
 );
-
-// ── Premium badge (hiển thị inline bên cạnh tên) ─────────────────────────────
-const PremiumBadge = () => (
-  <span style={{
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    padding: '2px 7px', borderRadius: 5,
-    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-    fontSize: 10, fontWeight: 700, color: '#fff',
-    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
-    boxShadow: '0 1px 4px rgba(245,158,11,0.35)',
-  }}>
-    <Crown size={9} style={{ flexShrink: 0 }} /> PRO
-  </span>
-);
-
-// ── Badge "Sắp chiếu" (show có FirstAirDate > hôm nay) ───────────────────────
-const UpcomingBadge = () => (
-  <span style={{
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    padding: '2px 7px', borderRadius: 5,
-    background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.35)',
-    fontSize: 10, fontWeight: 700, color: '#3B82F6',
-    fontFamily: FONT, letterSpacing: '0.04em', whiteSpace: 'nowrap',
-  }}>
-    SẮP CHIẾU
-  </span>
-);
-
-const fmtAirDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : null);
-
-// ── Premium toggle button ─────────────────────────────────────────────────────
-function PremiumToggle({ isPremium, loading, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      title={isPremium ? 'Đang là Premium — bấm để chuyển về Free' : 'Đang là Free — bấm để đặt Premium'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '4px 10px', borderRadius: 20,
-        border: isPremium ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(0,0,0,0.1)',
-        background: isPremium
-          ? 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)'
-          : 'rgba(0,0,0,0.04)',
-        cursor: loading ? 'wait' : 'pointer',
-        fontFamily: FONT,
-        fontSize: 11.5, fontWeight: 700,
-        color: isPremium ? '#92400E' : '#71717A',
-        transition: 'all 0.18s',
-        opacity: loading ? 0.6 : 1,
-        whiteSpace: 'nowrap',
-      }}
-      onMouseEnter={e => { if (!loading) e.currentTarget.style.filter = 'brightness(0.95)'; }}
-      onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; }}
-    >
-      {loading
-        ? <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
-        : <Crown size={11} style={{ flexShrink: 0 }} />
-      }
-      {isPremium ? 'Premium' : 'Free'}
-    </button>
-  );
-}
 
 // ── Table header ──────────────────────────────────────────────────────────────
 const Th = ({ children, sortKey, sortBy, sortDir, onSort, width }) => {
@@ -130,18 +70,20 @@ function ActionBtn({ children, color, bg, border, title, onClick }) {
 // ── Ghost Button (dùng cho Tải lại / Import — đồng bộ style AdminRevenue) ────
 const GhostBtn = ({ onClick, children, active, accent }) => {
   const [hov, setHov] = useState(false);
+  const isMobile = useIsMobile();
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        minHeight: isMobile ? 40 : undefined,
         fontFamily: FONT, fontSize: 13, fontWeight: (active || accent) ? 600 : 500,
         color: accent ? '#fff' : hov ? T.text : T.textSub,
         background: accent ? T.accent : hov ? T.surfaceHov : T.surface,
         border: `1px solid ${accent ? T.accent : hov ? T.borderMed : T.border}`,
-        borderRadius: 9, padding: '8px 16px',
+        borderRadius: 9, padding: isMobile ? '0 14px' : '8px 16px',
         cursor: 'pointer', outline: 'none',
         transition: 'all 0.13s',
         whiteSpace: 'nowrap',
@@ -194,16 +136,28 @@ export default function AdminTvShows() {
   const handleTogglePremium = (show) =>
     setPremium.mutate({ id: show.id, isPremium: !show.isPremium, title: show.title });
 
+  const isMobile = useIsMobile();
+
+  const premiumCount  = shows.filter(s => s.isPremium).length;
+  const upcomingCount = shows.filter(s => s.isUpcoming).length;
+  const SORT_OPTIONS = [
+    { v: 'firstairdate:desc', label: 'Mới phát sóng nhất' },
+    { v: 'firstairdate:asc',  label: 'Cũ nhất' },
+    { v: 'rating:desc',       label: 'Rating cao nhất' },
+    { v: 'rating:asc',        label: 'Rating thấp nhất' },
+  ];
+  const handleSortSelect = (v) => { const [k, d] = v.split(':'); setSortBy(k); setSortDir(d); };
+
   const isSearching  = debouncedSearch !== '';
   const showSkeleton = isPending;                       // chưa có dữ liệu nào
   const dimTable     = isFetching && isPlaceholderData; // đổi trang/bộ lọc: giữ dữ liệu cũ, làm mờ
 
   return (
-    <div style={{ padding: '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
+    <div data-page="" style={{ padding: isMobile ? '20px 16px 32px' : '28px 32px 56px', maxWidth: 1300, fontFamily: FONT }}>
 
       {/* ── Header — đồng bộ AdminRevenue ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
-        <div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: isMobile ? 18 : 24, gap: isMobile ? 12 : 16 }}>
+        <div style={{ flex: isMobile ? 1 : undefined, minWidth: 0 }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
             Quản lý
           </p>
@@ -219,10 +173,17 @@ export default function AdminTvShows() {
             </span>
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {isMobile && (
           <GhostBtn onClick={() => refetch()}>
-            <RefreshCw size={14} style={isFetching ? { animation: 'spin 0.75s linear infinite' } : undefined}/> Tải lại
+            <RefreshCw size={14} style={isFetching ? { animation: 'spin 0.75s linear infinite' } : undefined}/>
           </GhostBtn>
+        )}
+        <div data-admin-actions="" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {!isMobile && (
+            <GhostBtn onClick={() => refetch()}>
+              <RefreshCw size={14} style={isFetching ? { animation: 'spin 0.75s linear infinite' } : undefined}/> Tải lại
+            </GhostBtn>
+          )}
           <GhostBtn onClick={() => setShowAddModal(true)}>
             <Plus size={14}/> Thêm thủ công
           </GhostBtn>
@@ -232,12 +193,35 @@ export default function AdminTvShows() {
         </div>
       </div>
 
-      {/* ── Search bar — đồng bộ AdminRevenue ── */}
+      {/* ── Stat chips (số liệu của trang đang xem) ── */}
+      {!showSkeleton && total > 0 && (
+        <div data-admin-stats="" style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { icon: Crown,    label: 'Premium trên trang',   short: 'Premium', value: premiumCount,                  accent: T.gold },
+            { icon: Unlock,   label: 'Free trên trang',      short: 'Free',    value: shows.length - premiumCount,   accent: T.accent },
+            { icon: Calendar, label: 'Sắp chiếu trên trang', short: 'Sắp chiếu', value: upcomingCount,               accent: T.blue },
+          ].map(({ icon: Icon, label, short, value, accent }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 12, background: T.surface, border: `1px solid ${T.border}`, boxShadow: T.shadow }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: accent + '15', flexShrink: 0 }}>
+                <Icon size={14} color={accent} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: T.textMuted, marginBottom: 1 }}>{isMobile ? short : label}</p>
+                <p style={{ fontFamily: FONT_TITLE, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Bộ lọc: tìm kiếm (+ sắp xếp trên mobile) ── */}
+      <div data-admin-filters="" style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
       <div style={{
+        flex: 1, minWidth: isMobile ? 0 : 200,
         display: 'flex', alignItems: 'center', gap: 7,
         background: T.surface, border: `1px solid ${T.border}`,
-        borderRadius: 10, padding: '0 14px',
-        marginBottom: 20, height: 42,
+        borderRadius: 11, padding: '0 14px',
+        boxShadow: T.shadow, height: 42,
         transition: 'border-color 0.13s',
       }}
         onFocusCapture={e => e.currentTarget.style.borderColor = T.borderFocus}
@@ -261,7 +245,46 @@ export default function AdminTvShows() {
         )}
       </div>
 
-      {/* ── Table — đồng bộ AdminRevenue card style ── */}
+      {isMobile && (
+        <div style={{ position: 'relative' }}>
+          <select
+            value={`${sortBy}:${sortDir}`}
+            onChange={e => handleSortSelect(e.target.value)}
+            aria-label="Sắp xếp"
+            style={{
+              height: 42, padding: '0 34px 0 14px', borderRadius: 11,
+              background: T.surface, border: `1px solid ${T.border}`, color: T.text,
+              fontFamily: FONT, fontSize: 13.5, outline: 'none', cursor: 'pointer',
+              boxShadow: T.shadow, appearance: 'none',
+            }}
+          >
+            {SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2"
+            style={{ position: 'absolute', right: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      )}
+      </div>
+
+      {/* ── Mobile: danh sách card · Desktop: bảng ── */}
+      {isMobile ? (
+        <MobileTvShowList
+          shows={shows}
+          loading={showSkeleton}
+          isError={isError}
+          errorMessage={error?.response?.data?.message ?? error?.message ?? 'Không tải được danh sách TV show'}
+          onRetry={() => refetch()}
+          dim={dimTable}
+          isSearching={isSearching}
+          pendingIds={pendingIds}
+          onView={(s) => setDetailId(s.id)}
+          onEdit={(s) => setEditShow(s)}
+          onDelete={(s) => setDeleteShow(s)}
+          onTogglePremium={handleTogglePremium}
+        />
+      ) : (
       <div style={{
         background: T.surface, border: `1px solid ${T.border}`,
         borderRadius: 16, overflow: 'hidden',
@@ -347,8 +370,8 @@ export default function AdminTvShows() {
 
                   {/* Year */}
                   <td style={{ padding: '12px 16px', fontFamily: FONT, fontSize: 13, color: T.textSub }}>{s.year ?? '—'}
-                    {s.isUpcoming && fmtAirDate(s.firstAirDate) && (
-                      <div style={{ fontSize: 10.5, color: '#3B82F6', marginTop: 2 }}>{fmtAirDate(s.firstAirDate)}</div>
+                    {s.isUpcoming && s.firstAirDate && (
+                      <div style={{ fontSize: 10.5, color: '#3B82F6', marginTop: 2 }}>{fmtDate(s.firstAirDate)}</div>
                     )}
                   </td>
 
@@ -405,6 +428,7 @@ export default function AdminTvShows() {
           </table>
         </div>
       </div>
+      )}
 
       <AdminPagination {...pg.props} isFetching={isFetching} itemLabel="TV show" />
 

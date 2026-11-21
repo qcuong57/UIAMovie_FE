@@ -15,6 +15,7 @@ import { useGenres } from '../../hooks/home/useHomeQueries';
 import { useToast } from './common/Toast';
 import ConfirmDeleteModal, { InfoBox, WarnBox, IrreversibleNote } from './common/ConfirmDeleteModal';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 // ── Nhãn hiển thị (key do BE quyết định, FE chỉ đặt tên tiếng Việt; key lạ hiện nguyên key) ──
 const LAYOUT_INFO = {
@@ -253,8 +254,8 @@ const Poster = ({ src, w = 34 }) => (
   </div>
 );
 const IconBtn = ({ label, onClick, children }) => (
-  <button type="button" className="ahs-icon" aria-label={label} title={label} onClick={(e) => { e.stopPropagation(); onClick(); }}
-    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 7 }}>
+  <button type="button" data-icon-btn="" className="ahs-icon" aria-label={label} title={label} onClick={(e) => { e.stopPropagation(); onClick(); }}
+    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 7 }}>
     {children}
   </button>
 );
@@ -404,6 +405,7 @@ const formFromSection = (s) => ({
 });
 
 function SectionDrawer({ section, meta, onClose, onSaved }) {
+  const isMobile = useIsMobile();
   const toast = useToast();
   const saveM = useSaveHomeSection();
   const genresQ = useGenres();
@@ -492,7 +494,7 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
     }
   };
 
-  const colRow = (a, b) => <div style={{ display: 'flex', gap: 12 }}><div style={{ flex: 1 }}>{a}</div><div style={{ flex: 1 }}>{b}</div></div>;
+  const colRow = (a, b) => <div style={{ display: 'flex', gap: 12 }}><div style={{ flex: 1, minWidth: 0 }}>{a}</div><div style={{ flex: 1, minWidth: 0 }}>{b}</div></div>;
 
   return (
     <>
@@ -501,6 +503,7 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299 }}
       />
       <motion.aside
+        data-admin-panel=""
         initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
         transition={{ type: 'spring', damping: 30, stiffness: 320 }}
         role="dialog" aria-modal="true" aria-label={section ? 'Sửa bộ sưu tập' : 'Thêm bộ sưu tập'}
@@ -539,7 +542,7 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
 
           {/* 2. Bố trí */}
           <FormSection icon={LayoutGrid} title="Kiểu bố trí">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, marginBottom: 14 }}>
               {layouts.map((k) => {
                 const on = form.layout === k;
                 return (
@@ -690,7 +693,7 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
                   </Field>
                 )}
                 <div style={{ display: 'flex', gap: 12 }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <Field label="Loại nội dung">
                       <select value={form.autoContentType} onChange={(e) => set({ autoContentType: e.target.value })} style={inputStyle}>
                         {(meta?.autoContentTypes ?? Object.keys(AUTO_TYPE_INFO)).map((t) => <option key={t} value={t}>{AUTO_TYPE_INFO[t] ?? t}</option>)}
@@ -748,16 +751,16 @@ function SectionDrawer({ section, meta, onClose, onSaved }) {
         </div>
 
         {/* Footer cố định */}
-        <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 8, background: T.surface }}>
+        <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8, background: T.surface }}>
           {askDiscard ? (
             <>
-              <span style={{ flex: 1, fontFamily: FONT, fontSize: 13, fontWeight: 600, color: AMBER }}>Bỏ các thay đổi chưa lưu?</span>
+              <span style={{ flex: isMobile ? '1 1 100%' : 1, fontFamily: FONT, fontSize: 13, fontWeight: 600, color: AMBER }}>Bỏ các thay đổi chưa lưu?</span>
               <Btn onClick={() => setAskDiscard(false)}>Tiếp tục sửa</Btn>
               <Btn kind="danger" onClick={onClose}>Bỏ thay đổi</Btn>
             </>
           ) : (
             <>
-              <span style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: dirty ? AMBER : T.textMuted }}>{dirty ? '● Có thay đổi chưa lưu' : 'Chưa có thay đổi'}</span>
+              <span style={{ flex: isMobile ? '1 1 100%' : 1, fontFamily: FONT, fontSize: 12, color: dirty ? AMBER : T.textMuted }}>{dirty ? '● Có thay đổi chưa lưu' : 'Chưa có thay đổi'}</span>
               <Btn onClick={requestClose} disabled={saveM.isPending}>Hủy</Btn>
               <Btn kind="primary" onClick={submit} disabled={saveM.isPending}>
                 {saveM.isPending && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
@@ -829,6 +832,7 @@ function DeleteDialog({ section, onClose, onDeleted }) {
 // Một dòng bộ sưu tập (nội dung dùng chung cho chế độ kéo thả / chế độ lọc)
 // ═══════════════════════════════════════════════════════════════════════════════
 function RowBody({ s, dragHandle, onEdit, onDelete, onToggle }) {
+  const isMobile = useIsMobile();
   const st = statusOf(s);
   const isAuto = s.sourceType === 'Auto';
   const limit = LAYOUT_LIMIT[s.layout];
@@ -847,7 +851,7 @@ function RowBody({ s, dragHandle, onEdit, onDelete, onToggle }) {
       </div>
 
       <div role="button" tabIndex={0} className="ahs-focus" onClick={onEdit} onKeyDown={(e) => { if (e.key === 'Enter') onEdit(); }}
-        style={{ flex: '1 1 220px', minWidth: 0, cursor: 'pointer', borderRadius: 6 }}>
+        style={{ flex: isMobile ? '1 1 0' : '1 1 220px', minWidth: 0, cursor: 'pointer', borderRadius: 6 }}>
         <p style={{ margin: 0, fontFamily: FONT_TITLE, fontSize: 15, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</p>
         {s.subtitle && <p style={{ margin: '1px 0 0', fontFamily: FONT, fontSize: 12.5, color: T.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.subtitle}</p>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
@@ -869,7 +873,7 @@ function RowBody({ s, dragHandle, onEdit, onDelete, onToggle }) {
         </div>
       </div>
 
-      {posters.length > 0 && (
+      {!isMobile && posters.length > 0 && (
         <div aria-hidden style={{ display: 'flex', flexShrink: 0 }}>
           {posters.map((p, i) => (
             <div key={i} style={{ width: 26, height: 39, marginLeft: i ? -8 : 0, borderRadius: 4, overflow: 'hidden', border: `2px solid ${T.surface}`, background: T.surfaceAlt }}>
@@ -879,12 +883,17 @@ function RowBody({ s, dragHandle, onEdit, onDelete, onToggle }) {
         </div>
       )}
 
-      <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: st.color, background: st.color + '18', padding: '4px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>{st.label}</span>
+      {/* Mobile: trạng thái + thao tác xuống hàng riêng; desktop: display: contents nên giữ nguyên bố cục */}
+      <div style={isMobile
+        ? { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 10, borderTop: `1px solid ${T.border}` }
+        : { display: 'contents' }}>
+        <span style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: st.color, background: st.color + '18', padding: '4px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>{st.label}</span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <Switch checked={s.isActive} onChange={onToggle} label={s.isActive ? 'Tắt bộ sưu tập' : 'Bật bộ sưu tập'} />
-        <IconBtn label="Sửa" onClick={onEdit}><Pencil size={16} color={T.textSub} /></IconBtn>
-        <IconBtn label="Xóa" onClick={onDelete}><Trash2 size={16} color={T.red} /></IconBtn>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 4 }}>
+          <Switch checked={s.isActive} onChange={onToggle} label={s.isActive ? 'Tắt bộ sưu tập' : 'Bật bộ sưu tập'} />
+          <IconBtn label="Sửa" onClick={onEdit}><Pencil size={16} color={T.textSub} /></IconBtn>
+          <IconBtn label="Xóa" onClick={onDelete}><Trash2 size={16} color={T.red} /></IconBtn>
+        </div>
       </div>
     </div>
   );
@@ -927,6 +936,7 @@ const FILTERS = [
 ];
 
 export default function AdminHomeSections() {
+  const isMobile = useIsMobile();
   const toast = useToast();
   const listQ = useAdminHomeSections();
   const metaQ = useHomeSectionMeta();
@@ -1016,7 +1026,7 @@ export default function AdminHomeSections() {
   const rowProps = (s) => ({ s, onEdit: () => setEditing(s), onDelete: () => setDeleting(s), onToggle: (v) => toggle(s, v) });
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1040, margin: '0 auto' }}>
+    <div data-page="" style={{ padding: isMobile ? '20px 16px 32px' : '28px 32px', maxWidth: 1040, margin: '0 auto' }}>
       <style>{ADMIN_GOOGLE_FONTS}</style>
       <style>{ADMIN_CSS}</style>
 
@@ -1027,13 +1037,13 @@ export default function AdminHomeSections() {
             Gom phim thành các bộ sưu tập hiển thị trên trang chủ. Thứ tự từ trên xuống dưới là thứ tự trên trang chủ.
           </p>
         </div>
-        <Btn kind="primary" onClick={() => setEditing('new')}><Plus size={15} /> Thêm bộ sưu tập</Btn>
+        <Btn kind="primary" onClick={() => setEditing('new')} style={isMobile ? { width: '100%', justifyContent: 'center', minHeight: 40 } : undefined}><Plus size={15} /> Thêm bộ sưu tập</Btn>
       </div>
 
       {/* Bộ lọc + tìm kiếm */}
       {order.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-          <div role="tablist" aria-label="Lọc theo trạng thái" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+          <div role="tablist" aria-label="Lọc theo trạng thái" data-admin-chips="" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: isMobile ? '1 1 100%' : 1, minWidth: 0 }}>
             {FILTERS.map((f) => {
               const on = filter === f.key;
               return (
@@ -1047,7 +1057,7 @@ export default function AdminHomeSections() {
               );
             })}
           </div>
-          <div style={{ position: 'relative', width: 220 }}>
+          <div data-admin-search="" style={{ position: 'relative', width: isMobile ? '100%' : 220 }}>
             <Search size={14} color={T.textMuted} style={{ position: 'absolute', left: 11, top: 11 }} />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm bộ sưu tập…" aria-label="Tìm bộ sưu tập" style={{ ...inputStyle, paddingLeft: 32 }} />
           </div>

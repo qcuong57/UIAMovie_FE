@@ -10,6 +10,7 @@ import { usePagination } from '../../hooks/common/usePagination';
 import AdminPagination from '../../components/common/AdminPagination';
 import { useToast } from './common/Toast';
 import { T, FONT_BODY as FONT, FONT_TITLE, ADMIN_GOOGLE_FONTS } from '../../context/adminTokens';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const PAGE_SIZE = 12;
 
@@ -131,7 +132,7 @@ const StatChip = ({ icon: Icon, label, value, accent = T.accent }) => (
 // ── Tab button ────────────────────────────────────────────────────────────────
 const TabBtn = ({ active, onClick, icon: Icon, label, color }) => (
   <button onClick={onClick} style={{
-    display: 'flex', alignItems: 'center', gap: 7,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
     padding: '8px 18px', borderRadius: 10, cursor: 'pointer',
     fontFamily: FONT, fontSize: 13.5, fontWeight: active ? 700 : 500,
     border: active ? `1.5px solid ${color}22` : `1px solid ${T.border}`,
@@ -197,7 +198,7 @@ const SearchableDropdown = ({
   const posterUrl   = getPosterUrl(hoveredItem);
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', flex: '0 0 300px', zIndex: 50 }}>
+    <div ref={containerRef} data-review-field="" style={{ position: 'relative', flex: '0 0 300px', zIndex: 50 }}>
       {/* Trigger button */}
       <button
         type="button"
@@ -257,6 +258,7 @@ const SearchableDropdown = ({
             animate={{ opacity: 1, y: 0,  scale: 1 }}
             exit={{   opacity: 0, y: -6,  scale: 0.98 }}
             transition={{ duration: 0.14, ease: 'easeOut' }}
+            data-dropdown-panel=""
             style={{
               position: 'absolute', top: 'calc(100% + 6px)', left: 0,
               width: posterUrl ? 520 : 300,
@@ -400,6 +402,7 @@ const SearchableDropdown = ({
               {posterUrl && (
                 <motion.div
                   key={hoveredItem?.id ?? 'none'}
+                  data-poster-preview=""
                   initial={{ opacity: 0, x: 8 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 8 }}
@@ -456,6 +459,7 @@ const SearchableDropdown = ({
 // Hiển thị reply của 1 review: reply gốc + reply con (lồng 1 cấp), phân trang theo reply gốc.
 const ReplyPanel = ({ reviewId, accentColor }) => {
   const toast = useToast();
+  const isMobile = useIsMobile();
   const [page,      setPage]      = useState(1);
   const [delReply,  setDelReply]  = useState(null);
   const [deleting,  setDeleting]  = useState(false);
@@ -503,7 +507,7 @@ const ReplyPanel = ({ reviewId, accentColor }) => {
       padding: '10px 12px', borderRadius: 10,
       background: T.surface,
       border: `1px solid ${T.border}`,
-      marginLeft: isChild ? 28 : 0,
+      marginLeft: isChild ? (isMobile ? 14 : 28) : 0,
     }}>
       <div style={{ width: 26, height: 26, borderRadius: 8, background: accentColor + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <span style={{ fontFamily: FONT_TITLE, fontSize: 11, fontWeight: 700, color: accentColor }}>
@@ -546,7 +550,7 @@ const ReplyPanel = ({ reviewId, accentColor }) => {
   const childCount = delReply && !delReply.parentReplyId ? childrenOf(delReply.id).length : 0;
 
   return (
-    <div style={{ padding: '14px 18px 16px 62px', background: T.surfaceAlt, borderTop: `1px dashed ${T.border}` }}>
+    <div style={{ padding: isMobile ? '12px 12px 14px' : '14px 18px 16px 62px', background: T.surfaceAlt, borderTop: `1px dashed ${T.border}` }}>
       {loading ? (
         <p style={{ fontFamily: FONT, fontSize: 12.5, color: T.textMuted, margin: 0 }}>Đang tải trả lời…</p>
       ) : error ? (
@@ -587,7 +591,7 @@ const ReplyPanel = ({ reviewId, accentColor }) => {
               onClick={closeDel}
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }}
             />
-            <motion.div key="reply-modal"
+            <motion.div key="reply-modal" data-admin-modal=""
               initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
               transition={{ type: 'spring', stiffness: 340, damping: 30 }}
               style={{
@@ -651,9 +655,146 @@ const ReplyPanel = ({ reviewId, accentColor }) => {
   );
 };
 
+// ── Mobile: thanh chọn tất cả + sắp xếp (thay cho tiêu đề cột của bảng) ───────
+const MobileSortBar = ({ allSelected, someSelected, onToggleAll, sortKey, sortDir, onSortKey, onToggleDir, accentColor }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: `1px solid ${T.border}`, background: T.surfaceAlt }}>
+    <input
+      type="checkbox"
+      aria-label="Chọn tất cả đánh giá trong trang"
+      checked={allSelected}
+      ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+      onChange={onToggleAll}
+      style={{ accentColor, cursor: 'pointer', width: 18, height: 18, flexShrink: 0 }}
+    />
+    <select
+      aria-label="Sắp xếp theo"
+      value={sortKey}
+      onChange={e => onSortKey(e.target.value)}
+      style={{
+        flex: 1, minWidth: 0, height: 36, padding: '0 10px', borderRadius: 8,
+        background: T.surface, border: `1px solid ${T.border}`, color: T.text,
+        fontFamily: FONT, fontSize: 13, outline: 'none',
+      }}
+    >
+      <option value="date">Sắp xếp: Ngày</option>
+      <option value="rating">Sắp xếp: Điểm đánh giá</option>
+      <option value="replies">Sắp xếp: Lượt trả lời</option>
+      <option value="user">Sắp xếp: Người dùng</option>
+    </select>
+    <button
+      type="button"
+      onClick={onToggleDir}
+      aria-label={sortDir === 'asc' ? 'Đang tăng dần, bấm để giảm dần' : 'Đang giảm dần, bấm để tăng dần'}
+      style={{
+        width: 36, height: 36, borderRadius: 8, flexShrink: 0, cursor: 'pointer',
+        background: T.surface, border: `1px solid ${T.border}`, color: T.textSub,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {sortDir === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+    </button>
+  </div>
+);
+
+// ── Mobile: mỗi đánh giá là một thẻ (thay cho bảng 7 cột) ─────────────────────
+const MobileReviewList = ({ reviews, selected, onToggle, accentColor, expandedId, onToggleReplies, onDelete }) => (
+  <div style={{ display: 'flex', flexDirection: 'column' }}>
+    {reviews.map(r => {
+      const isSel = selected.has(r.id);
+      const open = expandedId === r.id;
+      const replyCount = r.replyCount ?? 0;
+      return (
+        <div key={r.id} style={{ borderBottom: `1px solid ${T.border}`, background: isSel ? accentColor + '0D' : 'transparent' }}>
+          <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="checkbox"
+                aria-label={`Chọn đánh giá của ${r.userName ?? 'người dùng'}`}
+                checked={isSel}
+                onChange={() => onToggle(r.id)}
+                style={{ accentColor, cursor: 'pointer', width: 18, height: 18, flexShrink: 0 }}
+              />
+              <div style={{
+                width: 30, height: 30, borderRadius: 9, background: accentColor + '18',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <span style={{ fontFamily: FONT_TITLE, fontSize: 12, fontWeight: 700, color: accentColor }}>
+                  {(r.userName ?? r.userId ?? '?')[0]?.toUpperCase()}
+                </span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.text, overflowWrap: 'anywhere' }}>
+                    {r.userName ?? r.userId?.slice(0, 8) ?? 'Ẩn danh'}
+                  </span>
+                  {r.isSpoiler && (
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: '#D97706', padding: '1px 6px', borderRadius: 4, border: '1px solid #FDE68A', background: '#FEF3C7' }}>
+                      Spoiler
+                    </span>
+                  )}
+                </div>
+                <span
+                  title={r.createdAt ? new Date(r.createdAt).toLocaleString('vi-VN') : undefined}
+                  style={{ fontFamily: FONT, fontSize: 11.5, color: T.textMuted }}
+                >
+                  {timeAgo(r.createdAt)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onDelete(r)}
+                aria-label="Xóa đánh giá"
+                style={{
+                  width: 36, height: 36, borderRadius: 9, flexShrink: 0, cursor: 'pointer',
+                  background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)', color: T.red,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            <StarRow rating={r.rating ?? 0} />
+
+            <p style={{
+              fontFamily: FONT, fontSize: 13, color: T.textSub, lineHeight: 1.55, margin: 0,
+              overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+              wordBreak: 'break-word',
+            }}>
+              {r.reviewText || <span style={{ color: T.textMuted, fontStyle: 'italic' }}>Không có nội dung</span>}
+            </p>
+
+            {replyCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onToggleReplies(r.id)}
+                aria-expanded={open}
+                style={{
+                  alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  background: open ? accentColor + '14' : T.surface,
+                  color: open ? accentColor : T.textSub,
+                  border: `1px solid ${open ? accentColor + '40' : T.border}`,
+                }}
+              >
+                <MessageCircle size={12} />
+                {replyCount} trả lời
+                {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+            )}
+          </div>
+          {open && <ReplyPanel reviewId={r.id} accentColor={accentColor} />}
+        </div>
+      );
+    })}
+  </div>
+);
+
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AdminReviews() {
   const toast = useToast();
+  const isMobile = useIsMobile();
   const [tab,       setTab]       = useState('movie');   // 'movie' | 'tvshow'
   const [selId,     setSelId]     = useState('');
   const [selEpId,   setSelEpId]   = useState('');        // '' = show-level, guid = episode cụ thể
@@ -783,7 +924,7 @@ export default function AdminReviews() {
   const selectedTitle = catalogue.find(c => c.id === selId)?.title ?? '';
 
   return (
-    <div style={{ padding: '28px 32px 64px', maxWidth: 1120, fontFamily: FONT }}>
+    <div data-page="" style={{ padding: isMobile ? '20px 16px 32px' : '28px 32px 64px', maxWidth: 1120, fontFamily: FONT }}>
       <style>{ADMIN_GOOGLE_FONTS}</style>
 
       {/* ── Page header ── */}
@@ -792,7 +933,7 @@ export default function AdminReviews() {
           <p style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 3, fontFamily: FONT, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Quản lý đánh giá · {tab === 'movie' ? 'Phim' : 'TV Show'}
           </p>
-          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 23, fontWeight: 700, color: T.text, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ fontFamily: FONT_TITLE, fontSize: 23, fontWeight: 700, color: T.text, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {selId ? selectedTitle : (tab === 'movie' ? 'Chọn phim để kiểm duyệt' : 'Chọn TV show để kiểm duyệt')}
             {selId && selEpId && (() => {
               const ep = episodes.find(e => e.id === selEpId);
@@ -806,7 +947,7 @@ export default function AdminReviews() {
         </div>
 
         {/* Tab switcher */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div data-admin-actions="" style={{ display: 'flex', gap: 8 }}>
           <TabBtn active={tab === 'movie'}  onClick={() => setTab('movie')}  icon={Film} label="Phim"    color={T.accent}   />
           <TabBtn active={tab === 'tvshow'} onClick={() => setTab('tvshow')} icon={Tv}   label="TV Show" color="#7C3AED"    />
         </div>
@@ -827,7 +968,7 @@ export default function AdminReviews() {
           {tab === 'tvshow' && selId && (
             <motion.div key="ep-select"
               initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
-              style={{ position: 'relative', flex: '0 0 260px' }}>
+              data-review-field="" style={{ position: 'relative', flex: '0 0 260px' }}>
               <select
                 value={selEpId}
                 onChange={e => { setSelEpId(e.target.value); setSearch(''); }}
@@ -863,7 +1004,7 @@ export default function AdminReviews() {
         <AnimatePresence>
           {selId && (
             <motion.div key="search" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
-              style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+              data-review-field="" style={{ flex: 1, minWidth: 200, position: 'relative' }}>
               <Search size={14} color={T.textMuted}
                 style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
               <input
@@ -888,7 +1029,7 @@ export default function AdminReviews() {
       <AnimatePresence>
         {selId && !loading && reviews.length > 0 && (
           <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+            data-admin-stats="" style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
             <StatChip icon={MessageSquare} label={selEpId ? 'Đánh giá tập này' : 'Tổng đánh giá'} value={totalRev}  accent={accentColor} />
             <StatChip icon={Star}          label="Điểm trung bình"                                  value={avgRating} accent={T.gold}      />
             {search.trim() && <StatChip icon={BarChart2} label="Khớp tìm kiếm" value={filtered.length} accent={accentColor} />}
@@ -925,7 +1066,23 @@ export default function AdminReviews() {
       )}
 
       {/* ── Loading skeleton ── */}
-      {loading && (
+      {loading && isMobile && (
+        <div style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[140, 90, '90%'].map((w, j) => (
+                <div key={j} style={{
+                  width: w, height: 13, borderRadius: 6,
+                  background: `linear-gradient(90deg, ${T.surfaceAlt} 25%, ${T.surfaceHov} 50%, ${T.surfaceAlt} 75%)`,
+                  backgroundSize: '400px 100%', animation: 'shimmer 1.4s infinite',
+                }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loading && !isMobile && (
         <div style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -949,7 +1106,7 @@ export default function AdminReviews() {
           style={{ background: T.surface, borderRadius: 16, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: 'hidden' }}>
           {selected.size > 0 && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: isMobile ? '10px 16px' : '10px 18px',
               background: accentColor + '12', borderBottom: `1px solid ${T.border}`,
             }}>
               <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.text }}>
@@ -980,6 +1137,28 @@ export default function AdminReviews() {
               <Search size={24} color={T.textMuted} style={{ margin: '0 auto 10px', opacity: 0.35 }} />
               <p style={{ fontFamily: FONT, fontSize: 13, color: T.textMuted }}>Không tìm thấy đánh giá nào</p>
             </div>
+          ) : isMobile ? (
+            <>
+              <MobileSortBar
+                allSelected={allPageSelected}
+                someSelected={somePageSelected}
+                onToggleAll={toggleAllPage}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSortKey={(k) => { setSortKey(k); setSortDir(k === 'user' ? 'asc' : 'desc'); }}
+                onToggleDir={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))}
+                accentColor={accentColor}
+              />
+              <MobileReviewList
+                reviews={pageReviews}
+                selected={selected}
+                onToggle={toggleOne}
+                accentColor={accentColor}
+                expandedId={expandedId}
+                onToggleReplies={(id) => setExpandedId(prev => (prev === id ? null : id))}
+                onDelete={(r) => { setDeleteReview(r); setDeleteId(r.id); setDeleteError(''); }}
+              />
+            </>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -1161,6 +1340,7 @@ export default function AdminReviews() {
             />
             <motion.div
               key="review-modal"
+              data-admin-modal=""
               initial={{ opacity: 0, scale: 0.97, y: 8 }}
               animate={{ opacity: 1, scale: 1,    y: 0 }}
               exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -1285,6 +1465,7 @@ export default function AdminReviews() {
             />
             <motion.div
               key="bulk-modal"
+              data-admin-modal=""
               role="dialog" aria-modal="true" aria-label="Xác nhận xóa nhiều đánh giá"
               initial={{ opacity: 0, scale: 0.97, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

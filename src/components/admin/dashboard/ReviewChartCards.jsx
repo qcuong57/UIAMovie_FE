@@ -9,11 +9,14 @@ import {
 import { AXIS_TICK, ChartTooltip, GenreDonut, StarDisplay } from "./ChartComponents";
 import { Card, Paginated } from "./Card";
 import { ReviewRow } from "./ReviewRow";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 
 const NEGATIVE = "#DC2626";
 
 // ── Xu hướng đánh giá ─────────────────────────────────────────────────────────
-export const ReviewTrendCard = ({ trend, loading, error, onRetry }) => (
+export const ReviewTrendCard = ({ trend, loading, error, onRetry }) => {
+  const isMobile = useIsMobile();
+  return (
   <Card
     title="Xu hướng đánh giá"
     subtitle="Phim và TV Show — 6 tháng gần nhất"
@@ -22,7 +25,7 @@ export const ReviewTrendCard = ({ trend, loading, error, onRetry }) => (
     onRetry={onRetry}
     skeletonRows={5}
   >
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={isMobile ? 190 : 220}>
       <LineChart data={trend} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
         <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
@@ -34,7 +37,8 @@ export const ReviewTrendCard = ({ trend, loading, error, onRetry }) => (
       </LineChart>
     </ResponsiveContainer>
   </Card>
-);
+  );
+};
 
 // ── Phân bố số sao ────────────────────────────────────────────────────────────
 const SENTIMENT_SUMMARY = (ratio) =>

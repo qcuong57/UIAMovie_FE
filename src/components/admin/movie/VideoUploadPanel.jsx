@@ -628,6 +628,7 @@ export default function VideoUploadPanel({
 
   return (
     <motion.div
+      data-admin-panel=""
       initial={{ x: "100%", opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0 }}
@@ -658,7 +659,7 @@ export default function VideoUploadPanel({
           justifyContent: "space-between",
         }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <p
             style={{
               fontFamily: FONT,
@@ -680,7 +681,7 @@ export default function VideoUploadPanel({
               color: T.text,
               margin: 0,
               letterSpacing: "-0.01em",
-              maxWidth: 320,
+              maxWidth: "100%",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -711,6 +712,7 @@ export default function VideoUploadPanel({
 
       {/* Body */}
       <div
+        data-tvd-body=""
         style={{ flex: 1, overflowY: "auto", padding: 20, background: T.bg }}
       >
         <VideoList movieId={movieId} videos={initialVideos} />

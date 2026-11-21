@@ -18,6 +18,7 @@ import {
   FONT_TITLE,
   ADMIN_GOOGLE_FONTS,
 } from "../../context/adminTokens";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ const DESC_MAX = 500;
 
 const CSS = `
   @keyframes gn-spin { to { transform: rotate(360deg); } }
-  .gn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .gn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; }
   .gn-card { transition: box-shadow 0.15s; }
   .gn-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09) !important; }
   .gn-icon-btn { transition: all 0.15s; }
@@ -200,6 +201,7 @@ function Modal({ title, onClose, onSubmit, busy, footer, children }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={() => !busy && onClose()}
+      data-admin-overlay=""
       style={{
         position: "fixed",
         inset: 0,
@@ -216,6 +218,7 @@ function Modal({ title, onClose, onSubmit, busy, footer, children }) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        data-admin-modal=""
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
@@ -296,9 +299,10 @@ function Modal({ title, onClose, onSubmit, busy, footer, children }) {
           </button>
         </header>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>{children}</div>
+        <div data-admin-modal-body="" style={{ flex: 1, overflowY: "auto", padding: 20 }}>{children}</div>
 
         <footer
+          data-admin-modal-foot=""
           style={{
             padding: "14px 20px",
             borderTop: `1px solid ${T.border}`,
@@ -543,6 +547,7 @@ const GenreCard = memo(function GenreCard({ genre, index, onEdit, onDelete }) {
           <button
             type="button"
             className="gn-icon-btn"
+            data-icon-btn=""
             style={iconBtn}
             aria-label={`Sửa ${genre.name}`}
             onClick={() => onEdit(genre)}
@@ -552,6 +557,7 @@ const GenreCard = memo(function GenreCard({ genre, index, onEdit, onDelete }) {
           <button
             type="button"
             className="gn-icon-btn danger"
+            data-icon-btn=""
             style={{
               ...iconBtn,
               background: "#FEF2F2",
@@ -575,6 +581,7 @@ export default function AdminGenres() {
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+  const isMobile = useIsMobile();
 
   const genresQ = useAdminGenres();
   const { save, remove } = useGenreMutations();
@@ -640,7 +647,10 @@ export default function AdminGenres() {
   };
 
   return (
-    <div style={{ padding: "28px 32px 56px", maxWidth: 1100, fontFamily: FONT }}>
+    <div
+      data-page=""
+      style={{ padding: isMobile ? "20px 16px 32px" : "28px 32px 56px", maxWidth: 1100, fontFamily: FONT }}
+    >
       <style>{ADMIN_GOOGLE_FONTS}</style>
       <style>{CSS}</style>
 
@@ -689,7 +699,10 @@ export default function AdminGenres() {
           </h2>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div
+          data-genre-tools=""
+          style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
+        >
           <div style={{ position: "relative" }}>
             <Search
               size={14}

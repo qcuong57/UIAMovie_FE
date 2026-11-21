@@ -235,11 +235,12 @@ export default function AdScheduleSettingsModal({ open, onClose, onSaved }) {
           <style>{`
             @keyframes spin { to { transform: rotate(360deg); } }
             .ass-grid { display: grid; grid-template-columns: minmax(360px, 500px) minmax(0, 1fr); flex: 1; min-height: 0; }
-            @media (max-width: 900px) { .ass-grid { grid-template-columns: 1fr; overflow-y: auto; } .ass-pane { overflow: visible !important; } }
+            @media (max-width: 900px) { .ass-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; } .ass-pane { overflow: visible !important; min-height: auto !important; flex-shrink: 0; } .ass-pane { min-width: 0; } .ass-pane > * { flex-shrink: 0; min-width: 0; } }
           `}</style>
           <motion.div key="bd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 299, backdropFilter: 'blur(3px)' }} />
           <motion.div key="modal"
+            data-admin-modal="" data-admin-modal-tall=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: 'spring', stiffness: 340, damping: 30 }}
             style={{
@@ -300,7 +301,7 @@ export default function AdScheduleSettingsModal({ open, onClose, onSaved }) {
                       </Section>
 
                       <Section title="Quảng cáo giữa video (mid-roll)" desc="Chia theo % thời lượng THỰC của từng video: video 2 phút hay 2 tiếng đều được chia cùng tỉ lệ.">
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                           <Field label="Cứ mỗi (% thời lượng)" error={errors.intervalPct}><LightInput type="number" min="0" value={form.intervalPct} onChange={set('intervalPct')} error={errors.intervalPct} /></Field>
                           <Field label="Lệch ngẫu nhiên ± (%)" error={errors.jitterPct}><LightInput type="number" min="0" value={form.jitterPct} onChange={set('jitterPct')} error={errors.jitterPct} /></Field>
                           <Field label="Cách nhau tối thiểu (% thời lượng)" error={errors.minGap}><LightInput type="number" min="0" value={form.minGap} onChange={set('minGap')} error={errors.minGap} /></Field>
@@ -341,7 +342,7 @@ export default function AdScheduleSettingsModal({ open, onClose, onSaved }) {
                   </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) auto', gap: 10, alignItems: 'end' }}>
+                <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) auto', gap: 10, alignItems: 'end' }}>
                   <Field label="Hình thức" hint={scopeDesc(pvScope)}>
                     <LightSelect value={pvScope} onChange={setPvScope}>
                       {PREVIEW_SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}

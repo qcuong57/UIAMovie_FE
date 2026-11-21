@@ -26,6 +26,7 @@ import {
   useViewTop,
 } from "../../../hooks/admin/useAdminDashboard";
 import { nf } from "../../../helper/dashboardStats";
+import { useIsMobile } from "../../../hooks/common/useIsMobile";
 import { AXIS_TICK, ChartTooltip, HBarChart } from "./ChartComponents";
 import { Segmented } from "./DashboardPrimitives";
 import { Card } from "./Card";
@@ -54,6 +55,7 @@ export const ViewTrendCard = ({
   onRetry,
   fetching,
 }) => {
+  const isMobile = useIsMobile();
   const dot = (color) => (points.length > 40 ? false : { r: 3, fill: color });
   return (
     <Card
@@ -67,7 +69,7 @@ export const ViewTrendCard = ({
       // Đang tải khoảng mới: giữ biểu đồ cũ nhưng mờ đi để người dùng biết dữ liệu chưa mới
       style={{ opacity: fetching ? 0.6 : 1, transition: "opacity .15s" }}
     >
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={isMobile ? 210 : 260}>
         <LineChart
           data={points}
           margin={{ top: 8, right: 4, left: -16, bottom: 0 }}
@@ -92,8 +94,10 @@ export const ViewTrendCard = ({
             tickLine={false}
             allowDecimals={false}
           />
+          {/* Mobile: ẩn trục phải (đường giờ xem vẫn vẽ, tooltip vẫn đọc được) để dành chỗ cho biểu đồ */}
           <YAxis
             yAxisId="right"
+            hide={isMobile}
             orientation="right"
             tick={AXIS_TICK}
             axisLine={false}
@@ -327,6 +331,7 @@ export const ViewStatsSection = () => {
   return (
     <div className="dash-stack">
       <div
+        data-dash-filters=""
         style={{
           display: "flex",
           flexWrap: "wrap",

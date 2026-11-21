@@ -329,6 +329,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
           />
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -360,7 +361,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
             </div>
 
             {/* Body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div data-admin-modal-body="" style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               {/* Poster preview */}
               {movie?.posterUrl && (
@@ -426,7 +427,7 @@ export default function MovieEditModal({ movie, onClose, onSaved }) {
             )}
 
             {/* Footer */}
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <div data-movie-foot="" style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button
                 onClick={onClose}
                 style={{ padding: '8px 16px', borderRadius: 8, background: T.surfaceAlt, border: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: T.textSub }}

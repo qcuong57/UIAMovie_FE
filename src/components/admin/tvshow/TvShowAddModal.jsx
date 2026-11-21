@@ -101,7 +101,7 @@ function LightTextarea({ label, value, onChange, placeholder, rows = 4 }) {
 
 /** Ô 2 cột dùng cho các field ngắn (năm/rating/quốc gia...) */
 function Row({ children }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
+  return <div data-admin-grid2="" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
 }
 
 function LightSelect({ label, value, onChange, options }) {
@@ -305,6 +305,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
           />
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1,    y: 0 }}
             exit={{   opacity: 0, scale: 0.97, y: 8 }}
@@ -339,7 +340,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
             </div>
 
             {/* Body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div data-admin-modal-body="" style={{ flex: 1, overflowY: 'auto', padding: 20, background: T.surface, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               <LightInput label="Tên TV show" placeholder="Tên TV show..." value={form.title} onChange={set('title')} error={/tên|Tên/i.test(error) ? error : ''} />
               <LightTextarea label="Mô tả" placeholder="Nội dung mô tả TV show..." value={form.description} onChange={set('description')} rows={3} />
@@ -399,7 +400,7 @@ export default function TvShowAddModal({ open, onClose, onCreated }) {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <div data-tv-foot="" style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, background: T.surface, display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button
                 onClick={resetAndClose}
                 disabled={saving}

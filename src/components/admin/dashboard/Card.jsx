@@ -27,7 +27,7 @@ export const Card = ({
       }}
     >
       {(title || action) && (
-        <header style={{
+        <header data-dash-card-head="" style={{
           display: "flex", alignItems: "flex-start", justifyContent: "space-between",
           gap: 12, padding: "14px 20px 0",
         }}>
@@ -52,6 +52,7 @@ export const Card = ({
         <div
           role="tablist"
           className="dash-scroll-x"
+          data-dash-card-tabs=""
           style={{ display: "flex", padding: "6px 20px 0", borderBottom: `1px solid ${T.border}` }}
         >
           {tabs.map((tab) => {
@@ -90,7 +91,7 @@ export const Card = ({
         </div>
       )}
 
-      <div role={tabs ? "tabpanel" : undefined} style={{ padding: tabs ? "6px 20px 14px" : "14px 20px 18px", flex: 1 }}>
+      <div role={tabs ? "tabpanel" : undefined} data-dash-card-body="" style={{ padding: tabs ? "6px 20px 14px" : "14px 20px 18px", flex: 1 }}>
         {body}
       </div>
     </section>
@@ -118,6 +119,7 @@ export const Paginated = ({ items, pageSize = 6, renderItem, emptyText }) => {
       {pages > 1 && (
         <nav
           aria-label="Phân trang"
+          data-pagination=""
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12 }}
         >
           <span style={{ fontFamily: FONT, fontSize: 12, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>

@@ -75,7 +75,7 @@ const MetaRow = ({ icon: Icon, label, value, accent }) =>
           fontFamily: FONT,
           fontSize: 12,
           color: T.textMuted,
-          minWidth: 110,
+          minWidth: 96,
           flexShrink: 0,
         }}
       >
@@ -88,6 +88,9 @@ const MetaRow = ({ icon: Icon, label, value, accent }) =>
           color: T.text,
           lineHeight: 1.4,
           fontWeight: 500,
+          minWidth: 0,
+          flex: 1,
+          overflowWrap: "anywhere",
         }}
       >
         {value}
@@ -122,6 +125,7 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
 
       {/* Panel */}
       <motion.div
+        data-admin-panel=""
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
@@ -131,7 +135,7 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
           top: 0,
           right: 0,
           bottom: 0,
-          width: 460,
+          width: "min(460px, 100vw)",
           zIndex: 200,
           background: T.surface,
           borderLeft: `1px solid ${T.border}`,
@@ -306,7 +310,14 @@ export default function UserDetailPanel({ userId, onClose, onEdit }) {
                     {rStyle.label}
                   </span>
                 </div>
-                <p style={{ fontFamily: FONT, fontSize: 13, color: T.textSub }}>
+                <p
+                  style={{
+                    fontFamily: FONT,
+                    fontSize: 13,
+                    color: T.textSub,
+                    overflowWrap: "anywhere",
+                  }}
+                >
                   {user.email}
                 </p>
               </div>

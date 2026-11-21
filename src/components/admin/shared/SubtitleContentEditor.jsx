@@ -392,7 +392,7 @@ function CueEditor({ cues, onChange }) {
     );
   }
   return (
-    <div style={{ maxHeight: 420, overflowY: "auto", padding: "8px 0" }}>
+    <div data-sub-cues="" style={{ maxHeight: 420, overflowY: "auto", padding: "8px 0" }}>
       {cues.map((cue, idx) => (
         <CueRow
           key={idx}
@@ -421,6 +421,7 @@ function RawEditor({ value, onChange }) {
     <div style={{ padding: "12px 14px" }}>
       <textarea
         ref={ref}
+        data-sub-raw=""
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
@@ -497,6 +498,7 @@ export function SubtitleEditorModal({
       {open && (
         <motion.div
           key="modal-backdrop"
+          data-admin-overlay=""
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -516,6 +518,7 @@ export function SubtitleEditorModal({
         >
           <motion.div
             key="modal-panel"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -644,6 +647,7 @@ export default function SubtitleContentEditor({
     >
       {/* Header */}
       <div
+        data-sub-head=""
         style={{
           display: "flex",
           alignItems: "center",
@@ -653,7 +657,7 @@ export default function SubtitleContentEditor({
           borderBottom: `1px solid ${T.accent}20`,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
           <Pencil size={13} color={T.accent} />
           <span
             style={{
@@ -730,13 +734,17 @@ export default function SubtitleContentEditor({
           </div>
 
           <button
+            data-icon-btn=""
             onClick={onClose}
+            aria-label="Đóng"
             style={{
               background: "none",
               border: "none",
               cursor: "pointer",
               color: T.textMuted,
               display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               padding: 4,
             }}
           >
@@ -776,6 +784,7 @@ export default function SubtitleContentEditor({
       {/* Footer */}
       {!loading && !error && (
         <div
+          data-sub-foot=""
           style={{
             display: "flex",
             alignItems: "center",

@@ -17,7 +17,7 @@ export const DASHBOARD_LAYOUT_CSS = `
 @media (max-width:1280px){.dg--3{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:1100px){.dg--4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:900px){.dg--2-1,.dg--3-2,.dg--3{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:560px){.dg--4{grid-template-columns:minmax(0,1fr)}}
+/* < 768px: KPI / gap / padding thẻ → mobile.css (khối "ADMIN · Dashboard") */
 .dash-focus:focus-visible{outline:2px solid ${ACCENT};outline-offset:2px}
 .dash-scroll-x{overflow-x:auto;scrollbar-width:none}
 .dash-scroll-x::-webkit-scrollbar{display:none}
@@ -109,6 +109,7 @@ export const Segmented = ({ options, value, onChange, label }) => (
   <div
     role="radiogroup"
     aria-label={label}
+    data-dash-seg=""
     style={{
       display: "inline-flex", gap: 2, padding: 3, borderRadius: 10,
       background: T.bgSub ?? T.bg, border: `1px solid ${T.border}`,

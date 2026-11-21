@@ -155,6 +155,7 @@ export function useToast() {
 function ToastViewport({ toasts, onDismiss }) {
   return (
     <div
+      data-toast-viewport=""
       style={{
         position: 'fixed',
         top: 20,
@@ -229,7 +230,9 @@ function ToastItem({ toast, onDismiss }) {
       </div>
 
       <button
+        data-toast-close=""
         onClick={onDismiss}
+        aria-label="Đóng thông báo"
         style={{
           flexShrink: 0,
           width: 20, height: 20, borderRadius: '50%',

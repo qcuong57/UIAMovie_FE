@@ -6,6 +6,7 @@
 
 import React from "react";
 import PaginationBase from "./pagination/PaginationBase";
+import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { T, FONT_BODY as FONT } from "../../context/adminTokens";
 
 // Hằng số cấp module → tham chiếu ổn định
@@ -37,14 +38,15 @@ const THEME = {
 };
 
 export default function AdminPagination({ itemLabel = "mục", ...props }) {
+  const isMobile = useIsMobile();
   return (
     <PaginationBase
       {...props}
       itemLabel={itemLabel}
       theme={THEME}
-      size={34}
+      size={isMobile ? 38 : 34}
       radius={9}
-      padding="28px 0 8px"
+      padding={isMobile ? "20px 0 8px" : "28px 0 8px"}
     />
   );
 }

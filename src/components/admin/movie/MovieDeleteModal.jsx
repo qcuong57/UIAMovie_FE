@@ -76,6 +76,7 @@ export default function MovieDeleteModal({ movie, onClose, onDeleted }) {
           {/* Modal */}
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -157,6 +158,7 @@ export default function MovieDeleteModal({ movie, onClose, onDeleted }) {
 
             {/* Body */}
             <div
+              data-admin-modal-body=""
               style={{
                 padding: "20px",
                 display: "flex",
@@ -283,6 +285,7 @@ export default function MovieDeleteModal({ movie, onClose, onDeleted }) {
 
             {/* Footer */}
             <div
+              data-movie-foot=""
               style={{
                 padding: "14px 20px",
                 borderTop: `1px solid ${T.border}`,

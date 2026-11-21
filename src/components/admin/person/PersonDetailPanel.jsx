@@ -58,6 +58,7 @@ export default function PersonDetailPanel({ personId, onClose, onEdit, onDelete 
           {/* Panel */}
           <motion.div
             key="modal"
+            data-admin-modal=""
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -66,9 +67,9 @@ export default function PersonDetailPanel({ personId, onClose, onEdit, onDelete 
               position: 'fixed',
               inset: 0,
               margin: 'auto',
-              width: 660,
+              width: 'min(660px, calc(100vw - 24px))',
               height: 'fit-content',
-              maxHeight: '88vh',
+              maxHeight: 'calc(100dvh - 24px)',
               zIndex: 300,
               background: T.surface,
               borderRadius: 16,
@@ -143,9 +144,9 @@ export default function PersonDetailPanel({ personId, onClose, onEdit, onDelete 
             </div>
 
             {/* Scrollable body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+            <div data-person-body="" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
               {loading && (
-                <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                <div data-person-hero="" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
                   <div
                     style={{
                       width: 160,
@@ -200,7 +201,7 @@ export default function PersonDetailPanel({ personId, onClose, onEdit, onDelete 
 
               {!loading && !error && person && (
                 <>
-                <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', fontFamily: FONT }}>
+                <div data-person-hero="" style={{ display: 'flex', gap: 24, alignItems: 'flex-start', fontFamily: FONT }}>
                   {/* Photo */}
                   <div
                     style={{
