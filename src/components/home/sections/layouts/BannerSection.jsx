@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Star, Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import SectionHeading from '../shared/SectionHeading';
 import { useRailMotion, CSS_EASE } from '../shared/motionPresets';
 import { accentOf, keyOf } from '../shared/layoutUtils';
@@ -19,14 +19,14 @@ function BannerCard({ item, accent, isMobile, index, itemV, revealProps }) {
   return (
     <motion.div {...revealProps} custom={index} variants={itemV} style={{ flexShrink: 0, width: isMobile ? '78%' : 340, scrollSnapAlign: 'start' }}>
     <Link
-      to={contentPath(item)} aria-label={item.title}
+      to={infoPath(item)} aria-label={item.title}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         position: 'relative', display: 'block', width: '100%', aspectRatio: '16 / 9',
         borderRadius: 6, overflow: 'hidden', background: C.surfaceHigh, textDecoration: 'none',
       }}
     >
-      {img && <img src={img} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transform: hover ? 'scale(1.04)' : 'scale(1)', transition: `transform .6s ${CSS_EASE}` }} />}
+      {img && <img src={img} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transform: hover ? 'scale(1.04)' : 'scale(1)', transition: `transform .6s ${CSS_EASE}` }} />}
       <div style={{ position: 'absolute', inset: 'auto 0 0 0', padding: '10px 14px 12px', background: 'rgba(0,0,0,0.72)' }}>
         <p style={{ margin: 0, fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</p>
         <p style={{ margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT_BODY, fontSize: 11.5, color: 'rgba(255,255,255,0.65)' }}>
@@ -57,17 +57,25 @@ export function BannerSection({ section }) {
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
 
+  // Đo vị trí cuộn tối đa 1 lần / khung hình (scroll bắn dày, đọc scrollLeft liên tục sẽ ép layout)
   useEffect(() => {
     const el = scrollRef.current;
+    if (!el) return undefined;
+    let raf = 0;
     const check = () => {
-      if (!el) return;
+      raf = 0;
       setCanLeft(el.scrollLeft > 8);
       setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
     };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(check); };
     check();
-    el?.addEventListener('scroll', check, { passive: true });
-    window.addEventListener('resize', check);
-    return () => { el?.removeEventListener('scroll', check); window.removeEventListener('resize', check); };
+    el.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
   }, [section.items]);
 
   const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * scrollRef.current.clientWidth * 0.72, behavior: 'smooth' });

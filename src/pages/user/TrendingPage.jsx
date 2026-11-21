@@ -16,7 +16,6 @@ export default function TrendingPage() {
 
   return (
     <>
-      <style>{GOOGLE_FONTS}</style>
 
       <div
         style={{

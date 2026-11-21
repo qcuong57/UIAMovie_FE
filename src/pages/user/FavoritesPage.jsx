@@ -36,6 +36,7 @@ import { useIsMobile } from "../../hooks/common/useIsMobile";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import PageError from "../../components/common/PageError";
 import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
+import Footer from "../../components/layout/Footer";
 
 // 6 cột giống BrowsePage
 const grid6 = (isMobile) => ({
@@ -540,7 +541,6 @@ export default function FavoritesPage() {
           }}
         >
           <SeoMeta title="Phim yêu thích - UIAMovie" noindex />
-          <style>{GOOGLE_FONTS}</style>
           <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
 
           <div
@@ -890,6 +890,7 @@ export default function FavoritesPage() {
               )}
             </AnimatePresence>
           </div>
+          <Footer />
 
           {showSort && (
             <div

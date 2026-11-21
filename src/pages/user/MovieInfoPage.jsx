@@ -2,7 +2,12 @@
 // Trang thông tin chi tiết phim — hiển thị trước khi vào xem phim
 // Route: /movie/:id/info → /movie/:id (player)
 
-import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -33,14 +38,23 @@ import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { useFavoriteToggle } from "../../hooks/user/useFavorites";
 import { userHasPremium } from "../../utils/premium";
-import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
+import {
+  getStoredUser as getCurrentUser,
+  subscribeStoredUser,
+} from "../../config/sessionStore";
+import Footer from "../../components/layout/Footer";
 
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
 
 const EMPTY = [];
-const EMPTY_INFO = { movie: null, cast: EMPTY, directors: EMPTY, actors: EMPTY };
+const EMPTY_INFO = {
+  movie: null,
+  cast: EMPTY,
+  directors: EMPTY,
+  actors: EMPTY,
+};
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -51,7 +65,14 @@ export default function MovieInfoPage() {
   const navigate = useNavigate();
 
   // ── Dữ liệu: React Query. Cùng cache với trang xem /movie/:id → bấm "Xem" là có ngay, không gọi lại API ──
-  const { data: rawMovie, isPending, isError, error: queryError, refetch, isRefetching } = useMovie(id);
+  const {
+    data: rawMovie,
+    isPending,
+    isError,
+    error: queryError,
+    refetch,
+    isRefetching,
+  } = useMovie(id);
   const { movie, cast, directors, actors } = useMemo(
     () => (rawMovie ? normalizeMovieInfo(rawMovie) : EMPTY_INFO),
     [rawMovie],
@@ -60,16 +81,19 @@ export default function MovieInfoPage() {
 
   // ── Yêu thích: dùng chung cache React Query (optimistic + rollback + toast nằm trong hook) ──
   const favItem = useMemo(
-    () => (movie ? { id: movie.id, title: movie.title, isTvShow: false } : null),
+    () =>
+      movie ? { id: movie.id, title: movie.title, isTvShow: false } : null,
     [movie],
   );
   const { isFav, toggle: handleToggleFav } = useFavoriteToggle(favItem);
   const [showTrailer, setShowTrailer] = useState(false);
-  
+
   // Mở từ thông báo (?reviewId=...) thì vào thẳng tab Đánh giá
   const [searchParams] = useSearchParams();
   const reviewIdParam = searchParams.get("reviewId");
-  const [activeTab, setActiveTab] = useState(reviewIdParam ? "reviews" : "cast");
+  const [activeTab, setActiveTab] = useState(
+    reviewIdParam ? "reviews" : "cast",
+  );
   useEffect(() => {
     if (reviewIdParam) setActiveTab("reviews");
   }, [reviewIdParam]);
@@ -78,7 +102,11 @@ export default function MovieInfoPage() {
   // ── Premium gate state ──
   const [showPremiumGate, setShowPremiumGate] = useState(false);
 
-  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
+  const currentUser = useSyncExternalStore(
+    subscribeStoredUser,
+    getCurrentUser,
+    () => null,
+  );
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -138,7 +166,12 @@ export default function MovieInfoPage() {
       <style>{GLOBAL_STYLES}</style>
       <SeoMeta
         {...buildMovieSeo(
-          { ...movie, duration: movie?.runtime, director: directors[0]?.name, cast },
+          {
+            ...movie,
+            duration: movie?.runtime,
+            director: directors[0]?.name,
+            cast,
+          },
           id,
         )}
       />
@@ -235,7 +268,7 @@ export default function MovieInfoPage() {
           />
         )}
       </AnimatePresence>
-
+      <Footer />
       {/* Premium Gate Modal */}
       <PremiumGateModal
         open={showPremiumGate}

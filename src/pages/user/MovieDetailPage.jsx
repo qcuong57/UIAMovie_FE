@@ -32,6 +32,7 @@ import MovieTitleBlock from "../../components/movie/film/MovieTitleBlock";
 import MovieTabsPanel from "../../components/movie/film/MovieTabsPanel";
 import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import { Crown } from "lucide-react";
+import Footer from "../../components/layout/Footer";
 
 const EMPTY = [];
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
@@ -287,6 +288,7 @@ export default function MovieDetailPage() {
           </motion.div>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

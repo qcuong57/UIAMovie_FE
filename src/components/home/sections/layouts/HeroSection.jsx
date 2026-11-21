@@ -1,12 +1,12 @@
 // src/components/home/sections/layouts/HeroSection.jsx
 // hero: khối nổi bật lớn, tự chuyển nếu có nhiều phim (tối đa 5). Không trailer (xem billboard).
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
 import { Play, Star, Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import SectionHeading from '../shared/SectionHeading';
 import { useTextMotion, HOME_EASE, MOTION } from '../shared/motionPresets';
 import { accentOf, keyOf } from '../shared/layoutUtils';
@@ -19,12 +19,15 @@ export function HeroSection({ section }) {
   const items = section.items.slice(0, 5);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const stageRef = useRef(null);
+  const inView = useInView(stageRef);
 
+  // Chỉ tự chuyển khi đang nhìn thấy: ngoài màn hình thì không đổi ảnh / chạy animation vô ích
   useEffect(() => {
-    if (items.length < 2 || paused || reduce) return undefined;
+    if (items.length < 2 || paused || reduce || !inView) return undefined;
     const t = setInterval(() => setIndex((i) => (i + 1) % items.length), 6000);
     return () => clearInterval(t);
-  }, [items.length, paused, reduce]);
+  }, [items.length, paused, reduce, inView]);
 
   const safeIndex = Math.min(index, Math.max(0, items.length - 1));
   const item = items[safeIndex];
@@ -35,6 +38,7 @@ export function HeroSection({ section }) {
     <section style={{ marginBottom: isMobile ? 32 : 44 }}>
       <SectionHeading title={section.title} subtitle={section.subtitle} accent={accent} isMobile={isMobile} />
       <div
+        ref={stageRef}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         style={{ position: 'relative', overflow: 'hidden', borderRadius: 8, background: C.surfaceMid, aspectRatio: isMobile ? '4 / 3' : '21 / 9' }}
       >
@@ -73,7 +77,7 @@ export function HeroSection({ section }) {
               {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
               <motion.button
                 variants={lineV} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                type="button" onClick={() => navigate(contentPath(item))}
+                type="button" onClick={() => navigate(infoPath(item))}
                 style={{
                   alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', border: 'none',
                   padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,

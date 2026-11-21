@@ -133,7 +133,6 @@ const MobileBottomNav = ({ searchOpen, onNavigate, onHome, onGuarded, onSearch }
 
   return createPortal(
     <nav aria-label="Điều hướng chính" data-bottom-nav className="mbn" style={NAV_STYLE}>
-      <style>{CSS}</style>
       {TABS.map((t) => {
         const active = t.key === "search" ? !!searchOpen : !searchOpen && isActivePath(pathname, t.path);
         return <TabButton key={t.key} tab={t} active={active} onPress={handlePress} />;

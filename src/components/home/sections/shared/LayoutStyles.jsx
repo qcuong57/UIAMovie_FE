@@ -12,5 +12,5 @@ const CSS = `
 `;
 
 export default function LayoutStyles() {
-  return <style>{CSS}</style>;
+  return;
 }

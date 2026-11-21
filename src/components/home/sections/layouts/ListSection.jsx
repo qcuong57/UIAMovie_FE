@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
 import Cover from '../shared/Cover';
@@ -19,7 +19,7 @@ function ListRow({ item, rank, accent, isMobile, index, itemV, revealProps }) {
   return (
     <motion.div {...revealProps} custom={index} variants={itemV} style={{ minWidth: 0 }}>
     <Link
-      to={contentPath(item)} aria-label={item.title} className="hsl-link hsl-row"
+      to={infoPath(item)} aria-label={item.title} className="hsl-link hsl-row"
       style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 10px', borderRadius: 8, textDecoration: 'none', minWidth: 0, '--hsl-accent': accent }}
     >
       {rank != null && (

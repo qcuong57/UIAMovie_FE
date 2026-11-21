@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
 import { useRailMotion, CSS_EASE } from '../shared/motionPresets';
@@ -21,7 +21,7 @@ function MosaicTile({ item, accent, big, compact, style, index = 0, itemV, revea
       style={{ position: 'relative', minHeight: 0, overflow: 'hidden', borderRadius: big ? 8 : 6, background: C.surfaceHigh, '--hsl-accent': accent, ...style }}
     >
     <Link
-      to={contentPath(item)} aria-label={item.title} className="hsl-link"
+      to={infoPath(item)} aria-label={item.title} className="hsl-link"
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ position: 'absolute', inset: 0, display: 'block', textDecoration: 'none' }}
     >

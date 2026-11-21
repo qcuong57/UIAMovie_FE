@@ -544,7 +544,6 @@ export default function HomePage() {
             position: "relative",
           }}
         >
-          <style>{GOOGLE_FONTS}</style>
 
           {/* Noise texture */}
           <div

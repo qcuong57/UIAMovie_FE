@@ -73,3 +73,13 @@ export const normalizeFavoriteTvShow = (f) => ({
   isPremium: f.isPremium ?? false,
   isTvShow: true,
 });
+
+export const withMediaMeta = (item, isTvShow) => {
+  const date = item.releaseDate ?? item.firstAirDate;
+  const y = date ? new Date(date).getFullYear() : null;
+  return {
+    ...item,
+    isTvShow: item.isTvShow ?? isTvShow,
+    year: item.year ?? (Number.isFinite(y) ? y : undefined),
+  };
+};

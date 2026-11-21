@@ -13,6 +13,7 @@
 //   3. Thêm key vào HomeSectionConstants.Layouts (BE) và LAYOUT_INFO + LayoutThumb trong AdminHomeSections.jsx
 import React from 'react';
 import HomeReveal from '../../../motion-configs/HomeReveal';
+import LazyMount from './shared/LazyMount';
 import { useHomeSections } from '../../../hooks/home/useHomeSections';
 import { CarouselSection } from './layouts/CarouselSection';
 import { GridSection } from './layouts/GridSection';
@@ -52,16 +53,20 @@ export default function HomeSections() {
   const { data } = useHomeSections();
 
   // Lỗi / chưa có khối nào → không hiện gì, trang chủ vẫn chạy bình thường với các phần có sẵn.
-  if (!data?.length) return null;
+  const sections = data?.filter((section) => section.items.length);
+  if (!sections?.length) return null;
 
-  return data.map((section) => {
-    if (!section.items.length) return null;
+  return sections.map((section, i) => {
     // Layout lạ (FE cũ chưa biết) rơi về carousel thay vì làm vỡ trang
     const { component: Layout, reveal } = HOME_LAYOUTS[section.layout] ?? HOME_LAYOUTS.carousel;
-    return (
-      <HomeReveal key={section.id} variant={reveal} divider>
+    const block = (
+      <HomeReveal variant={reveal} divider>
         <Layout section={section} />
       </HomeReveal>
     );
+    // Khối đầu nằm trên màn hình đầu tiên → dựng ngay; các khối sau chỉ dựng khi người xem cuộn gần tới
+    return i === 0
+      ? <React.Fragment key={section.id}>{block}</React.Fragment>
+      : <LazyMount key={section.id}>{block}</LazyMount>;
   });
 }

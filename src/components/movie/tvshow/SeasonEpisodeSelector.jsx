@@ -409,6 +409,13 @@ const SeasonEpisodeSelector = ({
     selectedSeason?.seasonNumber ?? seasons[0]?.seasonNumber ?? 1;
   const [activeSeason, setActiveSeason] = useState(defaultSeason);
 
+  // Đồng bộ khi CHA đổi mùa (tự chọn mùa đầu, khôi phục từ sessionStorage…): trước đây activeSeason chỉ lấy
+  // giá trị lúc mount nên danh sách và mùa đang chọn có thể lệch nhau.
+  const selectedSeasonNumber = selectedSeason?.seasonNumber;
+  useEffect(() => {
+    if (selectedSeasonNumber != null) setActiveSeason(selectedSeasonNumber);
+  }, [selectedSeasonNumber]);
+
   // Trigger initial season load on mount / show change
   useEffect(() => {
     if (seasons.length > 0 && onSeasonSelect) {

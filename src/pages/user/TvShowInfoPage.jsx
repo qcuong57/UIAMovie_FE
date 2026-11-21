@@ -2,7 +2,13 @@
 // Trang thông tin chi tiết TV Show — hiển thị trước khi vào xem
 // Route: /tvshow/:id/info → /tvshow/:id (player)
 
-import React, { useState, useEffect, useMemo, useSyncExternalStore } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { useIsMobile } from "../../hooks/common/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -16,7 +22,11 @@ import BackdropCarousel from "../../components/movie/ui/BackdropCarousel";
 import StarRating from "../../components/movie/ui/StarRating";
 import TrailerModal from "../../components/movie/ui/TrailerModal";
 import Skeleton from "../../components/movie/ui/Skeleton";
-import { C, fmt, GLOBAL_STYLES } from "../../components/movie/ui/movieConstants";
+import {
+  C,
+  fmt,
+  GLOBAL_STYLES,
+} from "../../components/movie/ui/movieConstants";
 
 // ── Extracted components ──────────────────────────────────────────
 import TvShowInfoHero from "../../components/movie/tvshow/TvShowInfoHero";
@@ -25,7 +35,11 @@ import TvShowInfoTabs from "../../components/movie/tvshow/TvShowInfoTabs";
 // ── Loading screen (full-page) ────────────────────────────────────
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { useFavoriteToggle } from "../../hooks/user/useFavorites";
-import { getStoredUser as getCurrentUser, subscribeStoredUser } from "../../config/sessionStore";
+import {
+  getStoredUser as getCurrentUser,
+  subscribeStoredUser,
+} from "../../config/sessionStore";
+import Footer from "../../components/layout/Footer";
 
 const EMPTY = [];
 const EMPTY_INFO = { show: null, cast: EMPTY, creators: EMPTY };
@@ -33,13 +47,20 @@ const EMPTY_INFO = { show: null, cast: EMPTY, creators: EMPTY };
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════
-export default function TvShowInfoPage() {
+function TvShowInfoPageInner() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
 
   // ── Dữ liệu: React Query (cache chung với trang xem /tvshow/:id) ──
-  const { data: rawShow, isPending, isError, error: queryError, refetch, isRefetching } = useTvShow(id);
+  const {
+    data: rawShow,
+    isPending,
+    isError,
+    error: queryError,
+    refetch,
+    isRefetching,
+  } = useTvShow(id);
   const { show, cast, creators } = useMemo(
     () => (rawShow ? normalizeTvShowInfo(rawShow) : EMPTY_INFO),
     [rawShow],
@@ -57,7 +78,9 @@ export default function TvShowInfoPage() {
   // Mở từ thông báo (?reviewId=...) thì vào thẳng tab Đánh giá
   const [searchParams] = useSearchParams();
   const reviewIdParam = searchParams.get("reviewId");
-  const [activeTab, setActiveTab] = useState(reviewIdParam ? "reviews" : "cast");
+  const [activeTab, setActiveTab] = useState(
+    reviewIdParam ? "reviews" : "cast",
+  );
   useEffect(() => {
     if (reviewIdParam) setActiveTab("reviews");
   }, [reviewIdParam]);
@@ -67,26 +90,38 @@ export default function TvShowInfoPage() {
   const [seasonEpisodesCache, setSeasonEpisodesCache] = useState({});
   const [loadingSeasonEpisodes, setLoadingSeasonEpisodes] = useState(false);
 
-  const currentUser = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
+  const currentUser = useSyncExternalStore(
+    subscribeStoredUser,
+    getCurrentUser,
+    () => null,
+  );
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
 
+  // Các mùa đang được tải. Dùng Set thay cho một cờ boolean: trước đây mùa A tải xong sẽ tắt cờ
+  // trong khi mùa B (vừa chọn) vẫn đang tải → danh sách chớp "Chưa có tập nào" rồi mới hiện.
+  const inflight = useRef(new Set());
+
   // Lazy-load episodes khi user bấm vào season
-  const handleSeasonSelect = async (season) => {
-    setSelectedSeason(season);
-    const sn = season.seasonNumber;
-    if (seasonEpisodesCache[sn]) return;
+  const handleSeasonSelect = async (rawSeason) => {
+    // Dữ liệu mùa có thể dùng `number` thay cho `seasonNumber` → chuẩn hoá để getSeason không nhận undefined
+    const sn = rawSeason.seasonNumber ?? rawSeason.number;
+    const season = rawSeason.seasonNumber === sn ? rawSeason : { ...rawSeason, seasonNumber: sn };
+    setSelectedSeason((prev) => (prev && prev.seasonNumber === sn ? prev : season));
+    if (seasonEpisodesCache[sn] || inflight.current.has(sn)) return; // đã có / đang tải
+    inflight.current.add(sn);
+    setLoadingSeasonEpisodes(true);
     try {
-      setLoadingSeasonEpisodes(true);
       const data = await tvShowService.getSeason(id, sn);
       const episodes = data?.episodes ?? [];
       setSeasonEpisodesCache((prev) => ({ ...prev, [sn]: episodes }));
     } catch (e) {
-      console.error('[TvShowInfoPage] getSeason:', e);
+      console.error("[TvShowInfoPage] getSeason:", e);
     } finally {
-      setLoadingSeasonEpisodes(false);
+      inflight.current.delete(sn);
+      setLoadingSeasonEpisodes(inflight.current.size > 0);
     }
   };
 
@@ -104,7 +139,9 @@ export default function TvShowInfoPage() {
   const year = show?.year;
 
   const genreList = Array.isArray(show?.genres)
-    ? show.genres.map((g) => (typeof g === "string" ? g : g.name)).filter(Boolean)
+    ? show.genres
+        .map((g) => (typeof g === "string" ? g : g.name))
+        .filter(Boolean)
     : [];
 
   // ── Loading / Error ──────────────────────────────────────────────
@@ -195,7 +232,9 @@ export default function TvShowInfoPage() {
 
         {/* Backdrop carousel */}
         {(() => {
-          const backdrops = (show?.images || []).filter((i) => i.imageType === "backdrop");
+          const backdrops = (show?.images || []).filter(
+            (i) => i.imageType === "backdrop",
+          );
           if (!backdrops.length) return null;
           return <BackdropCarousel backdrops={backdrops} />;
         })()}
@@ -226,7 +265,7 @@ export default function TvShowInfoPage() {
           }}
         />
       </div>
-
+      <Footer />
       {/* Trailer Modal */}
       <AnimatePresence>
         {showTrailer && hasTrailer && (
@@ -239,4 +278,11 @@ export default function TvShowInfoPage() {
       </AnimatePresence>
     </div>
   );
+}
+
+// key={id}: sang show khác (vd. bấm phim liên quan) → remount với state sạch.
+// Nếu không, seasonEpisodesCache (khoá theo số mùa) của show cũ sẽ hiện nhầm tập cho show mới.
+export default function TvShowInfoPage() {
+  const { id } = useParams();
+  return <TvShowInfoPageInner key={id} />;
 }

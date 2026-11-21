@@ -1,5 +1,12 @@
 // src/components/home/RecommendSection.jsx
-import React, { useState, useMemo, useEffect, useSyncExternalStore } from "react";
+import React, {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../config/queryKeys";
 import { motion, AnimatePresence } from "framer-motion";
@@ -70,7 +77,6 @@ function calculateMatchPercentage(item) {
   return Math.min(99, Math.max(76, baseScore + variance - 2));
 }
 
-
 // ── Chuẩn hoá item gợi ý từ AI ─────────────────────────────────────
 // Item từ BE (AiCatalogItem) có thể thiếu/khác tên field ảnh so với movie ở trang chủ.
 // Ưu tiên dữ liệu đầy đủ đã có ở props (cùng id), rồi mới tới các tên field phổ biến.
@@ -111,17 +117,244 @@ const getInfoRoute   = (item) => (item?.isTvShow ? `/tvshow/${item.id}/info` : `
 
 const ACCENT_COLOR = "#a78bfa";
 const EMPTY_AI = [];
+// Mặc định ở mức module: `movies = []` trong tham số sẽ tạo mảng MỚI mỗi lần render
+// → làm useMemo bên dưới tính lại (xáo trộn + normalize) ở mọi lần render.
+const EMPTY_LIST = [];
 const EMPTY_RECOMMENDATIONS = "EMPTY_RECOMMENDATIONS";
 
+// ── Card nhỏ (desktop) — memo để chọn phim khác chỉ render lại đúng 2 thẻ đổi trạng thái ──
+const DesktopCard = memo(function DesktopCard({ item, globalIdx, isSelected, onSelect }) {
+  return (
+    <motion.div
+      onClick={() => onSelect(globalIdx)}
+      initial={false}
+      // opacity/scale chạy hoàn toàn qua framer (compositor), KHÔNG để CSS transition + style.transform
+      // tranh nhau với whileHover y (trước đây hai bên cùng ghi vào `transform`).
+      animate={{ opacity: isSelected ? 1 : 0.5, scale: isSelected ? 1.02 : 1 }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        position: "relative",
+        height: 104,
+        borderRadius: 14,
+        overflow: "hidden",
+        cursor: "pointer",
+        background: "#16161a",
+        border: "none",
+        // Bóng tĩnh: không transition box-shadow (đó là thuộc tính buộc repaint mỗi khung hình)
+        boxShadow: "0 6px 16px rgba(0,0,0,0.5)",
+      }}
+    >
+      <img
+        src={item.backdropUrl || item.posterUrl}
+        alt={item.title}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onError={hideBrokenImage}
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 45%, rgba(0,0,0,0.95) 100%)",
+        }}
+      />
+
+      <div style={{ position: "absolute", top: 6, left: 6, display: "flex", alignItems: "center" }}>
+        <span
+          style={{
+            fontFamily: FONT_BODY,
+            fontSize: 9.5,
+            fontWeight: 800,
+            color: C.green,
+            // bỏ backdrop-filter: blur(4px) — mỗi thẻ một lớp blur là rất nặng khi cuộn
+            background: "rgba(0,0,0,0.8)",
+            padding: "2px 6px",
+            borderRadius: 4,
+          }}
+        >
+          {item.match}%
+        </span>
+      </div>
+
+      <div style={{ position: "absolute", bottom: 8, left: 8, right: 8 }}>
+        <p
+          style={{
+            fontFamily: FONT_BODY,
+            fontSize: 11.5,
+            fontWeight: isSelected ? 800 : 700,
+            color: "#ffffff",
+            margin: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            lineHeight: 1.25,
+            textShadow: "0 2px 6px rgba(0,0,0,0.9)",
+          }}
+        >
+          {item.title}
+        </p>
+      </div>
+    </motion.div>
+  );
+});
+
+// ── Card mobile — memo, chỉ render lại khi yêu thích / khoá premium của chính nó đổi ──
+const MobileCard = memo(function MobileCard({ item, isFav, isLocked, onOpen, onPlay, onFav }) {
+  return (
+    <div
+      onClick={() => onOpen(item)}
+      style={{
+        position: "relative",
+        flexShrink: 0,
+        width: "86vw",
+        maxWidth: 340,
+        borderRadius: 16,
+        background: "rgba(255,255,255,0.04)",
+        border: "none",
+        padding: 12,
+        display: "flex",
+        gap: 12,
+        scrollSnapAlign: "start",
+      }}
+    >
+      <div
+        style={{
+          width: 90,
+          aspectRatio: "2 / 3",
+          borderRadius: 10,
+          overflow: "hidden",
+          flexShrink: 0,
+          position: "relative",
+        }}
+      >
+        <img
+          src={item.posterUrl || item.backdropUrl}
+          alt={item.title}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onError={hideBrokenImage}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+        {item.isPremium && (
+          <div
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              background: "linear-gradient(135deg, #facc15, #f59e0b)",
+              borderRadius: 4,
+              padding: "2px 4px",
+            }}
+          >
+            <Crown size={8} fill="#1c1400" color="#1c1400" />
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <span
+            style={{
+              fontFamily: FONT_BODY,
+              fontSize: 10,
+              fontWeight: 800,
+              color: C.green,
+              display: "block",
+              marginBottom: 3,
+            }}
+          >
+            {item.match}% Phù hợp
+          </span>
+
+          <h4
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fff",
+              margin: "0 0 4px 0",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {item.title}
+          </h4>
+
+          <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+            {item.isTvShow ? "Series" : "Phim"} • {item.year || "Mới"}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <button
+            onClick={(e) => onPlay(e, item)}
+            style={{
+              flex: 1,
+              height: 32,
+              borderRadius: 8,
+              border: "none",
+              background: isLocked ? "#facc15" : "#fff",
+              color: "#000",
+              fontFamily: FONT_BODY,
+              fontSize: 12,
+              fontWeight: 800,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+            }}
+          >
+            <Play size={12} fill="#000" />
+            <span>Xem</span>
+          </button>
+
+          <button
+            onClick={(e) => onFav(e, item)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "none",
+              background: isFav ? C.accent : "rgba(255,255,255,0.1)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {isFav ? <Heart size={13} fill="white" color="white" /> : <Plus size={14} color="white" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function RecommendSection({
-  movies = [],
-  tvShows = [],
+  movies = EMPTY_LIST,
+  tvShows = EMPTY_LIST,
   items,
   subtitle = "",
 }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const user = useSyncExternalStore(subscribeStoredUser, getCurrentUser, () => null);
+  // Tính một lần mỗi render (trước đây gọi getCurrentUser() lặp lại cho từng thẻ)
+  const hasPremium = userHasPremium(user);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselPage, setCarouselPage] = useState(0); // 0 (phim 1-5) hoặc 1 (phim 6-10)
@@ -130,6 +363,11 @@ export default function RecommendSection({
 
   // Yêu thích: đọc + ghi qua cache React Query (cập nhật lạc quan, lỗi tự hoàn tác, mọi thẻ đồng bộ)
   const { isFavorited, toggle: toggleFav, pending: favLoading } = useFavoriteActions();
+
+  // "Bản mới nhất" của các hàm/giá trị hay đổi tham chiếu → handler bên dưới giữ nguyên tham chiếu
+  // để React.memo của các thẻ thực sự có tác dụng.
+  const live = useRef({});
+  live.current = { navigate, toggleFav, hasPremium };
 
   // Gợi ý AI: cache theo người dùng + ngày (React Query + persist plugin lưu localStorage qua lần tải lại)
   // → tránh gọi lại API AI tốn kém. Lỗi hoặc rỗng KHÔNG được cache như dữ liệu hợp lệ:
@@ -162,7 +400,8 @@ export default function RecommendSection({
     return map;
   }, [movies, tvShows]);
 
-  // Trộn phim theo seed ngày hôm nay và chốt danh sách 10 phim (2 lượt carousel)[cite: 1]
+  // Trộn phim theo seed ngày hôm nay và chốt danh sách 10 phim (2 lượt carousel).
+  // Gắn sẵn `match` ở đây để không phải hash lại id phim trong mỗi lần render.
   const list = useMemo(() => {
     const raw = aiItems.length > 0
       ? aiItems.filter(Boolean).map((it) => normalizeItem(it, knownById.get(String(it.id))))
@@ -170,49 +409,46 @@ export default function RecommendSection({
     const valid = (raw || []).filter(Boolean);
     if (!valid.length) return [];
 
-    const shuffled = seededShuffle(valid, getTodaySeed());
-    return shuffled.slice(0, 10);
-  }, [aiItems, items, movies, tvShows, knownById]);
+    return seededShuffle(valid, daySeed)
+      .slice(0, 10)
+      .map((it) => ({ ...it, match: calculateMatchPercentage(it) }));
+  }, [aiItems, items, movies, tvShows, knownById, daySeed]);
 
-  // Đảm bảo activeIndex hợp lệ khi list thay đổi
-  useEffect(() => {
-    if (activeIndex >= list.length) {
-      setActiveIndex(0);
-    }
-  }, [list.length, activeIndex]);
+  // activeIndex hợp lệ ngay trong lúc render (không cần effect + render thêm một lượt)
+  const safeIndex = activeIndex < list.length ? activeIndex : 0;
+  const activeItem = list[safeIndex] || null;
 
-  const activeItem = list[activeIndex] || list[0] || null;
-
-  const checkFav = (item) => isFavorited(item?.id, item?.isTvShow);
-
-  const handleTogglePage = () => {
+  const handleTogglePage = useCallback(() => {
     setCarouselPage((prev) => (prev === 0 ? 1 : 0));
-  };
+  }, []);
 
-  const handleFavoriteClick = (e, item) => toggleFav(item, e);
+  const handleFavoriteClick = useCallback((e, item) => live.current.toggleFav(item, e), []);
 
-  const handlePlay = (e, item) => {
+  const handlePlay = useCallback((e, item) => {
     e.stopPropagation();
     if (!item) return;
-    const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
-    if (isLocked) {
+    const { navigate: nav, hasPremium: premium } = live.current;
+    if (item.isPremium && !premium) {
       setGateTitle(item.title);
       setShowGate(true);
       return;
     }
-    navigate(getPlayerRoute(item));
-  };
+    nav(getPlayerRoute(item));
+  }, []);
+
+  const openInfo = useCallback((item) => live.current.navigate(getInfoRoute(item)), []);
+  const closeGate = useCallback(() => setShowGate(false), []);
 
   if (!list.length || !activeItem) return null;
 
-  const isCurrentFav = checkFav(activeItem);
-  const isCurrentPremium = activeItem.isPremium && !userHasPremium(getCurrentUser());
-  const matchPct = calculateMatchPercentage(activeItem);
+  const isCurrentFav = isFavorited(activeItem.id, activeItem.isTvShow);
+  const isCurrentPremium = activeItem.isPremium && !hasPremium;
+  const matchPct = activeItem.match;
   const displayGenre =
     activeItem.genres?.[0] ||
     (Array.isArray(activeItem.genre) ? activeItem.genre[0] : activeItem.genre);
 
-  // 5 phim tương ứng cho carousel hiện tại[cite: 1]
+  // 5 phim tương ứng cho carousel hiện tại
   const currentFiveMovies = list.slice(carouselPage * 5, carouselPage * 5 + 5);
 
   return (
@@ -279,18 +515,20 @@ export default function RecommendSection({
             position: "relative",
             width: "100%",
             borderRadius: 24,
-            background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
-            backdropFilter: "blur(24px)",
-            boxShadow: "0 24px 60px -10px rgba(0,0,0,0.75)",
+            // Trước đây: backdrop-filter: blur(24px) trên cả khối ~600px — nền phía sau chỉ là màu trơn
+            // nên blur không nhìn thấy gì, nhưng trình duyệt phải blur lại mỗi khung hình cuộn.
+            background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.025) 100%)",
+            boxShadow: "0 18px 40px -12px rgba(0,0,0,0.7)",
             padding: "36px 36px 30px 36px",
             display: "grid",
             gridTemplateColumns: "300px 1fr",
             gap: 40,
             alignItems: "stretch",
             overflow: "hidden",
+            contain: "layout style",
           }}
         >
-          {/* Ambient Glow */}
+          {/* Ambient Glow — radial-gradient đã mềm sẵn, bỏ filter: blur(60px) trên lớp rất lớn */}
           <div
             style={{
               position: "absolute",
@@ -298,8 +536,7 @@ export default function RecommendSection({
               left: "-10%",
               width: "45%",
               height: "140%",
-              background: `radial-gradient(circle, ${ACCENT_COLOR}16 0%, transparent 65%)`,
-              filter: "blur(60px)",
+              background: `radial-gradient(closest-side, ${ACCENT_COLOR}24 0%, transparent 100%)`,
               pointerEvents: "none",
             }}
           />
@@ -312,16 +549,18 @@ export default function RecommendSection({
               aspectRatio: "2 / 3",
               borderRadius: 20,
               overflow: "hidden",
-              boxShadow: "0 20px 45px rgba(0,0,0,0.9)",
+              boxShadow: "0 14px 32px rgba(0,0,0,0.8)",
               cursor: "pointer",
             }}
-            onClick={() => navigate(getInfoRoute(activeItem))}
+            onClick={() => openInfo(activeItem)}
           >
             <AnimatePresence mode="wait">
               <motion.img
                 key={`poster-${activeItem.id}`}
                 src={activeItem.posterUrl || activeItem.backdropUrl}
                 alt={activeItem.title}
+                decoding="async"
+                draggable={false}
                 onError={hideBrokenImage}
                 initial={{ opacity: 0, scale: 1.05 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -353,8 +592,7 @@ export default function RecommendSection({
                   fontSize: 10,
                   fontWeight: 800,
                   color: "#fff",
-                  background: "rgba(0,0,0,0.7)",
-                  backdropFilter: "blur(8px)",
+                  background: "rgba(0,0,0,0.75)",
                   padding: "4px 8px",
                   borderRadius: 6,
                 }}
@@ -563,7 +801,7 @@ export default function RecommendSection({
                   <motion.button
                     whileHover={{ scale: 1.06 }}
                     whileTap={{ scale: 0.94 }}
-                    onClick={() => navigate(getInfoRoute(activeItem))}
+                    onClick={() => openInfo(activeItem)}
                     style={{
                       width: 42,
                       height: 42,
@@ -609,24 +847,18 @@ export default function RecommendSection({
 
                   {/* Dot phân trang */}
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <div
-                      style={{
-                        width: carouselPage === 0 ? 16 : 5,
-                        height: 5,
-                        borderRadius: 999,
-                        background: carouselPage === 0 ? ACCENT_COLOR : "rgba(255,255,255,0.2)",
-                        transition: "all 0.3s ease",
-                      }}
-                    />
-                    <div
-                      style={{
-                        width: carouselPage === 1 ? 16 : 5,
-                        height: 5,
-                        borderRadius: 999,
-                        background: carouselPage === 1 ? ACCENT_COLOR : "rgba(255,255,255,0.2)",
-                        transition: "all 0.3s ease",
-                      }}
-                    />
+                    {[0, 1].map((p) => (
+                      <div
+                        key={p}
+                        style={{
+                          width: carouselPage === p ? 16 : 5,
+                          height: 5,
+                          borderRadius: 999,
+                          background: carouselPage === p ? ACCENT_COLOR : "rgba(255,255,255,0.2)",
+                          transition: "width 0.3s ease, background-color 0.3s ease",
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
 
@@ -646,7 +878,7 @@ export default function RecommendSection({
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: carouselPage === 0 ? "default" : "pointer",
-                      transition: "all 0.2s",
+                      transition: "background-color 0.2s, color 0.2s",
                     }}
                     title="Trang trước"
                   >
@@ -666,7 +898,7 @@ export default function RecommendSection({
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: carouselPage === 1 ? "default" : "pointer",
-                      transition: "all 0.2s",
+                      transition: "background-color 0.2s, color 0.2s",
                     }}
                     title="Trang tiếp theo"
                   >
@@ -691,103 +923,14 @@ export default function RecommendSection({
                 >
                   {currentFiveMovies.map((item, idx) => {
                     const globalIdx = carouselPage * 5 + idx;
-                    const isSelected = globalIdx === activeIndex;
-                    const itemMatch = calculateMatchPercentage(item);
-
                     return (
-                      <motion.div
+                      <DesktopCard
                         key={`card-${item.id}-${globalIdx}`}
-                        onClick={() => setActiveIndex(globalIdx)}
-                        whileHover={{ y: -3 }}
-                        transition={{ duration: 0.2 }}
-                        style={{
-                          position: "relative",
-                          height: 104,
-                          borderRadius: 14,
-                          overflow: "hidden",
-                          cursor: "pointer",
-                          background: "#16161a",
-                          border: "none",
-                          opacity: isSelected ? 1 : 0.5,
-                          transform: isSelected ? "scale(1.02)" : "scale(1)",
-                          boxShadow: isSelected
-                            ? "0 12px 30px rgba(0,0,0,0.85)"
-                            : "0 4px 14px rgba(0,0,0,0.35)",
-                          transition: "opacity 0.2s, transform 0.2s, box-shadow 0.2s",
-                        }}
-                      >
-                        <img
-                          src={item.backdropUrl || item.posterUrl}
-                          alt={item.title}
-                onError={hideBrokenImage}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                            display: "block",
-                          }}
-                        />
-
-                        <div
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            background:
-                              "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 45%, rgba(0,0,0,0.95) 100%)",
-                          }}
-                        />
-
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: 6,
-                            left: 6,
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontFamily: FONT_BODY,
-                              fontSize: 9.5,
-                              fontWeight: 800,
-                              color: C.green,
-                              background: "rgba(0,0,0,0.75)",
-                              backdropFilter: "blur(4px)",
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                            }}
-                          >
-                            {itemMatch}%
-                          </span>
-                        </div>
-
-                        <div
-                          style={{
-                            position: "absolute",
-                            bottom: 8,
-                            left: 8,
-                            right: 8,
-                          }}
-                        >
-                          <p
-                            style={{
-                              fontFamily: FONT_BODY,
-                              fontSize: 11.5,
-                              fontWeight: isSelected ? 800 : 700,
-                              color: "#ffffff",
-                              margin: 0,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              lineHeight: 1.25,
-                              textShadow: "0 2px 6px rgba(0,0,0,0.9)",
-                            }}
-                          >
-                            {item.title}
-                          </p>
-                        </div>
-                      </motion.div>
+                        item={item}
+                        globalIdx={globalIdx}
+                        isSelected={globalIdx === safeIndex}
+                        onSelect={setActiveIndex}
+                      />
                     );
                   })}
                 </motion.div>
@@ -805,156 +948,21 @@ export default function RecommendSection({
             padding: "2px 2px 14px 2px",
             scrollSnapType: "x mandatory",
             WebkitOverflowScrolling: "touch",
+            overscrollBehaviorX: "contain",
             scrollbarWidth: "none",
           }}
         >
-          {list.map((item) => {
-            const isFav = checkFav(item);
-            const isLocked = item.isPremium && !userHasPremium(getCurrentUser());
-            const itemMatch = calculateMatchPercentage(item);
-
-            return (
-              <div
-                key={`mob-curated-${item.id}`}
-                onClick={() => navigate(getInfoRoute(item))}
-                style={{
-                  position: "relative",
-                  flexShrink: 0,
-                  width: "86vw",
-                  maxWidth: 340,
-                  borderRadius: 16,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "none",
-                  padding: 12,
-                  display: "flex",
-                  gap: 12,
-                  scrollSnapAlign: "start",
-                }}
-              >
-                <div
-                  style={{
-                    width: 90,
-                    aspectRatio: "2 / 3",
-                    borderRadius: 10,
-                    overflow: "hidden",
-                    flexShrink: 0,
-                    position: "relative",
-                  }}
-                >
-                  <img
-                    src={item.posterUrl || item.backdropUrl}
-                    alt={item.title}
-                onError={hideBrokenImage}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                  {item.isPremium && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 4,
-                        right: 4,
-                        background: "linear-gradient(135deg, #facc15, #f59e0b)",
-                        borderRadius: 4,
-                        padding: "2px 4px",
-                      }}
-                    >
-                      <Crown size={8} fill="#1c1400" color="#1c1400" />
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        fontFamily: FONT_BODY,
-                        fontSize: 10,
-                        fontWeight: 800,
-                        color: C.green,
-                        display: "block",
-                        marginBottom: 3,
-                      }}
-                    >
-                      {itemMatch}% Phù hợp
-                    </span>
-
-                    <h4
-                      style={{
-                        fontFamily: FONT_DISPLAY,
-                        fontSize: 14,
-                        fontWeight: 800,
-                        color: "#fff",
-                        margin: "0 0 4px 0",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {item.title}
-                    </h4>
-
-                    <span
-                      style={{
-                        fontFamily: FONT_BODY,
-                        fontSize: 11,
-                        color: "rgba(255,255,255,0.5)",
-                      }}
-                    >
-                      {item.isTvShow ? "Series" : "Phim"} • {item.year || "Mới"}
-                    </span>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                    <button
-                      onClick={(e) => handlePlay(e, item)}
-                      style={{
-                        flex: 1,
-                        height: 32,
-                        borderRadius: 8,
-                        border: "none",
-                        background: isLocked ? "#facc15" : "#fff",
-                        color: "#000",
-                        fontFamily: FONT_BODY,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <Play size={12} fill="#000" />
-                      <span>Xem</span>
-                    </button>
-
-                    <button
-                      onClick={(e) => handleFavoriteClick(e, item)}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        border: "none",
-                        background: isFav ? C.accent : "rgba(255,255,255,0.1)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {isFav ? <Heart size={13} fill="white" color="white" /> : <Plus size={14} color="white" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {list.map((item) => (
+            <MobileCard
+              key={`mob-curated-${item.id}`}
+              item={item}
+              isFav={isFavorited(item.id, item.isTvShow)}
+              isLocked={!!item.isPremium && !hasPremium}
+              onOpen={openInfo}
+              onPlay={handlePlay}
+              onFav={handleFavoriteClick}
+            />
+          ))}
         </div>
       )}
 
@@ -962,7 +970,7 @@ export default function RecommendSection({
       <ModalPortal>
         <PremiumGateModal
           open={showGate}
-          onClose={() => setShowGate(false)}
+          onClose={closeGate}
           movieTitle={gateTitle}
         />
       </ModalPortal>

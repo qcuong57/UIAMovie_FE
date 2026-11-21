@@ -27,6 +27,7 @@ import { useMinimumLoading } from "../../hooks/common/useMinimumLoading";
 import { queryKeys, STALE } from "../../config/queryKeys";
 import { normalizeMovie, normalizeTvShow, mediaKey } from "../../utils/normalizeMedia";
 import { parsePaged } from "../../utils/queryHelpers";
+import Footer from "../../components/layout/Footer";
 
 const PAGE_SIZE = 24; // 24 chia hết cho 2/3/4/6 cột → hàng cuối luôn đầy
 
@@ -285,7 +286,6 @@ export default function SearchPage() {
       {!showLoading && !loadFailed && (
         <div style={{ minHeight: "100vh", background: C.bg, color: C.text, paddingTop: 68 }}>
           <SeoMeta title={query ? `Kết quả cho "${query}" - UIAMovie` : "Tìm kiếm - UIAMovie"} noindex />
-          <style>{GOOGLE_FONTS}</style>
 
           <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "16px 14px 60px" : "32px 48px 80px" }}>
             {/* Header */}
@@ -393,6 +393,7 @@ export default function SearchPage() {
               )}
             </AnimatePresence>
           </div>
+          <Footer />
         </div>
       )}
     </>

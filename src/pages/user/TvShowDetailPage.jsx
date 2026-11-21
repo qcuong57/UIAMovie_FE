@@ -32,6 +32,7 @@ import TvShowTitleBlock from "../../components/movie/tvshow/TvShowTitleBlock";
 import PremiumGateModal from "../../components/movie/ui/PremiumGateModal";
 import { Crown } from "lucide-react";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import Footer from "../../components/layout/Footer";
 
 const EMPTY = [];
 // Gợi ý "liên quan": một query riêng (lỗi không làm hỏng trang chính)
@@ -43,7 +44,17 @@ const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 // ══════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════
-export default function TvShowDetailPage() {
+// ──────────────────────────────────────────────────────────────────────────
+// NGUYÊN NHÂN LỖI "treo, không có tập / video cho tới khi đổi tab rồi quay lại":
+// khi dữ liệu show đã có sẵn trong cache React Query (đi từ trang /info sang), SeasonEpisodeSelector
+// được mount ở LẦN RENDER ĐẦU. React chạy effect của component CON trước effect của component CHA, nên:
+//   1. con gọi onSeasonSelect(mùa 1)  → setSelectedSeason(mùa 1)
+//   2. cha chạy effect "reset khi đổi id" → setSelectedSeason(null)   ← ghi đè (cùng batch, lệnh sau thắng)
+// → selectedSeason = null: không ai tải danh sách tập, không có tập để phát (player đứng im).
+// Đổi tab làm selector unmount/mount lại → effect của con chạy lại sau khi cha đã yên → mới hoạt động.
+// Cách sửa: (a) bỏ effect reset, dùng key={id} để remount sạch khi đổi show; (b) trang tự chọn mùa đầu.
+// ──────────────────────────────────────────────────────────────────────────
+function TvShowDetailPageInner() {
   const isMobile = useIsMobile();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -88,6 +99,7 @@ export default function TvShowDetailPage() {
   });
   const [episodeDetail, setEpisodeDetail] = useState(null);
   const [loadingEpisode, setLoadingEpisode] = useState(false);
+  const [seasonFailed, setSeasonFailed] = useState(false);
   // Cache episodes theo season để tránh gọi API nhiều lần
   const [seasonEpisodesCache, setSeasonEpisodesCache] = useState({});
 
@@ -108,17 +120,14 @@ export default function TvShowDetailPage() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [id]);
 
-  // Đổi sang show khác → dọn trạng thái tập/mùa (dữ liệu show do React Query lo)
+  // Tự chọn mùa đầu tiên ngay tại trang (trước đây việc này do SeasonEpisodeSelector làm trong effect lúc mount
+  // → bị effect "reset" của trang ghi đè thành null, xem ghi chú ở đầu file). Trang là nơi sở hữu state nên
+  // trang phải tự bảo đảm luôn có mùa được chọn, không phụ thuộc component con có đang mount hay không.
   useEffect(() => {
-    setSeasonEpisodesCache({});
-    // Chỉ reset season/episode khi navigate sang show khác (không phải reload)
-    if (!location.state?.selectedSeason && !sessionStorage.getItem(`tvshow_${id}_season`))
-      setSelectedSeason(null);
-    if (!location.state?.selectedEpisode && !sessionStorage.getItem(`tvshow_${id}_episode`))
-      setSelectedEpisode(null);
-    setEpisodeDetail(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+    if (selectedSeason || !tvShow?.seasons?.length) return;
+    const first = tvShow.seasons[0];
+    setSelectedSeason({ ...first, seasonNumber: first.seasonNumber ?? first.number });
+  }, [tvShow, selectedSeason]);
 
   // Lazy-load season episodes khi selectedSeason thay đổi (BE không trả episodes trong GET /id)
   useEffect(() => {
@@ -126,6 +135,7 @@ export default function TvShowDetailPage() {
     const sn = selectedSeason.seasonNumber;
     // Đã có trong cache → không fetch lại
     if (seasonEpisodesCache[sn]) {
+      setLoadingEpisode(false);
       // Nếu có episode đang chọn, fill episodeDetail từ cache
       if (selectedEpisode) {
         const ep = seasonEpisodesCache[sn].find(
@@ -137,10 +147,14 @@ export default function TvShowDetailPage() {
       }
       return;
     }
+    // Đổi mùa nhanh / rời trang → bỏ kết quả của lần fetch cũ (tránh ghi đè nhầm tập)
+    let cancelled = false;
     (async () => {
       try {
+        setSeasonFailed(false);
         setLoadingEpisode(true);
         const season = await tvShowService.getSeason(id, sn);
+        if (cancelled) return;
         const episodes = season?.episodes ?? [];
         setSeasonEpisodesCache((prev) => ({ ...prev, [sn]: episodes }));
         // Tự động chọn episode đang pending (nếu có) hoặc tập 1
@@ -162,20 +176,28 @@ export default function TvShowDetailPage() {
               sn,
               targetEp.episodeNumber ?? targetEp.number,
             );
+            if (cancelled) return;
             setEpisodeDetail(full ?? targetEp);
           } catch {
+            if (cancelled) return;
             setEpisodeDetail(targetEp);
           }
         } else {
           setEpisodeDetail(null);
         }
       } catch (e) {
+        if (cancelled) return;
         console.error("[TvShowDetailPage] getSeason:", e);
+        setSeasonFailed(true);
         setEpisodeDetail(selectedEpisode ?? null);
       } finally {
-        setLoadingEpisode(false);
+        if (!cancelled) setLoadingEpisode(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSeason?.seasonNumber, tvShow?.id]);
 
   // Khi episode thay đổi trong 1 season đã load → pick từ cache
@@ -266,6 +288,14 @@ export default function TvShowDetailPage() {
     : (tvShow?.year ?? "");
   const hasCast = actors.length > 0;
 
+  // Chưa có tập để phát: đang chờ danh sách mùa → hiện spinner; đã tải xong mà rỗng / lỗi → báo rõ
+  // (trước đây player được dựng với episode=null và đứng im vô thời hạn)
+  const hasSeasons = !!tvShow?.seasons?.length;
+  const seasonLoaded =
+    selectedSeason?.seasonNumber != null && !!seasonEpisodesCache[selectedSeason.seasonNumber];
+  const waitingEpisode = hasSeasons && !currentEp && !seasonLoaded && !seasonFailed;
+  const noEpisode = hasSeasons && !currentEp && (seasonLoaded || seasonFailed);
+
   const TABS = [
     { key: "episodes", label: "Tập phim", icon: List },
     { key: "cast", label: "Diễn viên" },
@@ -338,7 +368,7 @@ export default function TvShowDetailPage() {
               animate="show"
               transition={{ duration: 0.5 }}
             >
-              {loadingEpisode ? (
+              {loadingEpisode || waitingEpisode ? (
                 <div
                   style={{
                     width: "100%",
@@ -432,6 +462,31 @@ export default function TvShowDetailPage() {
                       Nâng cấp Premium
                     </button>
                   </div>
+                </div>
+              ) : noEpisode ? (
+                <div
+                  style={{
+                    width: "100%",
+                    aspectRatio: "16/9",
+                    borderRadius: 12,
+                    background: "#111",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    color: C.textSub,
+                    fontFamily: "'Nunito',sans-serif",
+                    textAlign: "center",
+                    padding: 16,
+                  }}
+                >
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                    {seasonFailed ? "Không tải được danh sách tập" : "Mùa này chưa có tập để phát"}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, color: C.textDim }}>
+                    {seasonFailed ? "Vui lòng tải lại trang hoặc thử lại sau." : "Hãy chọn mùa khác ở danh sách bên dưới."}
+                  </p>
                 </div>
               ) : (
                 <EpisodeVideoPlayer
@@ -564,7 +619,13 @@ export default function TvShowDetailPage() {
                         seasonEpisodesCache={seasonEpisodesCache}
                         loadingSeasonEpisodes={loadingEpisode}
                         onSelectEpisode={handleSelectEpisode}
-                        onSeasonSelect={(seasObj) => setSelectedSeason(seasObj)}
+                        onSeasonSelect={(seasObj) => {
+                          const n = seasObj.seasonNumber ?? seasObj.number;
+                          // Giữ nguyên tham chiếu nếu cùng mùa → không render lại thừa
+                          setSelectedSeason((prev) =>
+                            prev && prev.seasonNumber === n ? prev : { ...seasObj, seasonNumber: n },
+                          );
+                        }}
                       />
                     )}
                   </motion.div>
@@ -779,6 +840,13 @@ export default function TvShowDetailPage() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   );
+}
+
+// key={id}: đổi sang show khác → remount toàn bộ trang với state mới tinh (mùa/tập/cache), thay cho effect reset cũ.
+export default function TvShowDetailPage() {
+  const { id } = useParams();
+  return <TvShowDetailPageInner key={id} />;
 }

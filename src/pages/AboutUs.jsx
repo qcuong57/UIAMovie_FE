@@ -1109,7 +1109,6 @@ export default function IntroPage() {
         url="/about-us"
         schemaData={ABOUT_SCHEMA}
       />
-      <style>{GOOGLE_FONTS}</style>
       <style>{`
         html {
           text-rendering: optimizeLegibility;

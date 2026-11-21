@@ -1,6 +1,6 @@
 // src/components/home/sections/layouts/GridSection.jsx
 // grid: lưới chia trang giống CountryMovieRows (cột × hàng cấu hình được).
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import MovieCard from '../../../movie/MovieCard';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
@@ -24,11 +24,11 @@ export function GridSection({ section }) {
   const perPage = COLS * ROWS;
   const items = section.items;
 
-  const [page, setPage] = useState(0);
+  const [rawPage, setPage] = useState(0);
   const [dir, setDir] = useState(1);
-  const goPage = (p) => { setDir(p > page ? 1 : -1); setPage(p); };
   const maxPage = Math.max(0, Math.ceil(items.length / perPage) - 1);
-  useEffect(() => { if (page > maxPage) setPage(maxPage); }, [page, maxPage]);
+  const page = Math.min(rawPage, maxPage); // số trang đổi (đổi cột/hàng, đổi dữ liệu) thì kẹp lại ngay, không cần effect
+  const goPage = (p) => { setDir(p > page ? 1 : -1); setPage(p); };
 
   const visible = items.slice(page * perPage, page * perPage + perPage);
   const paged = !isMobile && maxPage > 0;

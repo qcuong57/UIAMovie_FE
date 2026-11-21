@@ -1,19 +1,21 @@
 // src/components/home/sections/layouts/AccordionSection.jsx
 // accordion: dải panel, panel đang chọn mở rộng (poster → backdrop + thông tin). Mobile rơi về dải thẻ poster cuộn ngang.
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
 import { Play } from 'lucide-react';
 import MovieCard from '../../../movie/MovieCard';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
 import { CSS_EASE } from '../shared/motionPresets';
 import Cover from '../shared/Cover';
 import { Rating, PremiumTag } from '../shared/Badges';
 import { accentOf, keyOf, imgOf, metaOf, clampLines } from '../shared/layoutUtils';
+
+const HOVER_DELAY = 120;
 
 export function AccordionSection({ section }) {
   const isMobile = useIsMobile();
@@ -22,6 +24,14 @@ export function AccordionSection({ section }) {
   const items = section.items.slice(0, 6);
   const [active, setActive] = useState(0);
   const safeActive = Math.min(active, Math.max(0, items.length - 1));
+  const hoverTimer = useRef(null);
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+
+  // Rê chuột lướt ngang qua nhiều panel: chờ ngắn rồi mới mở → không kích hoạt hàng loạt animation `flex` (mỗi khung hình là một lần layout)
+  const peek = (i) => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setActive(i), HOVER_DELAY);
+  };
 
   const heading = <SectionHeading title={section.title} subtitle={section.subtitle} accent={accent} isMobile={isMobile} />;
 
@@ -51,10 +61,10 @@ export function AccordionSection({ section }) {
           const on = i === safeActive;
           return (
             <Link
-              key={keyOf(item)} to={contentPath(item)} aria-label={item.title} className="hsl-link"
-              onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)}
+              key={keyOf(item)} to={infoPath(item)} aria-label={item.title} className="hsl-link"
+              onMouseEnter={() => peek(i)} onMouseLeave={() => clearTimeout(hoverTimer.current)} onFocus={() => setActive(i)}
               style={{
-                position: 'relative', minWidth: 0, overflow: 'hidden', borderRadius: 8, background: C.surfaceHigh, textDecoration: 'none',
+                position: 'relative', minWidth: 0, overflow: 'hidden', contain: 'layout paint', borderRadius: 8, background: C.surfaceHigh, textDecoration: 'none',
                 flex: on ? 6 : 1, transition: reduce ? 'none' : `flex .55s ${ease}`,
               }}
             >

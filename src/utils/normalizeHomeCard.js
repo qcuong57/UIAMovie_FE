@@ -54,6 +54,9 @@ export function normalizeHomeCard(card) {
 /** Link chi tiết — khớp route đang dùng ở HomePage (/movie/:id, /tvshow/:id). */
 export const contentPath = (item) => `/${item.isTvShow ? 'tvshow' : 'movie'}/${item.id}`;
 
+/** Link trang thông tin phim (/movie/:id/info, /tvshow/:id/info) — đi qua đây trước khi vào trang xem. */
+export const infoPath = (item) => `${contentPath(item)}/info`;
+
 /** HomeSectionDTO → section cho FE: items đã normalize, config luôn là object. */
 export function normalizeHomeSection(section) {
   return {

@@ -24,6 +24,7 @@ import LoadingScreen from "../../components/ui/LoadingScreen";
 import SectionReveal from "../../motion-configs/SectionReveal";
 import ComingSoonFeatured from "../../components/home/coming-soon/ComingSoonFeatured";
 import ComingSoonCard from "../../components/home/coming-soon/ComingSoonCard";
+import Footer from "../../components/layout/Footer";
 
 const ACCENT = C.gold;
 
@@ -43,9 +44,19 @@ const EMPTY = [];
 // TV show là nguồn phụ: chỉ bỏ qua khi endpoint không tồn tại (404/501).
 const fetchComingSoon = async () => {
   const [movies, tvShows] = await Promise.all([
-    movieService.getMovies({ isUpcoming: true, sortBy: "releaseDate", sortDesc: false, pageSize: 100 }),
+    movieService.getMovies({
+      isUpcoming: true,
+      sortBy: "releaseDate",
+      sortDesc: false,
+      pageSize: 100,
+    }),
     ignoreMissingEndpoint(
-      tvShowService.getTvShows({ isUpcoming: true, sortBy: "firstAirDate", sortDesc: false, pageSize: 100 }),
+      tvShowService.getTvShows({
+        isUpcoming: true,
+        sortBy: "firstAirDate",
+        sortDesc: false,
+        pageSize: 100,
+      }),
     ),
   ]);
   return { movies, tvShows };
@@ -322,7 +333,13 @@ export default function ComingSoonPage() {
 
   // LoadingScreen luôn hiện tối thiểu một nhịp khi vào trang (giống các trang danh sách khác)
   const minLoading = useMinimumLoading(isPending);
-  const status = minLoading ? "loading" : isError ? "error" : allItems.length ? "ready" : "empty";
+  const status = minLoading
+    ? "loading"
+    : isError
+      ? "error"
+      : allItems.length
+        ? "ready"
+        : "empty";
   const load = () => refetch(); // nút "Thử lại" trong khối lỗi
 
   const counts = useMemo(
@@ -366,7 +383,6 @@ export default function ComingSoonPage() {
 
       {status !== "loading" && (
         <>
-          <style>{GOOGLE_FONTS}</style>
 
           <div style={{ minHeight: "100vh", background: C.bg, color: C.text }}>
             <div
@@ -492,6 +508,7 @@ export default function ComingSoonPage() {
                 </AnimatePresence>
               )}
             </div>
+            <Footer />
           </div>
         </>
       )}

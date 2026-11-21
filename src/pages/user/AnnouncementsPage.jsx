@@ -274,7 +274,6 @@ export default function AnnouncementsPage() {
     <>
       <SeoMeta {...buildAnnouncementSeo(activeArticle)} />
 
-      <style>{GOOGLE_FONTS}</style>
       <style>{`
         .announcement-card:hover .announcement-title {
           color: #ffffff !important;

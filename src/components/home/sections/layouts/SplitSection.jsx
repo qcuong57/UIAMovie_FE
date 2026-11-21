@@ -13,7 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Play, Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
 import Cover from '../shared/Cover';
@@ -22,6 +22,14 @@ import { accentOf, keyOf, imgOf, metaOf, clampLines } from '../shared/layoutUtil
 import { HOME_EASE } from '../shared/motionPresets';
 
 const MAX_ITEMS = 10;
+
+// Tải trước một ảnh (không ép decode ngay: decode hàng loạt lúc mount làm đứng main thread)
+function preloadImage(src) {
+  if (!src) return;
+  const im = new Image();
+  im.decoding = 'async';
+  im.src = src;
+}
 
 // ── Quốc gia: nhận mã ISO 2 chữ cái (KR) hoặc tên; cờ lấy từ flagcdn (emoji cờ không hiện trên Windows) ──
 const VI_NAMES = {
@@ -93,19 +101,6 @@ export function SplitSection({ section }) {
   const autoScroll = useRef(false); // chỉ tự cuộn khi đổi bằng nút/phím/chip; rê chuột trên dải thì KHÔNG cuộn (tránh poster chạy dưới con trỏ)
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  // Tải trước ảnh của cả bộ để lúc đổi phim không bị khung trống chờ ảnh
-  useEffect(() => {
-    items.forEach((it) => {
-      [imgOf(it), it.posterUrl].forEach((u) => {
-        if (!u) return;
-        const im = new Image();
-        im.decoding = 'async';
-        im.src = u;
-        if (typeof im.decode === 'function') im.decode().catch(() => {});
-      });
-    });
-  }, [items]);
-
   // Khối "Theo quốc gia": lấy nước từ cấu hình khối (tên trường BE có thể khác nhau → thử vài chỗ)
   const sectionCountry = parseCountry(
     section.autoRule === 'country' ? section.autoParam : (section.config?.country ?? section.config?.countryCode ?? section.config?.autoParam),
@@ -150,6 +145,14 @@ export function SplitSection({ section }) {
     }
     updateEdges();
   }, [safeIndex, filter, n]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Chỉ tải trước ảnh nền của phim kế bên (poster đã nằm sẵn trong dải): đổi phim không bị khung trống,
+  // mà không tải cả bộ 10 ảnh ngay lúc vào trang (trước đây chặn băng thông của banner đầu trang)
+  useEffect(() => {
+    if (n < 2) return;
+    preloadImage(imgOf(visible[(safeIndex + 1) % n]));
+    preloadImage(imgOf(visible[(safeIndex - 1 + n) % n]));
+  }, [safeIndex, filter, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!active) return null;
 
@@ -231,7 +234,7 @@ export function SplitSection({ section }) {
         <span
           style={{
             position: 'absolute', left: 10, bottom: 10, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 7, maxWidth: '68%',
-            padding: '4px 11px 4px 6px', borderRadius: 999, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            padding: '4px 11px 4px 6px', borderRadius: 999, background: 'rgba(0,0,0,.6)',
           }}
         >
           <Flag code={country.code} width={18} />
@@ -267,7 +270,7 @@ export function SplitSection({ section }) {
   const cta = (
     <motion.div whileHover={reduce ? undefined : { scale: 1.04 }} whileTap={reduce ? undefined : { scale: 0.96 }} style={{ display: 'inline-flex' }}>
       <Link
-        to={contentPath(active)} className="hsl-link"
+        to={infoPath(active)} className="hsl-link"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
           padding: isMobile ? '9px 18px' : '11px 28px', borderRadius: 8,
@@ -377,7 +380,7 @@ export function SplitSection({ section }) {
                 }}
               >
                 {(it.posterUrl || imgOf(it)) && (
-                  <img src={it.posterUrl || imgOf(it)} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={it.posterUrl || imgOf(it)} alt="" loading="lazy" decoding="async" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 )}
                 {flagCode && <Flag code={flagCode} width={14} style={{ position: 'absolute', left: 3, bottom: 3 }} />}
               </button>

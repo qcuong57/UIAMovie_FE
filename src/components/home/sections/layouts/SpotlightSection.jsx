@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Crown } from 'lucide-react';
 import { C, FONT_BODY, FONT_DISPLAY } from '../../../../context/homeTokens';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { contentPath } from '../../../../utils/normalizeHomeCard';
+import { infoPath } from '../../../../utils/normalizeHomeCard';
 import LayoutStyles from '../shared/LayoutStyles';
 import SectionHeading from '../shared/SectionHeading';
 import Cover from '../shared/Cover';
@@ -142,7 +142,7 @@ export function SpotlightSection({ section }) {
               {/* Nút Xem ngay: y hệt nút Phát của HeroBanner — hover phình to, bấm thì nhún; phim Premium thì màu vàng */}
               <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} style={{ display: 'inline-flex' }}>
                 <Link
-                  to={contentPath(active)} className="hsl-link"
+                  to={infoPath(active)} className="hsl-link"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
                     padding: isMobile ? '7px 14px' : '11px 28px', borderRadius: 8,
